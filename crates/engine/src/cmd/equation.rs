@@ -940,6 +940,16 @@ mod tests {
     }
 
     #[test]
+    fn pasting_an_html_fragment_holding_only_mathml_inserts_an_equation() {
+        let mut s = session();
+        let id = editing_box(&mut s, "");
+        let html = format!("<html><body><!--StartFragment-->{QUADRATIC_MATHML}<!--EndFragment--></body></html>");
+        let r = s.execute("edit.paste", &json!({"text": html})).unwrap();
+        assert_eq!(r["format"], "MathML");
+        assert_eq!(shape_text(&s, id), (String::new(), 1));
+    }
+
+    #[test]
     fn plain_text_paste_and_match_formatting_and_malformed_markup_stay_text() {
         for text in ["hello world", "costs $5 and $6", "a \\frac{1}{2} b", "\\alpha", "<b>bold</b>"] {
             let mut s = session();
