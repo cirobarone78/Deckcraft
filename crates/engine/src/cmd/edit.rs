@@ -160,6 +160,23 @@ fn paste(s: &mut Session, p: &Value) -> Result<Value> {
     if let Some(t) = str_param(p, "text")
         && t != s.clipboard.plain
     {
+        // One whole equation (OMML, MathML or delimited LaTeX) pastes as an equation; one that
+        // does not parse pastes as the text it is, with a note in the status bar.
+        match deckcraft_math::equation_from_clipboard(t) {
+            Some((kind, Ok(m))) => {
+                let mut r = super::equation::paste_math(s, &m)?;
+                if let Some(o) = r.as_object_mut() {
+                    o.insert("pasted".into(), json!("equation"));
+                    o.insert("format".into(), json!(kind.name()));
+                }
+                return Ok(r);
+            }
+            Some((kind, Err(why))) => {
+                let text = format!("Pasted as text: the {} equation could not be read ({why}).", kind.name());
+                s.ui_requests.push(crate::UiRequest::Message { text });
+            }
+            None => {}
+        }
         return paste_plain(s, t);
     }
     let editing = s.doc()?.selection.text.is_some();
