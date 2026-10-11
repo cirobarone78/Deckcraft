@@ -50,6 +50,8 @@ pub struct EquationHost {
     pub(crate) tab_shown: bool,
     /// The ribbon's Close Equation asked for the edit to be applied, as Insert / Update does.
     pub(crate) commit_requested: bool,
+    /// Draws the faces in Insert › Equation's menu of ready-made equations (no editor is open then).
+    pub(crate) preview: Option<EquationEditor>,
 }
 
 impl EquationHost {
@@ -87,6 +89,13 @@ fn open(app: &mut SlideApp, params: &Value) -> Open {
         calibrated: false,
         pt: 20.0,
     };
+    // A ready-made equation from Insert › Equation's arrow: a new equation, started from it.
+    if let Some(id) = params.get("builtin").and_then(Value::as_str) {
+        if let Some(b) = equashion_egui::equashion_math::galleries().builtins.iter().find(|b| b.id == id) {
+            o.widget.set_math(b.math.clone());
+        }
+        return o;
+    }
     if params.get("edit").and_then(Value::as_bool) != Some(true) {
         return o;
     }
@@ -305,6 +314,29 @@ mod tests {
         steps(&mut h, 3);
         assert!(!h.state().equation.is_open());
         assert_ne!(h.state().ui.tab, "Equation", "leaving the equation goes back");
+    }
+
+    /// Insert › Equation's arrow: a ready-made equation opens the editor started from it, and
+    /// Enter inserts it as one undo step.
+    #[test]
+    fn a_ready_made_equation_opens_the_editor_started_from_it() {
+        let mut h = harness();
+        h.set_size(vec2(1700.0, 860.0));
+        h.state_mut().ui.tab = "Insert".into();
+        steps(&mut h, 3);
+        let id = equashion_egui::equashion_math::galleries().builtins.first().map(|b| b.id.clone()).expect("a built-in equation");
+        let mut d = crate::dialogs::Dialog::new("equation");
+        d.params = json!({"builtin": id});
+        h.state_mut().dialog = Some(d);
+        steps(&mut h, 4);
+        let w = h.state().equation.widget().expect("the editor is open");
+        assert!(!w.linear().is_empty(), "started from the ready-made equation");
+        assert!(h.state().equation.target().is_none(), "a new equation, not an edit");
+        let depth = undo_depth(h.state());
+        h.key_press(egui::Key::Enter);
+        steps(&mut h, 3);
+        assert_eq!(equations(h.state()).len(), 1);
+        assert_eq!(undo_depth(h.state()), depth + 1, "one undo step");
     }
 
     #[test]

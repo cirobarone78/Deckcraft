@@ -133,6 +133,53 @@ fn builtin_menu(ui: &mut Ui, ed: &mut EquationEditor) {
     }
 }
 
+/// Insert › Equation: a split button. The top inserts a new equation; the arrow lists the
+/// ready-made ones (WordCraft's Insert › Equation), each opening the editor started from it.
+pub fn insert_button(app: &mut SlideApp, ui: &mut Ui) {
+    let (main, arrow) = crate::widgets::big_button_ex(ui, Icon::Equation, "Equation", true, true, false);
+    if main.on_hover_text("Insert a new equation").clicked() {
+        let _ = app.run("app.dialog", serde_json::json!({"id": "equation"}));
+    }
+    let Some(a) = arrow else { return };
+    let mut chosen: Option<String> = None;
+    egui::Popup::menu(&a).show(|ui| {
+        ui.set_min_width(260.0);
+        let ed = app.equation.preview.get_or_insert_with(|| EquationEditor::new().id_salt("deckcraft-equation-preview"));
+        egui::ScrollArea::vertical().max_height(560.0).show(ui, |ui| {
+            ui.set_width(360.0);
+            section_heading(ui, "Built-In");
+            for b in &galleries().builtins {
+                let t = Tokens::get(ui.ctx());
+                ui.label(egui::RichText::new(&b.label).font(theme::bold(11.5)).color(t.text));
+                let (r, resp) = ui.allocate_exact_size(vec2(350.0, 64.0), Sense::click());
+                resp.widget_info(|| egui::WidgetInfo::labeled(egui::WidgetType::Button, true, &b.label));
+                ui.painter().rect_filled(r, 2.0, Color32::WHITE);
+                if resp.hovered() {
+                    ui.painter().rect_stroke(r, 2.0, Stroke::new(1.5, t.accent), StrokeKind::Inside);
+                }
+                paint_math(ed, ui, r.shrink(2.0), &format!("insert/builtin/{}", b.id), &b.math, 11.0);
+                if resp.clicked() {
+                    chosen = Some(b.id.clone());
+                    ui.close();
+                }
+                ui.add_space(4.0);
+            }
+        });
+        ui.separator();
+        if ui.button("Insert New Equation").clicked() {
+            chosen = Some(String::new());
+            ui.close();
+        }
+    });
+    if let Some(id) = chosen {
+        let mut d = crate::dialogs::Dialog::new("equation");
+        if !id.is_empty() {
+            d.params = serde_json::json!({"builtin": id});
+        }
+        app.dialog = Some(d);
+    }
+}
+
 fn symbol_button(ui: &mut Ui, ed: &mut EquationEditor, c: char) -> bool {
     let t = Tokens::get(ui.ctx());
     let (r, resp) = ui.allocate_exact_size(vec2(22.0, 22.0), Sense::click());
