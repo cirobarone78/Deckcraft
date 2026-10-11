@@ -12,6 +12,7 @@ pub mod control;
 pub mod credits;
 pub mod dialogs;
 pub mod equation_editor;
+pub mod equation_tab;
 pub mod fillui;
 pub mod icons;
 pub mod media;

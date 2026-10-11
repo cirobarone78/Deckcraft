@@ -45,6 +45,8 @@ pub(crate) struct Open {
 #[derive(Default)]
 pub struct EquationHost {
     pub(crate) open: Option<Open>,
+    /// The ribbon has already switched to the Equation tab for this editor.
+    pub(crate) tab_shown: bool,
 }
 
 impl EquationHost {
@@ -228,6 +230,31 @@ mod tests {
     fn open_new(h: &mut Harness<'static, SlideApp>) {
         h.state_mut().run("app.dialog", json!({"id": "equation"})).unwrap();
         steps(h, 4);
+    }
+
+    /// The Equation tab: it appears with the dialog, its galleries insert into the widget, and
+    /// it goes away with the dialog.
+    #[test]
+    fn the_equation_tab_inserts_from_its_galleries() {
+        let mut h = harness();
+        assert_ne!(h.state().ui.tab, "Equation");
+        open_new(&mut h);
+        assert_eq!(h.state().ui.tab, "Equation", "editing an equation brings up the tab");
+        h.get_by_label("Fraction").click();
+        steps(&mut h, 3);
+        h.get_by_label("Stacked Fraction").click();
+        steps(&mut h, 3);
+        let eq = h.state().equation.widget().map(|w| w.math().clone()).unwrap();
+        assert!(matches!(eq.body.first().map(equashion_egui::equashion_math::Node::bare), Some(equashion_egui::equashion_math::Node::Frac { .. })), "{eq:?}");
+        h.get_by_label("Symbols").click();
+        steps(&mut h, 3);
+        h.get_by_label("\u{3c0}").click();
+        steps(&mut h, 3);
+        assert!(h.state().equation.widget().is_some_and(|w| w.linear().contains('\u{3c0}')), "{:?}", h.state().equation.widget().map(|w| w.linear()));
+        h.state_mut().dialog = None;
+        steps(&mut h, 3);
+        assert!(!h.state().equation.is_open());
+        assert_ne!(h.state().ui.tab, "Equation", "leaving the equation goes back");
     }
 
     #[test]
