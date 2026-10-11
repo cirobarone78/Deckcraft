@@ -44,10 +44,10 @@ deckcraft-opus = { path = "crates/opus" }
 #   [patch."https://github.com/shuff57/equaSHion"]
 #   equashion-math = { path = "../equaSHion/crates/math" }
 #   equashion-egui = { path = "../equaSHion/crates/egui" }
-equashion-math = { git = "https://github.com/shuff57/equaSHion", rev = "9b6b1690deafa670b60978636461343d16c5f788" }
-equashion-egui = { git = "https://github.com/shuff57/equaSHion", rev = "9b6b1690deafa670b60978636461343d16c5f788" }
+equashion-math = { git = "https://github.com/shuff57/equaSHion", rev = "ee62762d8b57edbdb42f5055eaed7e9164a3e3fa" }
+equashion-egui = { git = "https://github.com/shuff57/equaSHion", rev = "ee62762d8b57edbdb42f5055eaed7e9164a3e3fa" }
 # The equation layout (the editor's own), for slides.
-equashion-layout = { git = "https://github.com/shuff57/equaSHion", rev = "9b6b1690deafa670b60978636461343d16c5f788", features = ["extra-fonts"] }
+equashion-layout = { git = "https://github.com/shuff57/equaSHion", rev = "ee62762d8b57edbdb42f5055eaed7e9164a3e3fa", features = ["extra-fonts"] }
 
 # foundation
 kurbo = { version = "0.13", features = ["serde"] }
