@@ -74,7 +74,7 @@ pub fn inspect(app: &SlideApp, ctx: &egui::Context) -> Value {
         "canvasScale": app.canvas_scale,
         "dialog": app.dialog.as_ref().map(|d| d.id.clone()),
         "home": app.home_open(),
-        "showing": app.show.as_ref().map(|s| json!({"slide": s.state.slide, "step": s.state.step, "ended": s.ended, "askKeep": s.ask_keep(), "inkTool": s.ink().tool().name(), "strokes": s.ink().strokes(s.state.slide).len(), "totalStrokes": s.ink().count()})),
+        "showing": app.show.as_ref().map(|s| json!({"slide": s.state.slide, "step": s.state.step, "ended": s.ended, "askKeep": s.ask_keep(), "inkTool": s.ink().tool().name(), "strokes": s.ink().strokes(s.state.slide).len(), "totalStrokes": s.ink().count(), "selected": s.ink().selection_len()})),
         "documents": app.session.documents().iter().map(|d| json!({"title": d.title(), "dirty": d.is_dirty(), "path": d.path})).collect::<Vec<_>>(),
         "status": app.status.as_ref().map(|s| s.0.clone()),
         "perf": {"frameMs": app.perf.frame_ms, "renderMs": app.perf.render_ms, "fps": app.perf.fps},

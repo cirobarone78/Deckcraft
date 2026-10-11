@@ -18,6 +18,8 @@ pub enum ShowTool {
     Highlighter,
     Eraser,
     Laser,
+    /// Select ink strokes: click to select, drag to move, marquee on empty space.
+    Select,
 }
 
 /// Default pen width in slide units (points).
@@ -75,6 +77,7 @@ impl ShowTool {
             ShowTool::Highlighter => "highlighter",
             ShowTool::Eraser => "eraser",
             ShowTool::Laser => "laser",
+            ShowTool::Select => "select",
         }
     }
 }
@@ -84,9 +87,15 @@ impl ShowTool {
 enum Op {
     /// A stroke was drawn (slide, stroke id).
     Draw(usize, u64),
-    /// Strokes were erased or cleared (slide, (position in the slide's stroke list, stroke),
-    /// positions ascending; each restores at `min(pos, len)`).
+    /// Strokes were created by duplicate/paste (slide, stroke ids).
+    Added(usize, Vec<u64>),
+    /// Strokes were erased, deleted or cleared (slide, (position in the slide's stroke list,
+    /// stroke), positions ascending; each restores at `min(pos, len)`).
     Erased(usize, Vec<(usize, ShowStroke)>),
+    /// Strokes were moved by (dx, dy) in normalized slide coordinates; undo subtracts the
+    /// accumulated total. The round trip through per-frame f32 deltas can drift the restore
+    /// by sub-point ulps — invisible, and not cumulative.
+    Moved(usize, Vec<u64>, f32, f32),
 }
 
 /// Ink state for one running show. Strokes are kept per slide, so they survive navigation.
@@ -102,6 +111,14 @@ pub struct ShowInk {
     /// Inside one erase gesture (button held): consecutive `erase_at` calls merge into a
     /// single journal entry, so one sweep is one undo.
     erase_open: bool,
+    /// Selected stroke ids on `select_slide`, worked on by the select tool.
+    selected: Vec<u64>,
+    select_slide: usize,
+    /// Ink clipboard for copy/paste (strokes keep their styles; ids are re-minted on paste).
+    clipboard: Vec<ShowStroke>,
+    /// Live move gesture: (slide, ids, accumulated dx, dy) between `begin_move` and
+    /// `end_move`. Anchored to the slide where the drag started, like the eraser.
+    move_open: Option<(usize, Vec<u64>, f32, f32)>,
     pub pen_color: Rgba,
     pub highlighter_color: Rgba,
     pub pen_width: f64,
@@ -114,6 +131,9 @@ const EPS: f32 = 0.0006;
 
 /// Subdivisions per quadratic segment when flattening a stroke for painting/keeping.
 const SMOOTH_SUBDIV: usize = 4;
+
+/// Offset applied to duplicated/pasted strokes (normalized; ≈ 14 pt on a 16:9 slide).
+const DUP_OFFSET: (f32, f32) = (0.015, 0.015);
 
 /// Flatten stroke points into a smooth polyline: quadratic Béziers through the segment
 /// midpoints with the input points as controls (classic pen smoothing). Endpoints are
@@ -150,6 +170,10 @@ impl ShowInk {
             next_id: 0,
             active: None,
             erase_open: false,
+            selected: vec![],
+            select_slide: 0,
+            clipboard: vec![],
+            move_open: None,
             pen_color,
             highlighter_color: Rgba::rgb(0xFF, 0xE0, 0x00),
             pen_width: PEN_WIDTH,
@@ -167,10 +191,15 @@ impl ShowInk {
         self.set_tool(if self.tool == tool { ShowTool::Pointer } else { tool });
     }
 
-    /// Switch tools; any open stroke or erase gesture ends (a stroke belongs to one tool).
+    /// Switch tools; any open stroke, erase gesture or move drag ends (a stroke belongs to
+    /// one tool). Switching away from Select drops the selection.
     pub fn set_tool(&mut self, tool: ShowTool) {
         self.end();
         self.end_erase();
+        self.end_move();
+        if tool != ShowTool::Select {
+            self.selected.clear();
+        }
         self.tool = tool;
     }
 
@@ -322,18 +351,34 @@ impl ShowInk {
     }
 
     /// True when the journal holds at least one entry `undo()` would act on (empty erasure
-    /// sweeps don't count — undo skips them).
+    /// sweeps don't count — undo skips them). An in-flight move drag counts: `undo()` commits
+    /// and reverts it.
     pub fn can_undo(&self) -> bool {
+        if self.move_open.as_ref().is_some_and(|(_, _, tx, ty)| *tx != 0.0 || *ty != 0.0) {
+            return true;
+        }
         self.journal.iter().rev().any(|op| match op {
-            Op::Draw(..) => true,
+            Op::Draw(..) | Op::Added(..) | Op::Moved(..) => true,
             Op::Erased(_, strokes) => !strokes.is_empty(),
         })
     }
 
     /// Undo the most recent ink action — a drawn stroke is removed, an erasure or clear is
-    /// restored (on any slide). Returns false when there is nothing to undo.
+    /// restored (on any slide), a move is reverted, a duplicate/paste vanishes. Returns false
+    /// when there is nothing to undo.
     pub fn undo(&mut self) -> bool {
         self.active = None;
+        // An in-flight move is committed first so the pop below reverts it (not the op
+        // under it) and nothing applied stays unjournaled.
+        self.end_move();
+        let done = self.undo_step();
+        if done {
+            self.prune_selection();
+        }
+        done
+    }
+
+    fn undo_step(&mut self) -> bool {
         while let Some(op) = self.journal.pop() {
             match op {
                 Op::Draw(slide, id) => {
@@ -347,6 +392,18 @@ impl ShowInk {
                         return true;
                     }
                 }
+                Op::Added(slide, ids) => {
+                    if let Some(v) = self.strokes.get_mut(&slide) {
+                        let before = v.len();
+                        v.retain(|s| !ids.contains(&s.id));
+                        if v.len() != before {
+                            if v.is_empty() {
+                                self.strokes.remove(&slide);
+                            }
+                            return true;
+                        }
+                    }
+                }
                 Op::Erased(slide, strokes) => {
                     if strokes.is_empty() {
                         continue;
@@ -357,9 +414,34 @@ impl ShowInk {
                     }
                     return true;
                 }
+                Op::Moved(slide, ids, dx, dy) => {
+                    if let Some(v) = self.strokes.get_mut(&slide) {
+                        let mut any = false;
+                        for s in v.iter_mut().filter(|s| ids.contains(&s.id)) {
+                            for p in &mut s.points {
+                                p.0 -= dx;
+                                p.1 -= dy;
+                            }
+                            any = true;
+                        }
+                        if any {
+                            return true;
+                        }
+                    }
+                }
             }
         }
         false
+    }
+
+    /// Drop selected ids whose strokes no longer exist (after undo/erase/clear).
+    fn prune_selection(&mut self) {
+        if self.selected.is_empty() {
+            return;
+        }
+        let slide = self.select_slide;
+        let alive: Vec<u64> = self.strokes.get(&slide).map(|v| v.iter().map(|s| s.id).collect()).unwrap_or_default();
+        self.selected.retain(|id| alive.contains(id));
     }
 
     /// Erase whole strokes near a point given in normalized slide coordinates. `tol` is the
@@ -371,19 +453,7 @@ impl ShowInk {
         let Some(v) = self.strokes.get_mut(&slide) else { return 0 };
         let (sw, sh) = (slide_w.max(1.0), slide_h.max(1.0));
         let (px, py) = (f64::from(x) * sw, f64::from(y) * sh);
-        let hit = |s: &ShowStroke| {
-            let t = f64::from(tol) + s.width / 2.0;
-            match s.points.as_slice() {
-                [] => false,
-                [(sx, sy)] => ((f64::from(*sx) * sw - px).powi(2) + (f64::from(*sy) * sh - py).powi(2)).sqrt() <= t,
-                _ => {
-                    let sm = smooth_stroke(&s.points);
-                    sm.windows(2).any(|w| {
-                        seg_dist(px, py, f64::from(w[0].0) * sw, f64::from(w[0].1) * sh, f64::from(w[1].0) * sw, f64::from(w[1].1) * sh) <= t
-                    })
-                }
-            }
-        };
+        let hit = |s: &ShowStroke| stroke_hit(s, px, py, tol, sw, sh);
         let mut removed: Vec<(usize, ShowStroke)> = vec![];
         let mut i = 0;
         v.retain(|s| {
@@ -403,6 +473,7 @@ impl ShowInk {
         if self.active.is_some_and(|(_, id)| removed.iter().any(|(_, s)| s.id == id)) {
             self.active = None;
         }
+        self.prune_selection();
         let n = removed.len();
         // One gesture = one undo step: merge into the open gesture's journal entry,
         // converting the just-removed positions (against the thinned list) back to positions
@@ -434,6 +505,7 @@ impl ShowInk {
 
     /// Clear one slide's ink (`E` in the show). Undoable.
     pub fn clear_slide(&mut self, slide: usize) {
+        self.end_move();
         if self.active.is_some_and(|(s, _)| s == slide) {
             self.active = None;
         }
@@ -442,6 +514,255 @@ impl ShowInk {
         {
             self.journal.push(Op::Erased(slide, v.into_iter().enumerate().collect()));
         }
+        self.prune_selection();
+    }
+
+    /// The selected stroke ids (empty when nothing is selected).
+    pub fn selection(&self) -> &[u64] {
+        &self.selected
+    }
+
+    /// Number of selected strokes (for `ui.inspect`).
+    pub fn selection_len(&self) -> usize {
+        self.selected.len()
+    }
+
+    /// True when the stroke is in the selection.
+    pub fn is_selected(&self, id: u64) -> bool {
+        self.selected.contains(&id)
+    }
+
+    /// Forget the selection (tool switch away, explicit deselect).
+    pub fn clear_selection(&mut self) {
+        self.selected.clear();
+    }
+
+    /// Keep the selection tied to the shown slide: navigating away ends any move drag
+    /// (journaled against its own slide) and drops the selection.
+    pub fn sync_slide(&mut self, slide: usize) {
+        if slide != self.select_slide {
+            self.end_move();
+            self.selected.clear();
+            self.select_slide = slide;
+        }
+    }
+
+    /// The topmost stroke under the point (normalized slide coordinates), using the eraser's
+    /// hit rule: within `tol + width/2` of the smoothed polyline, in slide units.
+    pub fn hit_test(&self, slide: usize, x: f32, y: f32, tol: f32, slide_w: f64, slide_h: f64) -> Option<u64> {
+        let v = self.strokes.get(&slide)?;
+        let (sw, sh) = (slide_w.max(1.0), slide_h.max(1.0));
+        let (px, py) = (f64::from(x) * sw, f64::from(y) * sh);
+        v.iter().rev().find(|s| stroke_hit(s, px, py, tol, sw, sh)).map(|s| s.id)
+    }
+
+    /// Replace the selection with one stroke.
+    pub fn select_only(&mut self, slide: usize, id: u64) {
+        self.set_select_slide(slide);
+        self.selected = vec![id];
+    }
+
+    /// Shift-click: add the stroke to the selection, or remove it when already selected.
+    pub fn toggle_selected(&mut self, slide: usize, id: u64) {
+        self.set_select_slide(slide);
+        match self.selected.iter().position(|s| *s == id) {
+            Some(pos) => {
+                self.selected.remove(pos);
+            }
+            None => self.selected.push(id),
+        }
+    }
+
+    /// Marquee-select strokes whose point bounding box intersects the rect (normalized slide
+    /// coordinates, corners in any order); `add` unions with the current selection instead of
+    /// replacing it. Returns the size of the resulting selection.
+    pub fn select_in_rect(&mut self, slide: usize, a: (f32, f32), b: (f32, f32), add: bool) -> usize {
+        self.set_select_slide(slide);
+        let (min, max) = ((a.0.min(b.0), a.1.min(b.1)), (a.0.max(b.0), a.1.max(b.1)));
+        let intersects = |s: &ShowStroke| {
+            let mut it = s.points.iter();
+            let Some(&(fx, fy)) = it.next() else { return false };
+            let (mut x0, mut y0, mut x1, mut y1) = (fx, fy, fx, fy);
+            for &(x, y) in it {
+                x0 = x0.min(x);
+                y0 = y0.min(y);
+                x1 = x1.max(x);
+                y1 = y1.max(y);
+            }
+            x0 <= max.0 && x1 >= min.0 && y0 <= max.1 && y1 >= min.1
+        };
+        let hit: Vec<u64> = self.strokes.get(&slide).map(|v| v.iter().filter(|s| intersects(s)).map(|s| s.id).collect()).unwrap_or_default();
+        if add {
+            for id in hit {
+                if !self.selected.contains(&id) {
+                    self.selected.push(id);
+                }
+            }
+        } else {
+            self.selected = hit;
+        }
+        self.selected.len()
+    }
+
+    /// Selections live on one slide at a time; a select on another slide starts fresh.
+    fn set_select_slide(&mut self, slide: usize) {
+        if slide != self.select_slide {
+            self.selected.clear();
+            self.select_slide = slide;
+        }
+    }
+
+    /// Bounding box of the selection on its slide, normalized coordinates (for the overlay).
+    pub fn selected_bounds(&self, slide: usize) -> Option<((f32, f32), (f32, f32))> {
+        if slide != self.select_slide || self.selected.is_empty() {
+            return None;
+        }
+        let v = self.strokes.get(&slide)?;
+        let (mut x0, mut y0, mut x1, mut y1) = (f32::INFINITY, f32::INFINITY, f32::NEG_INFINITY, f32::NEG_INFINITY);
+        let mut any = false;
+        for s in v.iter().filter(|s| self.selected.contains(&s.id)) {
+            for &(x, y) in &s.points {
+                x0 = x0.min(x);
+                y0 = y0.min(y);
+                x1 = x1.max(x);
+                y1 = y1.max(y);
+            }
+            any = true;
+        }
+        any.then_some(((x0, y0), (x1, y1)))
+    }
+
+    /// Begin a move drag for the current selection; deltas accumulate until `end_move`, which
+    /// journals one undoable entry for the whole gesture. The drag stays anchored to the
+    /// slide where it began, even if the show navigates away mid-drag.
+    pub fn begin_move(&mut self) {
+        self.move_open = (!self.selected.is_empty()).then(|| (self.select_slide, self.selected.clone(), 0.0, 0.0));
+    }
+
+    /// Translate the strokes being moved by (dx, dy) (normalized). The store moves live; the
+    /// journal entry is written by `end_move`. Deltas that hit no stroke (e.g. the gesture's
+    /// strokes are gone) are not accumulated, so the journaled total always matches what was
+    /// actually applied.
+    pub fn move_selection_by(&mut self, dx: f32, dy: f32) {
+        if !dx.is_finite() || !dy.is_finite() {
+            return;
+        }
+        let Some((slide, ids, tx, ty)) = self.move_open.as_mut() else { return };
+        let applied = match self.strokes.get_mut(slide) {
+            Some(v) => {
+                let mut applied = false;
+                for s in v.iter_mut().filter(|s| ids.contains(&s.id)) {
+                    for p in &mut s.points {
+                        p.0 += dx;
+                        p.1 += dy;
+                    }
+                    applied = true;
+                }
+                applied
+            }
+            None => false,
+        };
+        if applied {
+            *tx += dx;
+            *ty += dy;
+        }
+    }
+
+    /// End the move drag: journal the accumulated delta (against the slide where the drag
+    /// started) as one undo step. Returns false when nothing moved.
+    pub fn end_move(&mut self) -> bool {
+        let Some((slide, ids, tx, ty)) = self.move_open.take() else { return false };
+        if ids.is_empty() || !tx.is_finite() || !ty.is_finite() || (tx == 0.0 && ty == 0.0) {
+            return false;
+        }
+        self.journal.push(Op::Moved(slide, ids, tx, ty));
+        true
+    }
+
+    /// Duplicate the selection at a small offset; the copies become the new selection.
+    /// Returns how many strokes were created.
+    pub fn duplicate_selection(&mut self) -> usize {
+        self.end_move();
+        let slide = self.select_slide;
+        let src: Vec<ShowStroke> =
+            self.strokes.get(&slide).map(|v| v.iter().filter(|s| self.selected.contains(&s.id)).cloned().collect()).unwrap_or_default();
+        self.add_copies(slide, src)
+    }
+
+    /// Copy the selection to the ink clipboard. Returns how many strokes were copied.
+    pub fn copy_selection(&mut self) -> usize {
+        let slide = self.select_slide;
+        self.clipboard = self.strokes.get(&slide).map(|v| v.iter().filter(|s| self.selected.contains(&s.id)).cloned().collect()).unwrap_or_default();
+        self.clipboard.len()
+    }
+
+    /// Paste the ink clipboard onto `slide` at the duplicate offset; the pasted strokes become
+    /// the selection. Returns how many strokes were pasted.
+    pub fn paste(&mut self, slide: usize) -> usize {
+        // A no-op paste must not touch the selection.
+        if self.clipboard.is_empty() {
+            return 0;
+        }
+        self.end_move();
+        let src = self.clipboard.clone();
+        self.select_slide = slide;
+        self.selected.clear();
+        self.add_copies(slide, src)
+    }
+
+    /// Clone strokes onto a slide with fresh ids and the duplicate offset; the copies become
+    /// the selection and one `Added` journal entry. Returns how many were added.
+    fn add_copies(&mut self, slide: usize, src: Vec<ShowStroke>) -> usize {
+        if src.is_empty() {
+            return 0;
+        }
+        let v = self.strokes.entry(slide).or_default();
+        let mut ids = Vec::with_capacity(src.len());
+        for mut c in src {
+            c.id = self.next_id;
+            self.next_id += 1;
+            for p in &mut c.points {
+                p.0 += DUP_OFFSET.0;
+                p.1 += DUP_OFFSET.1;
+            }
+            ids.push(c.id);
+            v.push(c);
+        }
+        self.journal.push(Op::Added(slide, ids.clone()));
+        self.select_slide = slide;
+        self.selected = ids.clone();
+        ids.len()
+    }
+
+    /// Delete the selected strokes (undoable). Returns how many were deleted.
+    pub fn delete_selection(&mut self) -> usize {
+        // Journal any in-flight move before the deletion so undo restores in order.
+        self.end_move();
+        let slide = self.select_slide;
+        let sel = std::mem::take(&mut self.selected);
+        let Some(v) = self.strokes.get_mut(&slide) else { return 0 };
+        let mut removed: Vec<(usize, ShowStroke)> = vec![];
+        let mut i = 0;
+        v.retain(|s| {
+            let keep = !sel.contains(&s.id);
+            if !keep {
+                removed.push((i, s.clone()));
+            }
+            i += 1;
+            keep
+        });
+        if removed.is_empty() {
+            return 0;
+        }
+        if v.is_empty() {
+            self.strokes.remove(&slide);
+        }
+        if self.active.is_some_and(|(_, id)| removed.iter().any(|(_, s)| s.id == id)) {
+            self.active = None;
+        }
+        let n = removed.len();
+        self.journal.push(Op::Erased(slide, removed));
+        n
     }
 }
 
@@ -452,6 +773,21 @@ fn seg_dist(px: f64, py: f64, ax: f64, ay: f64, bx: f64, by: f64) -> f64 {
     let t = if len2 > 0.0 { (((px - ax) * dx + (py - ay) * dy) / len2).clamp(0.0, 1.0) } else { 0.0 };
     let (cx, cy) = (ax + t * dx, ay + t * dy);
     ((px - cx).powi(2) + (py - cy).powi(2)).sqrt()
+}
+
+/// The eraser/select hit rule: the point (slide units) comes within `tol + width/2` of the
+/// stroke's smoothed polyline, so hits match the painted geometry.
+fn stroke_hit(s: &ShowStroke, px: f64, py: f64, tol: f32, sw: f64, sh: f64) -> bool {
+    let t = f64::from(tol) + s.width / 2.0;
+    match s.points.as_slice() {
+        [] => false,
+        [(sx, sy)] => ((f64::from(*sx) * sw - px).powi(2) + (f64::from(*sy) * sh - py).powi(2)).sqrt() <= t,
+        _ => {
+            let sm = smooth_stroke(&s.points);
+            sm.windows(2)
+                .any(|w| seg_dist(px, py, f64::from(w[0].0) * sw, f64::from(w[0].1) * sh, f64::from(w[1].0) * sw, f64::from(w[1].1) * sh) <= t)
+        }
+    }
 }
 
 #[cfg(test)]
@@ -1014,5 +1350,260 @@ mod tests {
         ink.set_tool(ShowTool::Pointer);
         ink.step_width(true);
         assert_eq!(ink.pen_width, 6.0); // unchanged
+    }
+
+    /// Two strokes on slide 0: a diagonal (0.1,0.1)-(0.5,0.5) and a horizontal
+    /// (0.1,0.8)-(0.9,0.8). Slide units 100x100.
+    fn two_strokes() -> ShowInk {
+        let mut ink = ink();
+        ink.set_tool(ShowTool::Pen);
+        ink.begin(0, 0.1, 0.1);
+        ink.push(0, 0.5, 0.5);
+        ink.end();
+        ink.begin(0, 0.1, 0.8);
+        ink.push(0, 0.9, 0.8);
+        ink.end();
+        ink
+    }
+
+    #[test]
+    fn hit_test_finds_the_topmost_and_select_at_manages_the_selection() {
+        let mut ink = two_strokes();
+        // On the diagonal, 100x100 slide, tol 2pt.
+        let id = ink.hit_test(0, 0.3, 0.3, 2.0, 100.0, 100.0).expect("hit the diagonal");
+        assert_eq!(id, ink.strokes(0)[0].id);
+        // A miss selects nothing and clears.
+        assert_eq!(ink.hit_test(0, 0.3, 0.35, 0.01, 100.0, 100.0), None);
+        ink.select_only(0, id);
+        assert_eq!(ink.selection_len(), 1);
+        // Shift-click the horizontal stroke adds it; shift-click again removes it.
+        let id2 = ink.hit_test(0, 0.5, 0.8, 2.0, 100.0, 100.0).expect("hit the horizontal");
+        ink.toggle_selected(0, id2);
+        assert_eq!(ink.selection_len(), 2);
+        ink.toggle_selected(0, id2);
+        assert_eq!(ink.selection_len(), 1);
+        // A click on empty space (no shift) clears.
+        ink.clear_selection();
+        assert_eq!(ink.selection_len(), 0);
+    }
+
+    #[test]
+    fn marquee_selects_intersecting_boxes_and_adds_with_shift() {
+        let mut ink = two_strokes();
+        // Rect over the diagonal's middle: selects only it.
+        assert_eq!(ink.select_in_rect(0, (0.2, 0.2), (0.4, 0.4), false), 1);
+        // Full-slide rect selects both; add-mode keeps them.
+        assert_eq!(ink.select_in_rect(0, (0.0, 0.0), (1.0, 1.0), true), 2);
+        // An empty slide region replaces with nothing.
+        assert_eq!(ink.select_in_rect(0, (0.55, 0.55), (0.7, 0.7), false), 0);
+    }
+
+    #[test]
+    fn move_gesture_is_one_undoable_step() {
+        let mut ink = two_strokes();
+        let id = ink.strokes(0)[0].id;
+        let before = ink.strokes(0)[0].points.clone();
+        ink.select_only(0, id);
+        ink.begin_move();
+        ink.move_selection_by(0.1, 0.05);
+        ink.move_selection_by(-0.02, 0.01);
+        assert!(ink.end_move());
+        let s = &ink.strokes(0)[0];
+        assert!((s.points[0].0 - (before[0].0 + 0.08)).abs() < 1e-4);
+        assert!((s.points[0].1 - (before[0].1 + 0.06)).abs() < 1e-4);
+        // One undo restores the original points; the other stroke never moved.
+        assert!(ink.undo());
+        let restored = &ink.strokes(0)[0].points;
+        for (r, b) in restored.iter().zip(before.iter()) {
+            assert!((r.0 - b.0).abs() < 1e-6 && (r.1 - b.1).abs() < 1e-6, "undo restores points (float delta round-trip)");
+        }
+        assert_eq!(ink.strokes(0)[1].points, vec![(0.1, 0.8), (0.9, 0.8)]);
+        // A no-delta gesture journals nothing.
+        ink.begin_move();
+        assert!(!ink.end_move());
+    }
+
+    #[test]
+    fn duplicate_offsets_copies_and_undoes_cleanly() {
+        let mut ink = two_strokes();
+        let id = ink.strokes(0)[0].id;
+        let orig = ink.strokes(0)[0].points.clone();
+        ink.select_only(0, id);
+        assert_eq!(ink.duplicate_selection(), 1);
+        assert_eq!(ink.strokes(0).len(), 3);
+        // The copy is selected, offset by DUP_OFFSET, with a fresh id.
+        let copy_id = ink.selection()[0];
+        assert_ne!(copy_id, id);
+        let copy = ink.strokes(0).iter().find(|s| s.id == copy_id).expect("copy exists");
+        assert!((copy.points[0].0 - (orig[0].0 + DUP_OFFSET.0)).abs() < 1e-6);
+        // Undo removes only the copy.
+        assert!(ink.undo());
+        assert_eq!(ink.strokes(0).len(), 2);
+        assert_eq!(ink.strokes(0)[0].points, orig);
+        assert_eq!(ink.selection_len(), 0, "selection pruned after undo removed the copy");
+    }
+
+    #[test]
+    fn delete_selection_restores_on_undo() {
+        let mut ink = two_strokes();
+        let (id0, id1) = (ink.strokes(0)[0].id, ink.strokes(0)[1].id);
+        let orig1 = ink.strokes(0)[1].points.clone();
+        ink.select_only(0, id0);
+        ink.toggle_selected(0, id1);
+        assert_eq!(ink.delete_selection(), 2);
+        assert_eq!(ink.count(), 0);
+        assert!(ink.can_undo());
+        assert!(ink.undo());
+        assert_eq!(ink.strokes(0).len(), 2);
+        assert_eq!(ink.strokes(0)[1].points, orig1, "order preserved");
+    }
+
+    #[test]
+    fn copy_paste_lands_on_the_target_slide_with_new_ids() {
+        let mut ink = two_strokes();
+        let id = ink.strokes(0)[0].id;
+        ink.select_only(0, id);
+        assert_eq!(ink.copy_selection(), 1);
+        assert_eq!(ink.paste(2), 1);
+        assert_eq!(ink.strokes(2).len(), 1);
+        assert_ne!(ink.strokes(2)[0].id, id);
+        assert_eq!(ink.selection(), &[ink.strokes(2)[0].id]);
+        // Pasting again creates another copy (clipboard survives).
+        assert_eq!(ink.paste(2), 1);
+        assert_eq!(ink.strokes(2).len(), 2);
+        // Two pastes = two Added entries = two undos.
+        assert!(ink.undo());
+        assert!(ink.undo());
+        assert_eq!(ink.strokes(2).len(), 0);
+    }
+
+    #[test]
+    fn selection_is_pruned_when_strokes_vanish() {
+        let mut ink = two_strokes();
+        let id = ink.strokes(0)[0].id;
+        ink.select_only(0, id);
+        // Erase that stroke: the selection must drop it.
+        assert_eq!(ink.erase_at(0, 0.3, 0.3, 2.0, 100.0, 100.0), 1);
+        assert_eq!(ink.selection_len(), 0);
+        // Undo restores the stroke; the selection stays empty (no resurrection).
+        assert!(ink.undo());
+        assert_eq!(ink.selection_len(), 0);
+        // Clear drops the rest.
+        ink.select_only(0, id);
+        ink.clear_slide(0);
+        assert_eq!(ink.selection_len(), 0);
+    }
+
+    #[test]
+    fn selection_follows_only_its_slide() {
+        let mut ink = two_strokes();
+        let id = ink.strokes(0)[0].id;
+        ink.select_only(0, id);
+        ink.sync_slide(0);
+        assert_eq!(ink.selection_len(), 1);
+        ink.sync_slide(1);
+        assert_eq!(ink.selection_len(), 0, "navigating away drops the selection");
+        // Selecting on another slide starts fresh.
+        ink.begin(1, 0.2, 0.2);
+        ink.push(1, 0.4, 0.4);
+        ink.end();
+        ink.select_only(1, ink.strokes(1)[0].id);
+        assert_eq!(ink.selected_bounds(1), Some(((0.2, 0.2), (0.4, 0.4))));
+        assert_eq!(ink.selected_bounds(0), None, "bounds only on the selection's slide");
+    }
+
+    #[test]
+    fn move_is_anchored_to_its_slide_across_navigation() {
+        let mut ink = two_strokes();
+        let id = ink.strokes(0)[0].id;
+        let orig = ink.strokes(0)[0].points.clone();
+        ink.select_only(0, id);
+        ink.begin_move();
+        ink.move_selection_by(0.1, 0.0);
+        // Navigation mid-drag: the gesture ends against slide 0, selection drops.
+        ink.sync_slide(1);
+        assert_eq!(ink.selection_len(), 0);
+        // Deltas after the navigation go nowhere (the gesture is closed).
+        ink.move_selection_by(0.2, 0.0);
+        assert!(!ink.end_move(), "the gesture ended at navigation");
+        let s = &ink.strokes(0)[0];
+        assert!((s.points[0].0 - (orig[0].0 + 0.1)).abs() < 1e-6, "only pre-navigation deltas applied");
+        // One undo reverts exactly that journaled move, on slide 0.
+        assert!(ink.undo());
+        let s = &ink.strokes(0)[0];
+        assert!((s.points[0].0 - orig[0].0).abs() < 1e-6);
+    }
+
+    #[test]
+    fn undo_mid_move_first_reverts_the_inflight_drag() {
+        let mut ink = two_strokes();
+        let id = ink.strokes(0)[0].id;
+        let orig = ink.strokes(0)[0].points.clone();
+        ink.select_only(0, id);
+        ink.begin_move();
+        ink.move_selection_by(0.2, 0.0);
+        // Cmd+Z mid-drag: the in-flight move is committed and immediately reverted — not
+        // silently dropped, and the older Draw survives for the next undo.
+        assert!(ink.undo());
+        let s = &ink.strokes(0)[0];
+        assert!((s.points[0].0 - orig[0].0).abs() < 1e-6, "in-flight drag reverted");
+        ink.move_selection_by(0.5, 0.0);
+        assert!((ink.strokes(0)[0].points[0].0 - orig[0].0).abs() < 1e-6, "gesture is closed");
+        assert!(!ink.end_move());
+        assert!(ink.undo(), "the stroke's Draw is still undoable");
+        assert_eq!(ink.count(), 1);
+    }
+
+    #[test]
+    fn delete_mid_move_journals_move_before_delete() {
+        let mut ink = two_strokes();
+        let id = ink.strokes(0)[0].id;
+        let orig = ink.strokes(0)[0].points.clone();
+        ink.select_only(0, id);
+        ink.begin_move();
+        ink.move_selection_by(0.2, 0.0);
+        assert_eq!(ink.delete_selection(), 1);
+        assert_eq!(ink.strokes(0).len(), 1);
+        // Undo restores the stroke at its moved position, then reverts the move: strict LIFO.
+        assert!(ink.undo());
+        let s = &ink.strokes(0)[0];
+        assert!((s.points[0].0 - (orig[0].0 + 0.2)).abs() < 1e-6, "restored at the moved position");
+        assert!(ink.undo());
+        let s = &ink.strokes(0)[0];
+        assert!((s.points[0].0 - orig[0].0).abs() < 1e-6, "then the move is reverted");
+    }
+
+    #[test]
+    fn paste_with_empty_clipboard_keeps_the_selection() {
+        let mut ink = two_strokes();
+        let id = ink.strokes(0)[0].id;
+        ink.select_only(0, id);
+        assert_eq!(ink.paste(0), 0);
+        assert_eq!(ink.selection(), &[id], "empty clipboard: selection untouched");
+        assert_eq!(ink.count(), 2, "empty clipboard: no strokes added");
+    }
+
+    #[test]
+    fn switching_away_from_select_clears_the_selection() {
+        let mut ink = two_strokes();
+        let id = ink.strokes(0)[0].id;
+        ink.select_only(0, id);
+        ink.set_tool(ShowTool::Pen);
+        assert_eq!(ink.selection_len(), 0);
+        // Switching TO select keeps whatever the pure layer holds (a fresh selection starts).
+        ink.select_only(0, id);
+        ink.set_tool(ShowTool::Select);
+        assert_eq!(ink.selection_len(), 1);
+    }
+
+    #[test]
+    fn can_undo_sees_an_inflight_move() {
+        let mut ink = two_strokes();
+        let id = ink.strokes(0)[0].id;
+        ink.select_only(0, id);
+        ink.begin_move();
+        ink.move_selection_by(0.1, 0.0);
+        assert!(ink.can_undo(), "the in-flight drag is undoable");
+        assert!(ink.undo(), "and undo reverts it");
     }
 }

@@ -13,6 +13,16 @@ use crate::icons::Icon;
 use crate::show_ink::{PALETTE, ShowInk, ShowStroke, ShowTool, smooth_stroke};
 use crate::theme;
 
+/// The select tool's active drag gesture (normalized slide coordinates). Every gesture is
+/// anchored to the slide where it started: navigating away mid-drag ends/abandons it.
+enum SelectDrag {
+    /// Moving the selection: the slide, the last pointer position (deltas apply per frame).
+    Move(usize, f32, f32),
+    /// Marquee rectangle: the slide, start corner, current corner, and shift (add to
+    /// selection) as sampled at press.
+    Marquee(usize, (f32, f32), (f32, f32), bool),
+}
+
 pub struct Show {
     pub state: ShowState,
     pub reading: bool,
@@ -33,6 +43,8 @@ pub struct Show {
     ink: ShowInk,
     /// The slide an erase gesture started on (the gesture only erases there).
     erase_slide: Option<usize>,
+    /// The select tool's active drag gesture (normalized slide coordinates).
+    select_drag: Option<SelectDrag>,
     /// The keep-ink prompt is up (show stays alive until answered).
     ask_keep: bool,
     /// A scripted answer waiting for the prompt (`show.end {keep}`).
@@ -104,6 +116,7 @@ impl Show {
             blank: None,
             ink: ShowInk::new(doc.show.pen_color),
             erase_slide: None,
+            select_drag: None,
             ask_keep: false,
             pending_keep: None,
             laser_trail: vec![],
@@ -175,6 +188,10 @@ impl Show {
                 self.ink.end();
                 self.ink.end_erase();
                 self.erase_slide = None;
+                // The selection belongs to the slide that was visible when it was made;
+                // syncing here (the one navigation choke point) means no caller can act on a
+                // stale selection — not even a bar click followed by a key next frame.
+                self.ink.sync_slide(self.state.slide);
                 if self.preview_only {
                     return false;
                 }
@@ -185,6 +202,7 @@ impl Show {
                 self.ink.end();
                 self.ink.end_erase();
                 self.erase_slide = None;
+                self.ink.sync_slide(self.state.slide);
                 if self.preview_only {
                     return false;
                 }
@@ -302,6 +320,9 @@ pub fn ui(app: &mut SlideApp, ui: &mut Ui) {
             }
             continue;
         }
+        // Navigation keys mutate state.slide at once (their action is applied below); keep the
+        // selection on the visible slide even when a later key in the same frame reads it.
+        show.ink.sync_slide(show.state.slide);
         match k {
             Escape | Minus => keep = false,
             ArrowRight | ArrowDown | Space | PageDown | N => {
@@ -329,8 +350,23 @@ pub fn ui(app: &mut SlideApp, ui: &mut Ui) {
             E if m.command => show.ink.toggle(ShowTool::Eraser),
             L if m.command => show.ink.toggle(ShowTool::Laser),
             A if m.command => show.ink.set_tool(ShowTool::Pointer),
+            V if m.is_none() => show.ink.set_tool(ShowTool::Select),
             Z if m.command && !m.shift => {
                 show.ink.undo();
+            }
+            // Selection editing (select tool only, never on the end screen or mid-drag;
+            // Backspace stays "previous slide").
+            Delete if show.ink.tool() == ShowTool::Select && !show.ended && show.select_drag.is_none() => {
+                show.ink.delete_selection();
+            }
+            D if m.command && show.ink.tool() == ShowTool::Select && !show.ended && show.select_drag.is_none() => {
+                show.ink.duplicate_selection();
+            }
+            C if m.command && show.ink.tool() == ShowTool::Select && !show.ended => {
+                show.ink.copy_selection();
+            }
+            V if m.command && show.ink.tool() == ShowTool::Select && !show.ended && show.select_drag.is_none() => {
+                show.ink.paste(show.state.slide);
             }
             Home => actions.push(show.state.goto(&doc, 0)),
             End => actions.push(show.state.goto(&doc, doc.slides.len().saturating_sub(1))),
@@ -596,13 +632,19 @@ pub fn ui(app: &mut SlideApp, ui: &mut Ui) {
     if let Some(c) = show.blank {
         painter.rect_filled(full, CornerRadius::ZERO, c);
     }
-    // Pen / highlighter / eraser / laser. No ink input while a transition is running: the
-    // paint gate hides ink then, so drawing would be invisible.
+    // Pen / highlighter / eraser / laser / select. No ink input while a transition is
+    // running: the paint gate hides ink then, so drawing would be invisible.
     let drawing = matches!(show.ink.tool(), ShowTool::Pen | ShowTool::Highlighter) && !show.ended && show.trans.is_none() && !show.ask_keep;
     let erasing = show.ink.tool() == ShowTool::Eraser && !show.ended && show.trans.is_none() && !show.ask_keep;
     let lasering = show.ink.tool() == ShowTool::Laser && !show.ended && !show.ask_keep;
+    let selecting = show.ink.tool() == ShowTool::Select && !show.ended && show.trans.is_none() && !show.ask_keep;
+    if !selecting && show.select_drag.is_some() {
+        // The tool changed mid-gesture: commit the move, drop the marquee.
+        show.select_drag = None;
+        show.ink.end_move();
+    }
     let mut eraser_pos: Option<Pos2> = None;
-    let resp = ui.interact(full, ui.id().with("show_pen"), if drawing || erasing { Sense::click_and_drag() } else { Sense::hover() });
+    let resp = ui.interact(full, ui.id().with("show_pen"), if drawing || erasing || selecting { Sense::click_and_drag() } else { Sense::hover() });
     let norm = |p: Pos2| ((p.x - srect.min.x) / srect.width().max(1.0), (p.y - srect.min.y) / srect.height().max(1.0));
     if drawing {
         let pressed = ctx.input(|i| i.pointer.primary_pressed());
@@ -644,6 +686,72 @@ pub fn ui(app: &mut SlideApp, ui: &mut Ui) {
         }
         eraser_pos = resp.interact_pointer_pos().or_else(|| ctx.input(|i| i.pointer.hover_pos()));
         ctx.set_cursor_icon(egui::CursorIcon::None);
+    } else if selecting {
+        let pressed = ctx.input(|i| i.pointer.primary_pressed());
+        if resp.is_pointer_button_down_on()
+            && let Some(p) = resp.interact_pointer_pos()
+        {
+            let (x, y) = norm(p);
+            let slide = show.state.slide;
+            let ink_k = srect.width() / doc.slide_size.width.max(1.0) as f32;
+            // A gesture from a slide we just left is over: sync_slide already journaled the
+            // partial move; the marquee is simply abandoned.
+            let stale = matches!(show.select_drag.as_ref(), Some(SelectDrag::Move(s, ..) | SelectDrag::Marquee(s, ..)) if *s != slide);
+            if stale {
+                show.select_drag = None;
+                show.ink.end_move();
+            }
+            if pressed && !bar_hit && show.select_drag.is_none() {
+                // Press: on a stroke → (maybe re-select and) start a move; on empty space →
+                // marquee. Shift toggles/adds instead of replacing.
+                let shift = ctx.input(|i| i.modifiers.shift);
+                match show.ink.hit_test(slide, x, y, 10.0 / ink_k.max(0.01), doc.slide_size.width, doc.slide_size.height) {
+                    Some(id) => {
+                        if shift {
+                            show.ink.toggle_selected(slide, id);
+                        } else {
+                            if !show.ink.is_selected(id) {
+                                show.ink.select_only(slide, id);
+                            }
+                            show.ink.begin_move();
+                            show.select_drag = Some(SelectDrag::Move(slide, x, y));
+                        }
+                    }
+                    None => {
+                        if !shift {
+                            show.ink.clear_selection();
+                        }
+                        show.select_drag = Some(SelectDrag::Marquee(slide, (x, y), (x, y), shift));
+                    }
+                }
+            } else if let Some(drag) = show.select_drag.as_mut() {
+                match drag {
+                    SelectDrag::Move(_, lx, ly) => {
+                        show.ink.move_selection_by(x - *lx, y - *ly);
+                        *lx = x;
+                        *ly = y;
+                    }
+                    SelectDrag::Marquee(_, _, cur, _) => *cur = (x, y),
+                }
+            }
+        }
+        if !resp.is_pointer_button_down_on()
+            && let Some(drag) = show.select_drag.take()
+        {
+            match drag {
+                SelectDrag::Move(..) => {
+                    show.ink.end_move();
+                }
+                SelectDrag::Marquee(s, a, b, add) => {
+                    // A (near-)zero drag is a click, not a marquee — the press already handled
+                    // the selection. And if the show navigated mid-drag, the marquee dies here.
+                    if s == show.state.slide && ((b.0 - a.0).abs() > 0.002 || (b.1 - a.1).abs() > 0.002) {
+                        show.ink.select_in_rect(s, a, b, add);
+                    }
+                }
+            }
+        }
+        ctx.set_cursor_icon(egui::CursorIcon::Default);
     } else if link.is_some() {
         ctx.set_cursor_icon(egui::CursorIcon::PointingHand);
     } else if lasering {
@@ -674,6 +782,26 @@ pub fn ui(app: &mut SlideApp, ui: &mut Ui) {
     // except under the keep prompt, so the user sees what they are keeping).
     if show.trans.is_none() && (!show.ended || show.ask_keep) {
         paint_ink(&painter, srect, doc.slide_size.width, show.ink.strokes(show.state.slide));
+    }
+    // Select tool overlay: an accent box with handles around the selection, and the live
+    // marquee rectangle while dragging on empty space.
+    if selecting {
+        let accent = Color32::from_rgb(0x1E, 0x88, 0xE5);
+        let to_screen = |(x, y): (f32, f32)| pos2(srect.min.x + x * srect.width(), srect.min.y + y * srect.height());
+        if let Some((lo, hi)) = show.ink.selected_bounds(show.state.slide) {
+            let r = Rect::from_two_pos(to_screen(lo), to_screen(hi)).expand(4.0);
+            painter.rect_stroke(r, CornerRadius::same(2), Stroke::new(1.5, accent), egui::StrokeKind::Outside);
+            for cx in [r.left(), r.right()] {
+                for cy in [r.top(), r.bottom()] {
+                    painter.rect_filled(Rect::from_center_size(pos2(cx, cy), vec2(7.0, 7.0)), CornerRadius::same(2), accent);
+                }
+            }
+        }
+        if let Some(SelectDrag::Marquee(_, a, b, _)) = &show.select_drag {
+            let r = Rect::from_two_pos(to_screen(*a), to_screen(*b));
+            painter.rect_filled(r, CornerRadius::ZERO, accent.gamma_multiply(0.12));
+            painter.rect_stroke(r, CornerRadius::ZERO, Stroke::new(1.0, accent), egui::StrokeKind::Inside);
+        }
     }
     // Reading view bar / on-screen controls.
     if show.reading {
@@ -721,6 +849,18 @@ pub fn ui(app: &mut SlideApp, ui: &mut Ui) {
             }
         }
         bar_sep(&mut child);
+        if bar_icon_button(
+            &mut child,
+            Icon::LassoSelect,
+            "Select",
+            show.ink.tool() == ShowTool::Select,
+            true,
+            "Select ink (V) — drag to move, ⌘D duplicate, ⌦ delete",
+        )
+        .clicked()
+        {
+            show.ink.set_tool(ShowTool::Select);
+        }
         if bar_icon_button(
             &mut child,
             Icon::Pen,
