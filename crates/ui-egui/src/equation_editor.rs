@@ -327,4 +327,18 @@ mod tests {
         steps(&mut h, 3);
         assert!(!h.state().equation.is_open());
     }
+
+    #[test]
+    fn pasting_an_equation_on_the_slide_inserts_one() {
+        let mut h = harness();
+        h.event(egui::Event::Paste("$$\\frac{a}{b}$$".into()));
+        steps(&mut h, 2);
+        let eqs = equations(h.state());
+        assert_eq!(eqs.len(), 1, "a delimited LaTeX paste becomes an equation");
+        assert!(eqs[0].1.contains("<m:f>") && eqs[0].1.contains("oMathPara"), "{eqs:?}");
+        // Text with dollar signs stays text.
+        h.event(egui::Event::Paste("costs $5 and $6".into()));
+        steps(&mut h, 2);
+        assert_eq!(equations(h.state()).len(), 1);
+    }
 }
