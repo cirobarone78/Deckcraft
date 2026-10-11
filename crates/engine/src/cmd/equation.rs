@@ -44,9 +44,18 @@ pub fn specs() -> Vec<CommandSpec> {
             "Get Equation",
             [],
             None,
-            "{id?, cell?: [row, col], paragraph?, run?} → {id, cell?, paragraph, run, omml, linear, display, tree, rect?: [x,y,w,h]}: rect is where the equation is drawn, in slide points (a table's cell gives the table's)",
+            "{id?, cell?: [row, col], paragraph?, run?} → {id, cell?, paragraph, run, omml, linear, display, tree, rect?: [x,y,w,h], baseline?, size?}: where the equation is drawn, in slide points (a table's cell gives the table's rect only)",
             has_slide,
             get
+        ),
+        cmd!(
+            query "equation.place",
+            "Equation Place",
+            [],
+            None,
+            "{id?, cell?, paragraph?, run?} → {rect: [x,y,w,h], baseline?, size?}: where the equation is drawn, in slide points",
+            has_slide,
+            place
         ),
         cmd!(
             query "equation.fromLinear",
@@ -366,43 +375,59 @@ fn get(s: &mut Session, p: &Value) -> Result<Value> {
         if let Some((r, c)) = cell {
             o.insert("cell".into(), json!([r, c]));
         }
-        if let Some(r) = drawn_rect(s, id, cell, pi, ri) {
-            o.insert("rect".into(), json!(r));
+        if let Some(d) = drawn(s, id, cell, pi, ri) {
+            o.insert("rect".into(), json!(d.rect));
+            if let (Some(b), Some(z)) = (d.baseline, d.size) {
+                o.insert("baseline".into(), json!(b));
+                o.insert("size".into(), json!(z));
+            }
         }
     }
     Ok(v)
 }
 
-/// Where the equation run is drawn, as `[x, y, w, h]` in slide points: the equation's own extent
-/// in a text box, the whole shape for a table cell or when the layout cannot say.
-fn drawn_rect(s: &Session, id: ShapeId, cell: Cell, pi: usize, ri: usize) -> Option<[f64; 4]> {
+/// Where an equation run is drawn, in slide points: its extent `rect` `[x, y, w, h]`, the
+/// `baseline` y and the `size` it was laid out at. The extent of the whole shape for a table
+/// cell or when the layout cannot say.
+struct Drawn {
+    rect: [f64; 4],
+    baseline: Option<f64>,
+    size: Option<f64>,
+}
+
+fn drawn(s: &Session, id: ShapeId, cell: Cell, pi: usize, ri: usize) -> Option<Drawn> {
     let st = s.doc().ok()?;
     let sh = st.shape(id)?;
     let x = xfrm_of(&st.doc, &st.selection, sh);
+    let aff = x.affine();
     let whole = {
-        let aff = x.affine();
         let corners = [aff * Point::new(0.0, 0.0), aff * Point::new(x.w, 0.0), aff * Point::new(x.w, x.h), aff * Point::new(0.0, x.h)];
         let (x0, x1) = corners.iter().fold((f64::MAX, f64::MIN), |a, p| (a.0.min(p.x), a.1.max(p.x)));
         let (y0, y1) = corners.iter().fold((f64::MAX, f64::MIN), |a, p| (a.0.min(p.y), a.1.max(p.y)));
-        [x0, y0, x1 - x0, y1 - y0]
+        Drawn { rect: [x0, y0, x1 - x0, y1 - y0], baseline: None, size: None }
     };
     if cell.is_some() {
         return Some(whole);
     }
     let body = sh.text.as_ref()?;
-    let q = body.paragraphs.get(pi)?;
-    let at: usize = q.runs.iter().take(ri).map(|r| r.char_len()).sum();
-    let end = at + q.runs.get(ri)?.char_len();
+    let at: usize = body.paragraphs.get(pi)?.runs.iter().take(ri).map(|r| r.char_len()).sum();
     let t = crate::TextSel { shape: id, ..Default::default() };
     let l = text::layout_for(st, &t)?;
-    let (Some((x0, top, bottom)), Some((x1, _, _))) =
-        (l.caret(deckcraft_text::Pos { para: pi, ch: at }), l.caret(deckcraft_text::Pos { para: pi, ch: end }))
-    else {
-        return Some(whole);
-    };
-    let aff = x.affine();
-    let (a, b) = (aff * Point::new(x0.min(x1), top), aff * Point::new(x0.max(x1), bottom));
-    Some([a.x.min(b.x), a.y.min(b.y), (b.x - a.x).abs(), (b.y - a.y).abs()])
+    let Some(e) = l.equations.iter().find(|e| e.para == pi && e.ch == at) else { return Some(whole) };
+    let (a, b) = (aff * Point::new(e.x, e.baseline - e.ascent), aff * Point::new(e.x + e.width, e.baseline + e.descent));
+    let base = aff * Point::new(e.x, e.baseline);
+    Some(Drawn { rect: [a.x.min(b.x), a.y.min(b.y), (b.x - a.x).abs(), (b.y - a.y).abs()], baseline: Some(base.y), size: Some(e.size) })
+}
+
+fn place(s: &mut Session, p: &Value) -> Result<Value> {
+    let (id, cell, pi, ri) = locate(s, "equation.place", p)?;
+    let d = drawn(s, id, cell, pi, ri).ok_or_else(|| bad("equation.place", "the equation is gone"))?;
+    let mut v = json!({"rect": d.rect});
+    if let (Some(b), Some(z), Some(o)) = (d.baseline, d.size, v.as_object_mut()) {
+        o.insert("baseline".into(), json!(b));
+        o.insert("size".into(), json!(z));
+    }
+    Ok(v)
 }
 
 fn from_linear(_s: &mut Session, p: &Value) -> Result<Value> {

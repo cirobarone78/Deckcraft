@@ -32,14 +32,8 @@ pub(crate) struct Open {
     target: Option<Value>,
     /// Why loading failed.
     error: Option<String>,
-    /// Where the equation is drawn on the slide, `[x, y, w, h]` in slide points (a new one has none).
-    rect: Option<[f64; 4]>,
-    /// The font size is set for this slide zoom (and, for an existing equation, matched to the
-    /// size it is drawn at).
-    sized: bool,
-    calibrated: bool,
-    /// The font size now, in screen points.
-    pt: f64,
+    /// The undo history length before this edit's first change (its steps fold into one).
+    undo_base: Option<usize>,
 }
 
 /// The equation editor's state in [`SlideApp`].
@@ -80,14 +74,11 @@ impl EquationHost {
 /// names, read with `equation.get` (a query: the presentation and its history stay as they are).
 fn open(app: &mut SlideApp, params: &Value) -> Open {
     let mut o = Open {
-        widget: EquationEditor::new().inline(true).id_salt("deckcraft-equation-editor"),
+        widget: EquationEditor::new().inline(true).overlay(true).id_salt("deckcraft-equation-editor"),
         params: params.clone(),
         target: None,
         error: None,
-        rect: None,
-        sized: false,
-        calibrated: false,
-        pt: 20.0,
+        undo_base: None,
     };
     // A ready-made equation from Insert › Equation's arrow: a new equation, started from it.
     if let Some(id) = params.get("builtin").and_then(Value::as_str) {
@@ -107,10 +98,6 @@ fn open(app: &mut SlideApp, params: &Value) -> Open {
     }
     match app.session.execute("equation.get", &Value::Object(loc)) {
         Ok(v) => {
-            o.rect = v.get("rect").and_then(Value::as_array).and_then(|a| {
-                let n: Vec<f64> = a.iter().filter_map(Value::as_f64).collect();
-                <[f64; 4]>::try_from(n).ok()
-            });
             if let Some(x) = v.get("omml").and_then(Value::as_str) {
                 o.widget.set_omml(x);
                 // Update the very run that was read, even if the selection moves meanwhile.
@@ -128,29 +115,51 @@ fn open(app: &mut SlideApp, params: &Value) -> Open {
     o
 }
 
-/// Apply the widget's equation: `insert.equation` or `equation.update`, one undo step.
-fn apply(app: &mut SlideApp, o: &mut Open) -> Result<(), String> {
+/// Apply the widget's equation to the presentation as it is typed: `equation.update` on the
+/// equation being edited, or `insert.equation` the first time a new one has something in it. The
+/// undo steps these make are folded into one (the state before the first), so one Undo takes the
+/// whole edit back.
+fn sync(app: &mut SlideApp, o: &mut Open) -> Result<(), String> {
     o.widget.editor_mut().flush();
     if o.widget.editor().is_blank() {
-        return Err("Type or build an equation first.".into());
+        return Ok(());
     }
     let mut p = json!({"omml": o.widget.omml()});
-    let cmd = match (&o.target, p.as_object_mut()) {
+    let base = app.session.active().map_or(0, |d| d.history.undo.len());
+    let (cmd, inserted) = match (&o.target, p.as_object_mut()) {
         (Some(Value::Object(t)), Some(obj)) => {
             obj.extend(t.clone());
-            "equation.update"
+            ("equation.update", false)
         }
-        _ => "insert.equation",
+        _ => ("insert.equation", true),
     };
-    app.run(cmd, p).map(|_| ())
+    let r = app.run(cmd, p)?;
+    if inserted {
+        o.undo_base = Some(base);
+        if let Some(id) = r.get("id").and_then(Value::as_u64) {
+            o.target = Some(json!({"id": id, "paragraph": 0, "run": 0}));
+        }
+    } else if o.undo_base.is_none() {
+        o.undo_base = Some(base);
+    }
+    // One undo step for the whole edit: keep the first entry (the document before it began).
+    if let (Some(b), Some(d)) = (o.undo_base, app.session.active_mut())
+        && d.history.undo.len() > b + 1
+    {
+        d.history.undo.truncate(b + 1);
+        if let Some(e) = d.history.undo.get_mut(b) {
+            e.label = "Edit Equation".into();
+        }
+    }
+    Ok(())
 }
 
-/// The equation, edited where it sits on the slide: the widget's bare canvas over the equation
-/// (or in the middle of the slide for a new one), sized to match, with the Equation tab doing the
-/// choosing. True when the editor should close.
+/// The equation, edited where it sits on the slide: typing goes into the equation itself, drawn
+/// by the document as it always is, and the widget draws only the caret and selection over it.
+/// A new equation starts in the middle of the slide. True when the editor should close.
 ///
-/// - Enter, Esc, a click on the slide outside the equation, or the tab's Close Equation leave
-///   it, keeping the edit (one undo step); a new equation never filled is dropped.
+/// - Typing and the Equation tab edit the presentation live (see [`sync`]).
+/// - Enter, Esc, a click on the slide outside the equation or the tab's Close Equation leave it.
 /// - Clicks in the ribbon and its menus do not leave it.
 pub fn in_place(app: &mut SlideApp, ctx: &egui::Context, d: &mut Dialog) -> bool {
     let mut o = match app.equation.open.take() {
@@ -161,50 +170,57 @@ pub fn in_place(app: &mut SlideApp, ctx: &egui::Context, d: &mut Dialog) -> bool
         app.set_status(e);
         return true;
     }
+    // A new equation that starts with something in it (a ready-made one) goes in at once.
+    if o.target.is_none()
+        && !o.widget.editor().is_blank()
+        && let Err(e) = sync(app, &mut o)
+    {
+        app.set_status(e);
+    }
     let Some(slide) = app.slide_rect else {
         app.equation.open = Some(o);
         return false;
     };
     let scale = app.canvas_scale.max(0.05);
     let pad = EquationEditor::inline_pad();
-    let at = |x: f64, y: f64| egui::pos2(slide.min.x + x as f32 * scale, slide.min.y + y as f32 * scale);
-    let (anchor, target_h) = match o.rect {
-        Some([x, y, w, h]) => {
-            let (tl, br) = (at(x, y), at(x + w, y + h));
-            (egui::pos2(tl.x - pad.x, (tl.y + br.y) / 2.0), Some(br.y - tl.y))
+    // Where the equation is drawn now (the document is the truth once it exists).
+    let placed = o.target.as_ref().and_then(|t| {
+        let Value::Object(t) = t else { return None };
+        app.session.execute("equation.place", &Value::Object(t.clone())).ok()
+    });
+    let num = |v: &Value, k: &str| v.get(k).and_then(Value::as_f64);
+    let (left, baseline, pt) = match &placed {
+        Some(v) if num(v, "baseline").is_some() => {
+            let rect = v.get("rect").and_then(Value::as_array).map(|a| a.iter().filter_map(Value::as_f64).collect::<Vec<_>>()).unwrap_or_default();
+            let x = rect.first().copied().unwrap_or(0.0);
+            (
+                slide.min.x + x as f32 * scale,
+                slide.min.y + num(v, "baseline").unwrap_or(0.0) as f32 * scale,
+                num(v, "size").unwrap_or(24.0) * f64::from(scale),
+            )
         }
-        None => (egui::pos2(slide.center().x - 70.0, slide.center().y), None),
+        _ => (slide.center().x - 70.0, slide.center().y, 24.0 * f64::from(scale)),
     };
-    // Size: a new equation at a body-text size; an existing one calibrated once so that what is
-    // typed is the size of what was there.
-    if !o.sized {
-        o.pt = f64::from(if target_h.is_some() { 18.0 } else { 24.0 } * scale);
-        o.widget.set_font_size(o.pt);
-        o.sized = true;
-    } else if !o.calibrated {
-        if let (Some(h), Some(cs)) = (target_h, o.widget.content_size()) {
-            let natural = f64::from((cs.y - 2.0 * pad.y).max(1.0));
-            o.pt = (o.pt * f64::from(h) / natural).clamp(6.0, 400.0);
-            o.widget.set_font_size(o.pt);
-        }
-        o.calibrated = true;
-    }
+    o.widget.set_font_size(pt.clamp(4.0, 1200.0));
+    // The canvas's top-left: its baseline on the equation's (a guess until it has been drawn).
+    let base_in_canvas = o.widget.inline_baseline().unwrap_or((pad.y + 0.8 * pt as f32).max(1.0));
+    let top_left = egui::pos2(left - pad.x, baseline - base_in_canvas);
 
     let t = Tokens::get(ctx);
     let esc = ctx.input(|i| i.key_pressed(egui::Key::Escape));
     let mut response = None;
     let area = egui::Area::new(egui::Id::new("deckcraft-equation-in-place"))
         .order(egui::Order::Foreground)
-        .fixed_pos(anchor)
-        .pivot(egui::Align2::LEFT_CENTER)
+        .fixed_pos(top_left)
         .show(ctx, |ui| {
-            egui::Frame::new().fill(egui::Color32::from_rgba_unmultiplied(255, 255, 255, 255)).corner_radius(3).show(ui, |ui| {
-                // The widget draws its ink in the "strong" colour on this near-white backing.
-                ui.visuals_mut().widgets.active.fg_stroke.color = egui::Color32::BLACK;
-                ui.visuals_mut().selection.stroke.color = t.accent;
-                response = Some(o.widget.show(ui));
-            });
+            ui.visuals_mut().selection.stroke.color = t.accent;
+            response = Some(o.widget.show(ui));
         });
+    if response.as_ref().is_some_and(|r| r.changed)
+        && let Err(e) = sync(app, &mut o)
+    {
+        app.set_status(e);
+    }
     let outside = ctx.input(|i| i.pointer.primary_pressed())
         && ctx.pointer_interact_pos().is_some_and(|p| {
             !area.response.rect.contains(p)
@@ -216,12 +232,13 @@ pub fn in_place(app: &mut SlideApp, ctx: &egui::Context, d: &mut Dialog) -> bool
     let leave = esc || outside || from_ribbon || response.as_ref().is_some_and(|r| r.committed || r.cancelled);
     if !leave {
         app.equation.open = Some(o);
+        ctx.request_repaint();
         return false;
     }
-    o.widget.editor_mut().flush();
-    // Nothing typed, or nothing changed: nothing to apply.
-    let nothing = o.widget.editor().is_blank() || (o.target.is_some() && !o.widget.is_dirty());
-    if !nothing && let Err(e) = apply(app, &mut o) {
+    // Whatever the last frame left unsynced.
+    if o.widget.is_dirty()
+        && let Err(e) = sync(app, &mut o)
+    {
         app.set_status(e);
     }
     true
@@ -325,14 +342,15 @@ mod tests {
         h.state_mut().ui.tab = "Insert".into();
         steps(&mut h, 3);
         let id = equashion_egui::equashion_math::galleries().builtins.first().map(|b| b.id.clone()).expect("a built-in equation");
+        let depth = undo_depth(h.state());
         let mut d = crate::dialogs::Dialog::new("equation");
         d.params = json!({"builtin": id});
         h.state_mut().dialog = Some(d);
         steps(&mut h, 4);
         let w = h.state().equation.widget().expect("the editor is open");
         assert!(!w.linear().is_empty(), "started from the ready-made equation");
-        assert!(h.state().equation.target().is_none(), "a new equation, not an edit");
-        let depth = undo_depth(h.state());
+        // A ready-made equation goes onto the slide at once, as one undo step; leaving keeps it.
+        assert_eq!(equations(h.state()).len(), 1);
         h.key_press(egui::Key::Enter);
         steps(&mut h, 3);
         assert_eq!(equations(h.state()).len(), 1);
@@ -352,14 +370,16 @@ mod tests {
         let depth = undo_depth(h.state());
         type_text(&mut h, "x^2");
         assert_eq!(h.state().equation.widget().map(|w| w.linear()), Some("x^2".to_string()));
-        assert!(equations(h.state()).is_empty(), "the presentation waits for Enter");
+        // Typed into the equation itself: the slide has it already.
+        let eqs = equations(h.state());
+        assert_eq!(eqs.len(), 1, "the equation is on the slide as it is typed");
+        assert!(eqs[0].1.contains("m:sSup"), "{eqs:?}");
+        type_text(&mut h, "+1");
         h.key_press(egui::Key::Enter);
         steps(&mut h, 3);
-        assert!(h.state().dialog.is_none() && !h.state().equation.is_open(), "Enter applies and closes");
-        let eqs = equations(h.state());
-        assert_eq!(eqs.len(), 1);
-        assert!(eqs[0].1.contains("m:sSup"), "{eqs:?}");
-        assert_eq!(undo_depth(h.state()), depth + 1, "one undo step");
+        assert!(h.state().dialog.is_none() && !h.state().equation.is_open(), "Enter leaves the equation");
+        assert_eq!(equations(h.state()).len(), 1, "still one equation");
+        assert_eq!(undo_depth(h.state()), depth + 1, "one undo step for the whole edit");
         h.state_mut().run("edit.undo", json!({})).unwrap();
         steps(&mut h, 2);
         assert!(equations(h.state()).is_empty(), "one Undo takes the equation back");

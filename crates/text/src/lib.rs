@@ -105,6 +105,20 @@ impl std::fmt::Debug for GlyphRun {
     }
 }
 
+/// Where one equation was drawn: its first character, its left edge and baseline, the size it
+/// was laid out at (autofit applied), and its extent around the baseline. Shape-local points.
+#[derive(Clone, Copy, Debug, Default, PartialEq)]
+pub struct EquationPlace {
+    pub para: usize,
+    pub ch: usize,
+    pub x: f64,
+    pub baseline: f64,
+    pub size: f64,
+    pub width: f64,
+    pub ascent: f64,
+    pub descent: f64,
+}
+
 /// An underline, strikethrough or highlight box.
 #[derive(Clone, Debug)]
 pub struct Deco {
@@ -297,6 +311,8 @@ pub struct LineInfo {
 pub struct TextLayout {
     pub runs: Vec<GlyphRun>,
     pub decos: Vec<Deco>,
+    /// Where each equation sits, shape-local (for an editor that goes over it).
+    pub equations: Vec<EquationPlace>,
     pub lines: Vec<LineInfo>,
     /// Inner text box (insets applied), shape-local.
     pub inner: Rect,
@@ -1990,6 +2006,16 @@ fn layout_scaled(ctx: &Ctx, shape: &Shape, body: &TextBody, bp: &BodyProps, opts
                 let joiners = p.cells.iter().skip(ci + 1).take_while(|c| c.atom.is_none() && c.ch == '\u{2060}').count();
                 let base_y = line.baseline - st.baseline * st.size;
                 math::emit(m, cx, base_y, st.color, st.alpha, line.para, (ci, ci + 1 + joiners), &mut out.runs, &mut out.decos);
+                out.equations.push(EquationPlace {
+                    para: line.para,
+                    ch: ci,
+                    x: cx,
+                    baseline: base_y,
+                    size: st.size,
+                    width: m.w,
+                    ascent: m.asc,
+                    descent: m.desc,
+                });
                 if let Some(hl) = st.highlight {
                     out.decos.push(Deco { rect: Rect::new(cx, line.top, cx1, line.bottom), color: hl, behind: true, para: line.para, path: None });
                 }
