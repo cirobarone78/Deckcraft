@@ -100,8 +100,16 @@ notarize() {
 # ---- DeckCraft.app ----------------------------------------------------------------------------
 echo "==> assembling $APP"
 mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources"
-# Executable and icon carry the display name (CFBundleExecutable / CFBundleIconFile).
-cp "$WORK/bin/deckcraft" "$APP/Contents/MacOS/DeckCraft"
+# The Swift entry point receives Launch Services document events and forwards them to the
+# existing Rust UI executable. Keep the latter directly runnable for command-line use.
+swift_inputs=()
+for t in "${TARGETS[@]}"; do
+  swift_bin="$WORK/bin/DeckCraftLauncher-$t"
+  swiftc -O -target "${t%-apple-darwin}-apple-macos11.0" -o "$swift_bin" "$HERE/DeckCraftLauncher.swift"
+  swift_inputs+=("$swift_bin")
+done
+lipo -create -output "$APP/Contents/MacOS/DeckCraft" "${swift_inputs[@]}"
+cp "$WORK/bin/deckcraft" "$APP/Contents/MacOS/DeckCraftUI"
 cp "$ROOT/assets/app-icon/deckcraft.icns" "$APP/Contents/Resources/DeckCraft.icns"
 # Licences of the embedded craft-fonts fonts (only when built with CRAFT_FONTS_DIR).
 copy_font_licences "$APP/Contents/Resources"
@@ -112,7 +120,8 @@ plutil -lint "$APP/Contents/Info.plist"
 printf 'APPL????' >"$APP/Contents/PkgInfo"
 
 # Sign inside-out: nested code first, then the bundle itself (no --deep on the final signature).
-# Today the only nested code is the main executable; frameworks/helpers would be signed here too.
+# Sign both executables before signing the bundle.
+sign --options runtime --entitlements "$HERE/entitlements.plist" "$APP/Contents/MacOS/DeckCraftUI"
 sign --options runtime --entitlements "$HERE/entitlements.plist" "$APP/Contents/MacOS/DeckCraft"
 sign --options runtime --entitlements "$HERE/entitlements.plist" "$APP"
 codesign --verify --strict --deep --verbose=2 "$APP"

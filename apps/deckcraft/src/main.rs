@@ -17,24 +17,38 @@ mod control_server;
 #[cfg(any(target_os = "windows", test))]
 mod graphics;
 mod logging;
+#[cfg(target_os = "macos")]
+mod macos_open;
 
 use deckcraft_engine::Session;
 use deckcraft_ui_egui::{Services, SlideApp};
 
-struct App(SlideApp);
+struct App {
+    slide: SlideApp,
+    #[cfg(target_os = "macos")]
+    opened_files: Option<std::sync::mpsc::Receiver<String>>,
+}
 
 impl eframe::App for App {
     fn logic(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
-        self.0.logic(ctx);
+        #[cfg(target_os = "macos")]
+        if let Some(opened_files) = &self.opened_files {
+            for path in opened_files.try_iter() {
+                if let Err(error) = self.slide.open_path(&path) {
+                    log::error!("{path}: {error}");
+                }
+            }
+        }
+        self.slide.logic(ctx);
     }
     fn raw_input_hook(&mut self, _ctx: &egui::Context, raw: &mut egui::RawInput) {
-        self.0.raw_input_hook(raw);
+        self.slide.raw_input_hook(raw);
     }
     fn ui(&mut self, ui: &mut egui::Ui, _frame: &mut eframe::Frame) {
-        self.0.ui(ui);
+        self.slide.ui(ui);
     }
     fn on_exit(&mut self) {
-        save_prefs(&self.0);
+        save_prefs(&self.slide);
     }
 }
 
@@ -224,7 +238,13 @@ fn main() -> eframe::Result {
             if show {
                 app.start_show(0, false);
             }
-            Ok(Box::new(App(app)))
+            #[cfg(target_os = "macos")]
+            let opened_files = macos_open::start(cc.egui_ctx.clone());
+            Ok(Box::new(App {
+                slide: app,
+                #[cfg(target_os = "macos")]
+                opened_files,
+            }))
         }),
     )
 }
