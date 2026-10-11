@@ -47,6 +47,8 @@ pub struct EquationHost {
     pub(crate) open: Option<Open>,
     /// The ribbon has already switched to the Equation tab for this editor.
     pub(crate) tab_shown: bool,
+    /// The ribbon's Close Equation asked for the edit to be applied, as Insert / Update does.
+    pub(crate) commit_requested: bool,
 }
 
 impl EquationHost {
@@ -164,7 +166,8 @@ pub fn body(app: &mut SlideApp, ui: &mut Ui, d: &mut Dialog) -> bool {
             o.error = Some(DISCARD_PROMPT.to_string());
         }
     }
-    if !close && (ok || r.committed) {
+    let from_ribbon = std::mem::take(&mut app.equation.commit_requested);
+    if !close && (ok || r.committed || from_ribbon) {
         match apply(app, &mut o) {
             Ok(()) => close = true,
             Err(e) => o.error = Some(e),
@@ -237,6 +240,8 @@ mod tests {
     #[test]
     fn the_equation_tab_inserts_from_its_galleries() {
         let mut h = harness();
+        // The whole tab is about 1,300 points wide.
+        h.set_size(vec2(1700.0, 860.0));
         assert_ne!(h.state().ui.tab, "Equation");
         open_new(&mut h);
         assert_eq!(h.state().ui.tab, "Equation", "editing an equation brings up the tab");
@@ -246,11 +251,15 @@ mod tests {
         steps(&mut h, 3);
         let eq = h.state().equation.widget().map(|w| w.math().clone()).unwrap();
         assert!(matches!(eq.body.first().map(equashion_egui::equashion_math::Node::bare), Some(equashion_egui::equashion_math::Node::Frac { .. })), "{eq:?}");
-        h.get_by_label("Symbols").click();
+        // The symbol strip is on the tab itself: the first set's first symbols.
+        h.get_by_label("\u{221e}").click();
         steps(&mut h, 3);
-        h.get_by_label("\u{3c0}").click();
-        steps(&mut h, 3);
-        assert!(h.state().equation.widget().is_some_and(|w| w.linear().contains('\u{3c0}')), "{:?}", h.state().equation.widget().map(|w| w.linear()));
+        assert!(h.state().equation.widget().is_some_and(|w| w.linear().contains('\u{221e}')), "{:?}", h.state().equation.widget().map(|w| w.linear()));
+        // Display and Inline switch the equation's flag.
+        assert!(!h.state().equation.widget().unwrap().is_display());
+        h.get_by_label("Display").click();
+        steps(&mut h, 2);
+        assert!(h.state().equation.widget().unwrap().is_display());
         h.state_mut().dialog = None;
         steps(&mut h, 3);
         assert!(!h.state().equation.is_open());
