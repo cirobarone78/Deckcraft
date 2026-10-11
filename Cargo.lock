@@ -1135,6 +1135,7 @@ dependencies = [
  "deckcraft-fonts",
  "deckcraft-geom",
  "deckcraft-model",
+ "equashion-layout",
  "equashion-math",
  "kurbo",
  "unicode-bidi",

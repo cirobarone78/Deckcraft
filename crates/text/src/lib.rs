@@ -742,7 +742,7 @@ fn shape_para(ctx: &Ctx, shape: &Shape, body: &TextBody, pi: usize, scale: f64, 
             // the run: bidi sees a neutral object, line breaking cannot split it, and character
             // counts match the run's text.
             let n = run.char_len().max(1);
-            let mbox = math::layout_math_cached(omml, &st.face, st.size, rp.bold.unwrap_or(false), solo);
+            let mbox = math::layout_math_cached(omml, st.size, rp.bold.unwrap_or(false), solo);
             let si = styles.len();
             styles.push(st);
             atom_first.push((char_style.len(), atoms.len()));
