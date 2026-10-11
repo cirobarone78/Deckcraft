@@ -110,6 +110,28 @@ fn show_bar_shows_all_tools() {
 }
 
 #[test]
+fn undo_clear_disabled_state_tracks_ink() {
+    use egui_kittest::kittest::NodeT;
+    let mut h = make_show();
+    h.run_steps(2);
+    let disabled = |h: &Harness, label: &str| h.get_by_label(label).accesskit_node().is_disabled();
+    assert!(disabled(&h, "Undo"), "nothing to undo on a fresh show");
+    assert!(disabled(&h, "Clear"), "no ink to clear on a fresh show");
+    key(&mut h, egui::Key::P, true);
+    drag(&mut h, (300.0, 400.0), (900.0, 500.0));
+    h.run_steps(2);
+    assert!(!disabled(&h, "Undo"), "a drawn stroke can be undone");
+    assert!(!disabled(&h, "Clear"), "a drawn stroke can be cleared");
+    h.get_by_label("Clear").click();
+    h.run_steps(2);
+    assert!(!disabled(&h, "Undo"), "the clear itself is undoable");
+    assert!(disabled(&h, "Clear"), "no ink left to clear");
+    h.get_by_label("Undo").click();
+    h.run_steps(2);
+    assert!(!disabled(&h, "Clear"), "undo restored the stroke");
+}
+
+#[test]
 fn pen_draws_and_keep_prompt_has_buttons() {
     let mut h = make_show();
     h.run_steps(2);

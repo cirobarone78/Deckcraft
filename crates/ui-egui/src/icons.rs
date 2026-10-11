@@ -142,6 +142,9 @@ icons! {
     HighlighterPen => "highlighter-pen",
     Eraser => "eraser",
     LaserPointer => "laser-pointer",
+    Trash => "trash",
+    BlankScreen => "blank-screen",
+    ExitShow => "exit-show",
     LassoSelect => "lasso-select",
     InkToShape => "ink-to-shape",
     InkToText => "ink-to-text",
@@ -1532,6 +1535,27 @@ fn draw(p: &Pen<'_>, icon: Icon) {
             for (a, b) in [((19.0, 5.0), (21.0, 3.0)), ((19.0, 19.0), (21.0, 21.0)), ((5.0, 19.0), (3.0, 21.0)), ((5.0, 5.0), (3.0, 3.0))] {
                 p.seg(a, b, K);
             }
+        }
+        I::Trash => {
+            // Tapered can with a handle on the rim and two ribs.
+            p.rline(&[(6.0, 6.5), (7.0, 19.5), (17.0, 19.5), (18.0, 6.5)], 1.5, K);
+            p.line(&[(9.5, 6.5), (10.0, 4.5), (14.0, 4.5), (14.5, 6.5)], K);
+            p.seg((4.0, 6.5), (20.0, 6.5), K);
+            p.seg((10.0, 10.0), (10.4, 16.0), K);
+            p.seg((14.0, 10.0), (13.6, 16.0), K);
+        }
+        I::BlankScreen => {
+            // Monitor with a solid (blanked) screen on a stand.
+            p.rect(3.5, 5.0, 20.5, 15.0, 1.5, K, K);
+            p.seg((12.0, 15.0), (12.0, 18.5), K);
+            p.rline(&[(8.5, 18.5), (15.5, 18.5)], 0.8, K);
+        }
+        I::ExitShow => {
+            // Door opening with an arrow leaving to the right.
+            p.rline(&[(15.0, 19.5), (7.0, 19.5), (5.0, 17.5), (5.0, 6.5), (7.0, 4.5), (15.0, 4.5)], 1.2, K);
+            p.seg((10.5, 12.0), (20.5, 12.0), K);
+            let hs = p.head_size();
+            p.head((20.5, 12.0), 0.0, hs, K);
         }
         I::LassoSelect => {
             let mut e = arc_pts((13.0, 9.0), 8.5, 6.0, 120.0, 480.0);

@@ -252,9 +252,9 @@ fn quad_mesh(tex: Option<egui::TextureId>, rect: Rect, l: &Layer, color: Color32
     m
 }
 
-/// Width of the bar's extras section (8 swatches + 4 width dots + spacing) for the
-/// compact-mode estimate of the full bar width.
-const EXTRAS_W: f32 = 336.0;
+/// Width of the bar's extras section (separator + 8 swatches + 4 width dots + spacing) for
+/// the compact-mode estimate of the full bar width.
+const EXTRAS_W: f32 = 300.0;
 
 pub fn ui(app: &mut SlideApp, ui: &mut Ui) {
     let ctx = ui.ctx().clone();
@@ -692,16 +692,16 @@ pub fn ui(app: &mut SlideApp, ui: &mut Ui) {
                 .layout(egui::Layout::right_to_left(egui::Align::Center)),
         );
         // The keep-ink prompt is modal: the reading bar is inert while it is up.
-        if !show.ask_keep && child.button("Close").clicked() {
+        if !show.ask_keep && bar_icon_button(&mut child, Icon::Close, "Close", false, true, "Close reading view (Esc)").clicked() {
             keep = false;
         }
-        if !show.ask_keep && child.button("▶").clicked() {
+        if !show.ask_keep && bar_icon_button(&mut child, Icon::ChevronRight, "Next slide", false, true, "Next slide (→)").clicked() {
             let a = show.state.next(&doc);
             if !show.apply(a, &doc, now) {
                 keep = false;
             }
         }
-        if !show.ask_keep && child.button("◀").clicked() {
+        if !show.ask_keep && bar_icon_button(&mut child, Icon::ChevronLeft, "Previous slide", false, true, "Previous slide (←)").clicked() {
             let a = show.state.prev(&doc);
             show.apply(a, &doc, now);
         }
@@ -709,39 +709,63 @@ pub fn ui(app: &mut SlideApp, ui: &mut Ui) {
         painter.rect_filled(bar, CornerRadius::same(17), Color32::from_black_alpha(140));
         let mut child =
             ui.new_child(egui::UiBuilder::new().max_rect(bar.shrink2(vec2(10.0, 4.0))).layout(egui::Layout::left_to_right(egui::Align::Center)));
-        let b = |ui: &mut Ui, s: &str| ui.add(egui::Button::new(egui::RichText::new(s).color(Color32::WHITE).size(15.0)).frame(false));
-        // Icon tool button: vector icon from the icon set, highlighted while active.
-        let ib = |ui: &mut Ui, icon: Icon, label: &str, on: bool, sc: &str| -> egui::Response {
-            let resp = ui.add(egui::Button::new("").frame(false).min_size(vec2(26.0, 22.0)));
-            if on {
-                ui.painter().rect_filled(resp.rect, CornerRadius::same(5), Color32::from_white_alpha(36));
-            }
-            crate::icons::paint(ui.painter(), resp.rect.shrink(3.0), icon, Color32::WHITE, false);
-            resp.widget_info(|| egui::WidgetInfo::labeled(egui::WidgetType::Button, true, label));
-            resp.on_hover_text(format!("{label} ({sc})"))
-        };
-        if b(&mut child, "◀").clicked() {
+        child.spacing_mut().item_spacing.x = 2.0;
+        if bar_icon_button(&mut child, Icon::ChevronLeft, "Previous slide", false, true, "Previous slide (←)").clicked() {
             let a = show.state.prev(&doc);
             show.apply(a, &doc, now);
         }
-        if b(&mut child, "▶").clicked() {
+        if bar_icon_button(&mut child, Icon::ChevronRight, "Next slide", false, true, "Next slide (→)").clicked() {
             let a = show.state.next(&doc);
             if !show.apply(a, &doc, now) {
                 keep = false;
             }
         }
-        if ib(&mut child, Icon::Pen, "Pen", show.ink.tool() == ShowTool::Pen, &crate::ribbon::pretty_shortcut("Cmd+P")).clicked() {
+        bar_sep(&mut child);
+        if bar_icon_button(
+            &mut child,
+            Icon::Pen,
+            "Pen",
+            show.ink.tool() == ShowTool::Pen,
+            true,
+            format!("Pen ({})", crate::ribbon::pretty_shortcut("Cmd+P")),
+        )
+        .clicked()
+        {
             show.ink.toggle(ShowTool::Pen);
         }
-        if ib(&mut child, Icon::HighlighterPen, "Highlighter", show.ink.tool() == ShowTool::Highlighter, &crate::ribbon::pretty_shortcut("Cmd+I"))
-            .clicked()
+        if bar_icon_button(
+            &mut child,
+            Icon::HighlighterPen,
+            "Highlighter",
+            show.ink.tool() == ShowTool::Highlighter,
+            true,
+            format!("Highlighter ({})", crate::ribbon::pretty_shortcut("Cmd+I")),
+        )
+        .clicked()
         {
             show.ink.toggle(ShowTool::Highlighter);
         }
-        if ib(&mut child, Icon::Eraser, "Eraser", show.ink.tool() == ShowTool::Eraser, &crate::ribbon::pretty_shortcut("Cmd+E")).clicked() {
+        if bar_icon_button(
+            &mut child,
+            Icon::Eraser,
+            "Eraser",
+            show.ink.tool() == ShowTool::Eraser,
+            true,
+            format!("Eraser ({})", crate::ribbon::pretty_shortcut("Cmd+E")),
+        )
+        .clicked()
+        {
             show.ink.toggle(ShowTool::Eraser);
         }
-        if ib(&mut child, Icon::LaserPointer, "Laser pointer", show.ink.tool() == ShowTool::Laser, &crate::ribbon::pretty_shortcut("Cmd+L")).clicked()
+        if bar_icon_button(
+            &mut child,
+            Icon::LaserPointer,
+            "Laser pointer",
+            show.ink.tool() == ShowTool::Laser,
+            true,
+            format!("Laser pointer ({})", crate::ribbon::pretty_shortcut("Cmd+L")),
+        )
+        .clicked()
         {
             show.ink.toggle(ShowTool::Laser);
         }
@@ -749,17 +773,26 @@ pub fn ui(app: &mut SlideApp, ui: &mut Ui) {
         // windows get the compact bar without them).
         let roomy = show.bar_full.is_none_or(|fw| fw + 40.0 <= full.width());
         if roomy {
+            bar_sep(&mut child);
             let cur = show.ink.tool_color();
             for &(name, c) in PALETTE.iter() {
-                let swatch =
-                    egui::Button::new("  ").fill(theme::to_color32(c)).stroke(Stroke::new(1.0, Color32::from_gray(90))).min_size(vec2(22.0, 18.0));
-                let resp = child.add(swatch);
+                let resp = child.add(egui::Button::new("").frame(false).min_size(vec2(22.0, 24.0)));
+                let r = Rect::from_center_size(resp.rect.center(), vec2(15.0, 15.0));
+                child.painter().rect_filled(r, CornerRadius::same(4), theme::to_color32(c));
+                child.painter().rect_stroke(r, CornerRadius::same(4), Stroke::new(1.0, Color32::from_black_alpha(140)), egui::StrokeKind::Inside);
                 resp.widget_info(|| egui::WidgetInfo::labeled(egui::WidgetType::Button, true, name));
                 let resp = resp.on_hover_text(name);
                 if cur == c {
                     // Ring outside the fill so it also shows on the white swatch.
                     let ring = if c.luminance() > 0.6 { Color32::from_gray(20) } else { Color32::WHITE };
-                    child.painter().rect_stroke(resp.rect.expand(2.0), CornerRadius::same(3), Stroke::new(1.5, ring), egui::StrokeKind::Outside);
+                    child.painter().rect_stroke(r.expand(2.0), CornerRadius::same(6), Stroke::new(1.5, ring), egui::StrokeKind::Outside);
+                } else if resp.hovered() {
+                    child.painter().rect_stroke(
+                        r.expand(2.0),
+                        CornerRadius::same(6),
+                        Stroke::new(1.0, Color32::from_white_alpha(90)),
+                        egui::StrokeKind::Outside,
+                    );
                 }
                 if resp.clicked() {
                     if !matches!(show.ink.tool(), ShowTool::Pen | ShowTool::Highlighter) {
@@ -771,7 +804,7 @@ pub fn ui(app: &mut SlideApp, ui: &mut Ui) {
             // Width quick-picks drawn as dots of their size (`[` / `]` from the keyboard).
             let cur_w = show.ink.tool_width();
             for &w in show.ink.width_dots().iter() {
-                let resp = child.add(egui::Button::new("  ").frame(false).min_size(vec2(22.0, 18.0)));
+                let resp = child.add(egui::Button::new("").frame(false).min_size(vec2(22.0, 24.0)));
                 resp.widget_info(|| egui::WidgetInfo::labeled(egui::WidgetType::Button, true, format!("Width {w} pt")));
                 let resp = resp.on_hover_text(format!("{w} pt"));
                 let on = (cur_w - w).abs() < 0.001;
@@ -791,16 +824,28 @@ pub fn ui(app: &mut SlideApp, ui: &mut Ui) {
                 }
             }
         }
-        if b(&mut child, "Undo").on_hover_text(format!("Undo ink ({})", crate::ribbon::pretty_shortcut("Cmd+Z"))).clicked() {
+        bar_sep(&mut child);
+        if bar_icon_button(
+            &mut child,
+            Icon::Undo,
+            "Undo",
+            false,
+            show.ink.can_undo(),
+            format!("Undo ink ({})", crate::ribbon::pretty_shortcut("Cmd+Z")),
+        )
+        .clicked()
+        {
             show.ink.undo();
         }
-        if b(&mut child, "Clear").on_hover_text("Clear this slide's ink (E)").clicked() {
+        let slide_has_ink = !show.ink.strokes(show.state.slide).is_empty();
+        if bar_icon_button(&mut child, Icon::Trash, "Clear", false, slide_has_ink, "Clear this slide's ink (E)").clicked() {
             show.ink.clear_slide(show.state.slide);
         }
-        if b(&mut child, "⬛").clicked() {
-            show.blank = Some(Color32::BLACK);
+        bar_sep(&mut child);
+        if bar_icon_button(&mut child, Icon::BlankScreen, "Blank screen", show.blank.is_some(), true, "Blank screen (B/W)").clicked() {
+            show.blank = if show.blank.is_some() { None } else { Some(Color32::BLACK) };
         }
-        if b(&mut child, "End").clicked() {
+        if bar_icon_button(&mut child, Icon::ExitShow, "End", false, true, "End slide show (Esc)").clicked() {
             keep = false;
         }
         // Re-measure the content so the pill and its click-guard match reality. Compact
@@ -1019,6 +1064,34 @@ fn paint_ink(painter: &egui::Painter, r: Rect, slide_w: f64, strokes: &[ShowStro
 }
 
 /// The media shape under the pointer on the shown slide.
+/// One button of the show's control bars: a vector icon with hover and active fills; greyed
+/// and inert when `enabled` is false.
+fn bar_icon_button(ui: &mut Ui, icon: Icon, label: &str, on: bool, enabled: bool, tip: impl Into<String>) -> egui::Response {
+    let resp = ui.add_enabled(enabled, egui::Button::new("").frame(false).min_size(vec2(26.0, 24.0)));
+    if on {
+        ui.painter().rect_filled(resp.rect, CornerRadius::same(6), Color32::from_white_alpha(46));
+        ui.painter().rect_stroke(resp.rect, CornerRadius::same(6), Stroke::new(1.0, Color32::from_white_alpha(110)), egui::StrokeKind::Inside);
+    } else if resp.hovered() {
+        ui.painter().rect_filled(resp.rect, CornerRadius::same(6), Color32::from_white_alpha(20));
+    }
+    crate::icons::paint(ui.painter(), resp.rect.shrink(4.0), icon, Color32::WHITE, !enabled);
+    resp.widget_info(|| egui::WidgetInfo::labeled(egui::WidgetType::Button, true, label));
+    let tip = tip.into();
+    let resp = resp.on_hover_text(tip.clone());
+    if enabled {
+        resp
+    } else {
+        // Disabled buttons don't hover in egui; without this the tooltip is silently lost.
+        resp.on_disabled_hover_text(tip)
+    }
+}
+
+/// Thin vertical divider between the bar's button groups.
+fn bar_sep(ui: &mut Ui) {
+    let (_, r) = ui.allocate_space(vec2(9.0, 24.0));
+    ui.painter().vline(r.center().x, (r.top() + 5.0)..=(r.bottom() - 5.0), Stroke::new(1.0, Color32::from_white_alpha(50)));
+}
+
 fn media_hit(ctx: &egui::Context, ui: &Ui, show: &Show, doc: &Presentation) -> Option<(ShapeId, deckcraft_model::MediaClip)> {
     let p = ctx.input(|i| i.pointer.interact_pos())?;
     let full = ui.max_rect();

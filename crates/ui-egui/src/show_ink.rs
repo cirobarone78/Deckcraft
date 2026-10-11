@@ -321,6 +321,15 @@ impl ShowInk {
         self.active = None;
     }
 
+    /// True when the journal holds at least one entry `undo()` would act on (empty erasure
+    /// sweeps don't count — undo skips them).
+    pub fn can_undo(&self) -> bool {
+        self.journal.iter().rev().any(|op| match op {
+            Op::Draw(..) => true,
+            Op::Erased(_, strokes) => !strokes.is_empty(),
+        })
+    }
+
     /// Undo the most recent ink action — a drawn stroke is removed, an erasure or clear is
     /// restored (on any slide). Returns false when there is nothing to undo.
     pub fn undo(&mut self) -> bool {
@@ -451,6 +460,26 @@ mod tests {
 
     fn ink() -> ShowInk {
         ShowInk::new(Rgba::rgb(0xFF, 0x00, 0x00))
+    }
+
+    #[test]
+    fn can_undo_tracks_the_journal() {
+        let mut ink = ink();
+        assert!(!ink.can_undo());
+        ink.set_tool(ShowTool::Pen);
+        ink.begin(0, 0.1, 0.1);
+        ink.push(0, 0.2, 0.2);
+        ink.end();
+        assert!(ink.can_undo());
+        // An erasure that hits nothing journals nothing.
+        assert_eq!(ink.erase_at(0, 0.9, 0.9, 1.0, 100.0, 100.0), 0);
+        assert!(ink.can_undo());
+        // Clearing a slide with no ink journals nothing.
+        ink.clear_slide(3);
+        assert!(ink.can_undo());
+        assert!(ink.undo());
+        assert!(!ink.can_undo());
+        assert!(!ink.undo());
     }
 
     #[test]
