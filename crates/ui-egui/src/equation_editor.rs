@@ -1,29 +1,24 @@
-//! The equation editor: equaSHion's [`EquationEditor`] widget in the Equation dialog.
+//! The equation editor: equaSHion's [`EquationEditor`] widget, bare, over the equation where it
+//! sits on the slide.
 //!
-//! It opens from Insert › Equation (a new equation) and from a double-click on an equation (the
-//! engine asks for the `equation` dialog with `{edit: true, id, cell?, paragraph, run}`). The
-//! widget edits a copy, loaded from the run's OMML through `equation.get`; the presentation
-//! changes once, through the engine's own commands, so undo and save work as for any other edit:
-//! - Insert / Update or Enter applies it: `insert.equation` (a new text box) or
-//!   `equation.update` (that run), each one undo step. An empty equation is not applied.
-//! - Esc follows the widget's [`equashion_egui::DISCARD_PROMPT`] (a second Esc when there are
-//!   changes); Cancel and the close button discard at once. Nothing was changed, so nothing is
-//!   undone.
+//! It opens from Insert › Equation (a new equation, in the middle of the slide) and from a
+//! double-click on an equation (the engine asks for the `equation` dialog with
+//! `{edit: true, id, cell?, paragraph, run}`). The dialog is only the open request: nothing is
+//! drawn in a window. The Equation ribbon tab (see [`crate::equation_tab`]) does the choosing and
+//! inserts into the widget. The widget edits a copy, loaded from the run's OMML through
+//! `equation.get`; the presentation changes once, through the engine's own commands, so undo and
+//! save work as for any other edit: `insert.equation` (a new text box) or `equation.update`
+//! (that run), one undo step. An empty equation is not applied.
 //!
-//! The widget shares the app's `egui::Context` and never touches its fonts, visuals or style:
-//! it draws the equation with its own bundled fonts. Only this dialog's `Ui` gets the theme's
-//! accent as the selection stroke, which the widget uses for its caret and focus ring.
+//! The widget shares the app's `egui::Context` and never touches its fonts, visuals or style: it
+//! draws the equation with its own bundled fonts.
 
-use egui::{Ui, vec2};
-use equashion_egui::{DISCARD_PROMPT, EquationEditor};
+use equashion_egui::EquationEditor;
 use serde_json::{Value, json};
 
 use crate::SlideApp;
-use crate::dialogs::{Dialog, buttons};
+use crate::dialogs::Dialog;
 use crate::theme::Tokens;
-
-/// Width of the editor's contents, points.
-const WIDTH: f32 = 560.0;
 
 /// Parameters that say which equation run an edit targets.
 const TARGET_KEYS: [&str; 4] = ["id", "cell", "paragraph", "run"];
@@ -35,10 +30,16 @@ pub(crate) struct Open {
     params: Value,
     /// Where the edited equation lives (`id`, `cell`, `paragraph`, `run`); `None` inserts a new one.
     target: Option<Value>,
-    /// Why loading or applying failed, or the discard prompt.
+    /// Why loading failed.
     error: Option<String>,
-    /// Esc was pressed once with unsaved changes while the widget did not have the keyboard.
-    esc_armed: bool,
+    /// Where the equation is drawn on the slide, `[x, y, w, h]` in slide points (a new one has none).
+    rect: Option<[f64; 4]>,
+    /// The font size is set for this slide zoom (and, for an existing equation, matched to the
+    /// size it is drawn at).
+    sized: bool,
+    calibrated: bool,
+    /// The font size now, in screen points.
+    pt: f64,
 }
 
 /// The equation editor's state in [`SlideApp`].
@@ -77,11 +78,14 @@ impl EquationHost {
 /// names, read with `equation.get` (a query: the presentation and its history stay as they are).
 fn open(app: &mut SlideApp, params: &Value) -> Open {
     let mut o = Open {
-        widget: EquationEditor::new().id_salt("deckcraft-equation-editor"),
+        widget: EquationEditor::new().inline(true).id_salt("deckcraft-equation-editor"),
         params: params.clone(),
         target: None,
         error: None,
-        esc_armed: false,
+        rect: None,
+        sized: false,
+        calibrated: false,
+        pt: 20.0,
     };
     if params.get("edit").and_then(Value::as_bool) != Some(true) {
         return o;
@@ -94,6 +98,10 @@ fn open(app: &mut SlideApp, params: &Value) -> Open {
     }
     match app.session.execute("equation.get", &Value::Object(loc)) {
         Ok(v) => {
+            o.rect = v.get("rect").and_then(Value::as_array).and_then(|a| {
+                let n: Vec<f64> = a.iter().filter_map(Value::as_f64).collect();
+                <[f64; 4]>::try_from(n).ok()
+            });
             if let Some(x) = v.get("omml").and_then(Value::as_str) {
                 o.widget.set_omml(x);
                 // Update the very run that was read, even if the selection moves meanwhile.
@@ -128,55 +136,86 @@ fn apply(app: &mut SlideApp, o: &mut Open) -> Result<(), String> {
     app.run(cmd, p).map(|_| ())
 }
 
-/// The Equation dialog's body. True when the dialog should close.
-pub fn body(app: &mut SlideApp, ui: &mut Ui, d: &mut Dialog) -> bool {
+/// The equation, edited where it sits on the slide: the widget's bare canvas over the equation
+/// (or in the middle of the slide for a new one), sized to match, with the Equation tab doing the
+/// choosing. True when the editor should close.
+///
+/// - Enter, Esc, a click on the slide outside the equation, or the tab's Close Equation leave
+///   it, keeping the edit (one undo step); a new equation never filled is dropped.
+/// - Clicks in the ribbon and its menus do not leave it.
+pub fn in_place(app: &mut SlideApp, ctx: &egui::Context, d: &mut Dialog) -> bool {
     let mut o = match app.equation.open.take() {
         Some(o) if o.params == d.params => o,
         _ => open(app, &d.params),
     };
-    let had_keyboard = ui.memory(|m| m.has_focus(o.widget.canvas_id()) || m.has_focus(o.widget.linear_id()));
-    let esc = ui.input(|i| i.key_pressed(egui::Key::Escape));
-    let t = Tokens::get(ui.ctx());
-
-    ui.set_width(WIDTH);
-    // The widget's caret and focus ring use the selection stroke: give it the theme's accent
-    // here (DeckCraft's own stroke is the white text drawn on a selection).
-    ui.visuals_mut().selection.stroke.color = t.accent;
-    let r = o.widget.show(ui);
-    // One line is always reserved for the error, so showing it does not move the buttons.
-    ui.allocate_ui_with_layout(vec2(WIDTH, 18.0), egui::Layout::left_to_right(egui::Align::Center), |ui| {
-        if let Some(e) = &o.error {
-            ui.colored_label(t.accent, e);
-        }
-    });
-    let editing = o.target.is_some();
-    let (ok, cancel) = buttons(ui, if editing { "Update" } else { "Insert" });
-
-    if r.changed {
-        o.error = None;
-        o.esc_armed = false;
+    if let Some(e) = o.error.take() {
+        app.set_status(e);
+        return true;
     }
-    let mut close = cancel || r.cancelled;
-    // Esc the widget did not see (it did not have the keyboard): the same rule as its own.
-    if esc && !had_keyboard && !close {
-        if !o.widget.is_dirty() || o.esc_armed {
-            close = true;
-        } else {
-            o.esc_armed = true;
-            o.error = Some(DISCARD_PROMPT.to_string());
-        }
-    }
-    let from_ribbon = std::mem::take(&mut app.equation.commit_requested);
-    if !close && (ok || r.committed || from_ribbon) {
-        match apply(app, &mut o) {
-            Ok(()) => close = true,
-            Err(e) => o.error = Some(e),
-        }
-    }
-    if !close {
+    let Some(slide) = app.slide_rect else {
         app.equation.open = Some(o);
+        return false;
+    };
+    let scale = app.canvas_scale.max(0.05);
+    let pad = EquationEditor::inline_pad();
+    let at = |x: f64, y: f64| egui::pos2(slide.min.x + x as f32 * scale, slide.min.y + y as f32 * scale);
+    let (anchor, target_h) = match o.rect {
+        Some([x, y, w, h]) => {
+            let (tl, br) = (at(x, y), at(x + w, y + h));
+            (egui::pos2(tl.x - pad.x, (tl.y + br.y) / 2.0), Some(br.y - tl.y))
+        }
+        None => (egui::pos2(slide.center().x - 70.0, slide.center().y), None),
+    };
+    // Size: a new equation at a body-text size; an existing one calibrated once so that what is
+    // typed is the size of what was there.
+    if !o.sized {
+        o.pt = f64::from(if target_h.is_some() { 18.0 } else { 24.0 } * scale);
+        o.widget.set_font_size(o.pt);
+        o.sized = true;
+    } else if !o.calibrated {
+        if let (Some(h), Some(cs)) = (target_h, o.widget.content_size()) {
+            let natural = f64::from((cs.y - 2.0 * pad.y).max(1.0));
+            o.pt = (o.pt * f64::from(h) / natural).clamp(6.0, 400.0);
+            o.widget.set_font_size(o.pt);
+        }
+        o.calibrated = true;
     }
-    close
+
+    let t = Tokens::get(ctx);
+    let esc = ctx.input(|i| i.key_pressed(egui::Key::Escape));
+    let mut response = None;
+    let area = egui::Area::new(egui::Id::new("deckcraft-equation-in-place"))
+        .order(egui::Order::Foreground)
+        .fixed_pos(anchor)
+        .pivot(egui::Align2::LEFT_CENTER)
+        .show(ctx, |ui| {
+            egui::Frame::new().fill(egui::Color32::from_rgba_unmultiplied(255, 255, 255, 242)).corner_radius(3).show(ui, |ui| {
+                // The widget draws its ink in the "strong" colour on this near-white backing.
+                ui.visuals_mut().widgets.active.fg_stroke.color = egui::Color32::BLACK;
+                ui.visuals_mut().selection.stroke.color = t.accent;
+                response = Some(o.widget.show(ui));
+            });
+        });
+    let outside = ctx.input(|i| i.pointer.primary_pressed())
+        && ctx.pointer_interact_pos().is_some_and(|p| {
+            !area.response.rect.contains(p)
+                && app.canvas_rect.is_some_and(|c| c.contains(p))
+                // The slide itself, not a menu or window above it.
+                && ctx.layer_id_at(p).is_some_and(|l| l.order == egui::Order::Background)
+        });
+    let from_ribbon = std::mem::take(&mut app.equation.commit_requested);
+    let leave = esc || outside || from_ribbon || response.as_ref().is_some_and(|r| r.committed || r.cancelled);
+    if !leave {
+        app.equation.open = Some(o);
+        return false;
+    }
+    o.widget.editor_mut().flush();
+    // Nothing typed, or nothing changed: nothing to apply.
+    let nothing = o.widget.editor().is_blank() || (o.target.is_some() && !o.widget.is_dirty());
+    if !nothing && let Err(e) = apply(app, &mut o) {
+        app.set_status(e);
+    }
+    true
 }
 
 #[cfg(test)]
@@ -185,6 +224,8 @@ mod tests {
     use deckcraft_model::text::RunKind;
     use egui_kittest::Harness;
     use egui_kittest::kittest::Queryable;
+
+    use egui::vec2;
 
     use super::*;
     use crate::Services;
@@ -267,13 +308,13 @@ mod tests {
     }
 
     #[test]
-    fn insert_opens_the_widget_and_enter_inserts_one_undo_step() {
+    fn insert_opens_the_widget_in_place_and_enter_inserts_one_undo_step() {
         let mut h = harness();
         let fonts_before = h.ctx.fonts(|f| f.definitions().clone());
         let style_before = h.ctx.global_style();
         open_new(&mut h);
         assert!(h.state().equation.is_open(), "Insert › Equation opens the equaSHion widget");
-        assert!(h.query_by_label("Insert").is_some() && h.query_by_label("Cancel").is_some());
+        assert!(h.query_by_label("Insert").is_none() && h.query_by_label("Cancel").is_none(), "no dialog buttons: the ribbon does the choosing");
         let canvas = h.state().equation.widget().map(|w| w.canvas_id());
         assert!(canvas.is_some_and(|c| h.ctx.memory(|m| m.has_focus(c))), "typing goes to the widget");
         let depth = undo_depth(h.state());
@@ -295,43 +336,37 @@ mod tests {
         assert!(*h.ctx.global_style() == *style_before, "the widget changed the shared style");
     }
 
+    /// What a double-click on the equation asks for (see the engine's pointer tests).
+    fn edit_request(h: &mut Harness<'static, SlideApp>, id: u64) {
+        h.state_mut()
+            .session
+            .ui_requests
+            .push(deckcraft_engine::UiRequest::Dialog { id: "equation".into(), params: json!({"edit": true, "id": id, "paragraph": 0, "run": 0}) });
+        h.state_mut().run("edit.select", json!({"ids": [id]})).unwrap();
+        steps(h, 4);
+    }
+
     #[test]
-    fn double_click_edits_the_equation_in_place_and_esc_asks_before_discarding() {
+    fn double_click_edits_the_equation_in_place_and_esc_keeps_the_edit() {
         let mut h = harness();
         let r = h.state_mut().run("insert.equation", json!({"linear": "a/b", "rect": [100, 100, 300, 60]})).unwrap();
         let id = r["id"].as_u64().unwrap();
-        // What a double-click on the equation asks for (see the engine's pointer tests).
-        h.state_mut()
-            .session
-            .ui_requests
-            .push(deckcraft_engine::UiRequest::Dialog { id: "equation".into(), params: json!({"edit": true, "id": id, "paragraph": 0, "run": 0}) });
-        h.state_mut().run("edit.select", json!({"ids": [id]})).unwrap();
-        steps(&mut h, 4);
-        assert!(h.query_by_label("Update").is_some(), "an existing equation is updated");
+        edit_request(&mut h, id);
+        assert!(h.state().equation.is_open());
         assert_eq!(h.state().equation.widget().map(|w| w.linear()), Some("a/b".to_string()));
         assert_eq!(h.state().equation.target(), Some(&json!({"id": id, "paragraph": 0, "run": 0})));
 
-        // Esc with changes asks first; the second Esc discards and leaves the slide as it was.
-        type_text(&mut h, "+c");
-        h.key_press(egui::Key::Escape);
-        steps(&mut h, 2);
-        assert!(h.query_by_label(DISCARD_PROMPT).is_some(), "the first Esc asks");
-        assert!(h.state().equation.is_open());
+        // Esc without a change closes and changes nothing.
+        let depth = undo_depth(h.state());
         h.key_press(egui::Key::Escape);
         steps(&mut h, 3);
-        assert!(!h.state().equation.is_open() && h.state().dialog.is_none(), "the second Esc discards");
-        assert_eq!(equations(h.state())[0].0, "a/b");
+        assert!(!h.state().equation.is_open() && h.state().dialog.is_none());
+        assert_eq!(undo_depth(h.state()), depth, "nothing changed, no undo step");
 
-        // Again, and Update applies to that run in one undo step.
-        h.state_mut()
-            .session
-            .ui_requests
-            .push(deckcraft_engine::UiRequest::Dialog { id: "equation".into(), params: json!({"edit": true, "id": id, "paragraph": 0, "run": 0}) });
-        h.state_mut().run("edit.select", json!({"ids": [id]})).unwrap();
-        steps(&mut h, 4);
-        let depth = undo_depth(h.state());
+        // Typing then Esc keeps the edit, applied to that run in one undo step.
+        edit_request(&mut h, id);
         type_text(&mut h, "+c");
-        h.get_by_label("Update").click();
+        h.key_press(egui::Key::Escape);
         steps(&mut h, 3);
         assert!(!h.state().equation.is_open());
         let eqs = equations(h.state());
@@ -341,27 +376,15 @@ mod tests {
     }
 
     #[test]
-    fn cancel_and_empty_equations_change_nothing() {
+    fn an_empty_new_equation_is_dropped() {
         let mut h = harness();
         let depth = undo_depth(h.state());
         open_new(&mut h);
-        type_text(&mut h, "y");
-        h.get_by_label("Cancel").click();
+        h.key_press(egui::Key::Escape);
         steps(&mut h, 3);
         assert!(!h.state().equation.is_open() && h.state().dialog.is_none());
         assert!(equations(h.state()).is_empty());
         assert_eq!(undo_depth(h.state()), depth);
-        // Insert on an empty equation says why and stays open.
-        open_new(&mut h);
-        h.get_by_label("Insert").click();
-        steps(&mut h, 2);
-        assert!(h.state().equation.is_open());
-        assert!(h.query_by_label("Type or build an equation first.").is_some());
-        assert_eq!(undo_depth(h.state()), depth);
-        // A clean editor closes on the first Esc.
-        h.key_press(egui::Key::Escape);
-        steps(&mut h, 3);
-        assert!(!h.state().equation.is_open());
     }
 
     #[test]

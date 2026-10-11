@@ -3,6 +3,7 @@
 //! use them. The math tree, OMML, linear and LaTeX conversions are equaSHion's
 //! (see [`crate::equashion_bridge`]).
 
+use deckcraft_geom::Point;
 use deckcraft_model::text::{Run, RunKind, RunProps};
 use deckcraft_model::{ShapeId, ShapeKind};
 use serde_json::{Value, json};
@@ -43,7 +44,7 @@ pub fn specs() -> Vec<CommandSpec> {
             "Get Equation",
             [],
             None,
-            "{id?, cell?: [row, col], paragraph?, run?} → {id, cell?, paragraph, run, omml, linear, display, tree}",
+            "{id?, cell?: [row, col], paragraph?, run?} → {id, cell?, paragraph, run, omml, linear, display, tree, rect?: [x,y,w,h]}: rect is where the equation is drawn, in slide points (a table's cell gives the table's)",
             has_slide,
             get
         ),
@@ -365,8 +366,43 @@ fn get(s: &mut Session, p: &Value) -> Result<Value> {
         if let Some((r, c)) = cell {
             o.insert("cell".into(), json!([r, c]));
         }
+        if let Some(r) = drawn_rect(s, id, cell, pi, ri) {
+            o.insert("rect".into(), json!(r));
+        }
     }
     Ok(v)
+}
+
+/// Where the equation run is drawn, as `[x, y, w, h]` in slide points: the equation's own extent
+/// in a text box, the whole shape for a table cell or when the layout cannot say.
+fn drawn_rect(s: &Session, id: ShapeId, cell: Cell, pi: usize, ri: usize) -> Option<[f64; 4]> {
+    let st = s.doc().ok()?;
+    let sh = st.shape(id)?;
+    let x = xfrm_of(&st.doc, &st.selection, sh);
+    let whole = {
+        let aff = x.affine();
+        let corners = [aff * Point::new(0.0, 0.0), aff * Point::new(x.w, 0.0), aff * Point::new(x.w, x.h), aff * Point::new(0.0, x.h)];
+        let (x0, x1) = corners.iter().fold((f64::MAX, f64::MIN), |a, p| (a.0.min(p.x), a.1.max(p.x)));
+        let (y0, y1) = corners.iter().fold((f64::MAX, f64::MIN), |a, p| (a.0.min(p.y), a.1.max(p.y)));
+        [x0, y0, x1 - x0, y1 - y0]
+    };
+    if cell.is_some() {
+        return Some(whole);
+    }
+    let body = sh.text.as_ref()?;
+    let q = body.paragraphs.get(pi)?;
+    let at: usize = q.runs.iter().take(ri).map(|r| r.char_len()).sum();
+    let end = at + q.runs.get(ri)?.char_len();
+    let t = crate::TextSel { shape: id, ..Default::default() };
+    let l = text::layout_for(st, &t)?;
+    let (Some((x0, top, bottom)), Some((x1, _, _))) =
+        (l.caret(deckcraft_text::Pos { para: pi, ch: at }), l.caret(deckcraft_text::Pos { para: pi, ch: end }))
+    else {
+        return Some(whole);
+    };
+    let aff = x.affine();
+    let (a, b) = (aff * Point::new(x0.min(x1), top), aff * Point::new(x0.max(x1), bottom));
+    Some([a.x.min(b.x), a.y.min(b.y), (b.x - a.x).abs(), (b.y - a.y).abs()])
 }
 
 fn from_linear(_s: &mut Session, p: &Value) -> Result<Value> {
@@ -888,5 +924,19 @@ mod tests {
                 }
             }
         }
+    }
+
+    #[test]
+    fn equation_get_says_where_the_equation_is_drawn() {
+        let mut s = session();
+        let r = s.execute("insert.equation", &json!({"linear": "a^2+b^2=c^2", "rect": [100.0, 100.0, 300.0, 50.0]})).unwrap();
+        let id = r["id"].clone();
+        let g = s.execute("equation.get", &json!({"id": id})).unwrap();
+        let rect: Vec<f64> = g["rect"].as_array().unwrap().iter().map(|v| v.as_f64().unwrap()).collect();
+        assert_eq!(rect.len(), 4);
+        // Inside the box it was inserted into, with an extent of its own.
+        assert!(rect[0] >= 99.0 && rect[0] < 400.0, "{rect:?}");
+        assert!(rect[1] >= 99.0 && rect[1] < 150.0, "{rect:?}");
+        assert!(rect[2] > 20.0 && rect[2] <= 301.0 && rect[3] > 5.0, "{rect:?}");
     }
 }

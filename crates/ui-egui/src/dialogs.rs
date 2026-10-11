@@ -71,6 +71,16 @@ pub fn show(app: &mut SlideApp, ctx: &egui::Context) {
     // The equation editor sits low, so more of the slide (and the equation) stays in view.
     let equation = d.id == "equation";
     let (anchor, offset) = if equation { (Align2::CENTER_BOTTOM, vec2(0.0, -40.0)) } else { (Align2::CENTER_CENTER, vec2(0.0, -40.0)) };
+    // The equation is edited where it sits on the slide, not in a window.
+    if equation {
+        let close = crate::equation_editor::in_place(app, ctx, &mut d);
+        if close {
+            app.equation.open = None;
+        } else {
+            app.dialog = Some(d);
+        }
+        return;
+    }
     egui::Window::new(title(&d.id))
         .id(egui::Id::new(("dialog", d.id.clone())))
         .collapsible(false)
@@ -503,7 +513,6 @@ fn body(app: &mut SlideApp, ui: &mut Ui, d: &mut Dialog) -> bool {
             let (ok, cancel) = buttons(ui, "Close");
             ok || cancel
         }
-        "equation" => crate::equation_editor::body(app, ui, d),
         "spelling" => {
             let v = app.session.execute("review.spelling", &json!({})).unwrap_or_default();
             let list = v.as_array().cloned().unwrap_or_default();
