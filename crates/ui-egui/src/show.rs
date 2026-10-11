@@ -241,55 +241,14 @@ pub fn ui(app: &mut SlideApp, ui: &mut Ui) {
     }
     let mut keep = true;
     // Input.
-    let (keys, clicked, secondary, moved) = ctx.input(|i| {
-        let keys: Vec<(egui::Key, egui::Modifiers)> = i
-            .events
-            .iter()
-            .filter_map(|e| if let egui::Event::Key { key, pressed: true, modifiers, .. } = e { Some((*key, *modifiers)) } else { None })
-            .collect();
-        (keys, i.pointer.primary_clicked(), i.pointer.secondary_clicked(), i.pointer.delta().length() > 0.0)
-    });
+    let (keys, clicked, secondary, moved) =
+        ctx.input(|i| (pressed_keys(i), i.pointer.primary_clicked(), i.pointer.secondary_clicked(), i.pointer.delta().length() > 0.0));
     if moved {
         show.last_move = now;
     }
     let mut actions: Vec<ShowAction> = vec![];
     for (k, m) in keys {
-        use egui::Key::*;
-        match k {
-            Escape | Minus => keep = false,
-            ArrowRight | ArrowDown | Space | PageDown | N => {
-                if show.ended {
-                    keep = false;
-                } else {
-                    actions.push(show.state.next(&doc));
-                }
-            }
-            Enter => {
-                if let Ok(n) = show.goto.parse::<usize>() {
-                    actions.push(show.state.goto(&doc, n.saturating_sub(1)));
-                    show.goto.clear();
-                } else if show.ended {
-                    keep = false;
-                } else {
-                    actions.push(show.state.next(&doc));
-                }
-            }
-            ArrowLeft | ArrowUp | Backspace | PageUp | P if !(k == P && m.command) => {
-                show.ended = false;
-                actions.push(show.state.prev(&doc));
-            }
-            P if m.command => show.pen = !show.pen,
-            A if m.command => show.pen = false,
-            Home => actions.push(show.state.goto(&doc, 0)),
-            End => actions.push(show.state.goto(&doc, doc.slides.len().saturating_sub(1))),
-            B | Period => show.blank = if show.blank == Some(Color32::BLACK) { None } else { Some(Color32::BLACK) },
-            W | Comma => show.blank = if show.blank == Some(Color32::WHITE) { None } else { Some(Color32::WHITE) },
-            E => show.strokes.clear(),
-            Num0 | Num1 | Num2 | Num3 | Num4 | Num5 | Num6 | Num7 | Num8 | Num9 => {
-                show.goto.push_str(k.name());
-            }
-            _ => {}
-        }
+        show.key(&doc, k, m, &mut actions, &mut keep);
     }
     let on_slide = !show.pen && !show.ended && show.blank.is_none() && !show.reading_bar_hit(&ctx);
     let gif_click = if clicked && on_slide { gif_hit(&ctx, ui, &show, &doc, app) } else { None };
@@ -726,6 +685,56 @@ impl Show {
     }
 }
 
+impl Show {
+    /// A key pressed in the show or in Presenter View.
+    fn key(&mut self, doc: &Presentation, k: egui::Key, m: egui::Modifiers, actions: &mut Vec<ShowAction>, keep: &mut bool) {
+        use egui::Key::*;
+        match k {
+            Escape | Minus => *keep = false,
+            ArrowRight | ArrowDown | Space | PageDown | N => {
+                if self.ended {
+                    *keep = false;
+                } else {
+                    actions.push(self.state.next(doc));
+                }
+            }
+            Enter => {
+                if let Ok(n) = self.goto.parse::<usize>() {
+                    actions.push(self.state.goto(doc, n.saturating_sub(1)));
+                    self.goto.clear();
+                } else if self.ended {
+                    *keep = false;
+                } else {
+                    actions.push(self.state.next(doc));
+                }
+            }
+            ArrowLeft | ArrowUp | Backspace | PageUp | P if !(k == P && m.command) => {
+                self.ended = false;
+                actions.push(self.state.prev(doc));
+            }
+            P if m.command => self.pen = !self.pen,
+            A if m.command => self.pen = false,
+            Home => actions.push(self.state.goto(doc, 0)),
+            End => actions.push(self.state.goto(doc, doc.slides.len().saturating_sub(1))),
+            B | Period => self.blank = if self.blank == Some(Color32::BLACK) { None } else { Some(Color32::BLACK) },
+            W | Comma => self.blank = if self.blank == Some(Color32::WHITE) { None } else { Some(Color32::WHITE) },
+            E => self.strokes.clear(),
+            Num0 | Num1 | Num2 | Num3 | Num4 | Num5 | Num6 | Num7 | Num8 | Num9 => {
+                self.goto.push_str(k.name());
+            }
+            _ => {}
+        }
+    }
+}
+
+/// Keys pressed this frame, with their modifiers.
+fn pressed_keys(i: &egui::InputState) -> Vec<(egui::Key, egui::Modifiers)> {
+    i.events
+        .iter()
+        .filter_map(|e| if let egui::Event::Key { key, pressed: true, modifiers, .. } = e { Some((*key, *modifiers)) } else { None })
+        .collect()
+}
+
 fn presenter_window(ctx: &egui::Context, show: &mut Show, doc: &Presentation, now: f64, keep: &mut bool) {
     let cur = show.state.slide;
     let next = deckcraft_anim::show_order(doc).into_iter().find(|i| *i > cur);
@@ -748,6 +757,7 @@ fn presenter_window(ctx: &egui::Context, show: &mut Show, doc: &Presentation, no
     let notes = doc.slides.get(cur).map(|s| s.notes_text()).unwrap_or_default();
     let elapsed = now - show.show_start;
     let mut actions = vec![];
+    let mut keys = vec![];
     ctx.show_viewport_immediate(
         egui::ViewportId::from_hash_of("deckcraft_presenter"),
         egui::ViewportBuilder::default().with_title("Presenter View — DeckCraft").with_inner_size([1100.0, 700.0]),
@@ -810,8 +820,16 @@ fn presenter_window(ctx: &egui::Context, show: &mut Show, doc: &Presentation, no
             if ui.input(|i| i.viewport().close_requested()) {
                 show.presenter = false;
             }
+            // Presenter View takes the keyboard focus when it opens, so the show's keys work from
+            // here too. An embedded viewport (web) shares the show's input, which reads them already.
+            if !ui.ctx().embed_viewports() {
+                keys = ui.input(pressed_keys);
+            }
         },
     );
+    for (k, m) in keys {
+        show.key(doc, k, m, &mut actions, keep);
+    }
     for a in actions {
         if !show.apply(a, doc, now) {
             *keep = false;

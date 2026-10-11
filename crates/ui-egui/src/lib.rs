@@ -932,6 +932,37 @@ mod tests {
         assert_eq!(harness.state().session.documents().len(), 2);
     }
 
+    /// #17: Presenter View takes the keyboard focus, so it passes the show's keys on. Where it's
+    /// embedded (one input for both), each key still moves the show once, not twice.
+    #[test]
+    fn show_keys_move_one_slide_with_presenter_view_open() {
+        let mut s = Session::with_new();
+        for _ in 0..3 {
+            s.execute("slide.new", &json!({})).unwrap();
+        }
+        let mut app = SlideApp::new(s, Services::default());
+        assert!(app.ui.presenter_view);
+        app.start_show(0, false);
+        let mut harness = egui_kittest::Harness::builder().with_size(egui::vec2(1200.0, 800.0)).build_ui_state(
+            |ui, app: &mut SlideApp| {
+                app.logic(ui.ctx());
+                app.ui(ui);
+            },
+            app,
+        );
+        harness.run_steps(2);
+        let slide = |h: &egui_kittest::Harness<'_, SlideApp>| h.state().show.as_ref().unwrap().state.slide;
+        harness.key_press(egui::Key::ArrowRight);
+        harness.run_steps(2);
+        assert_eq!(slide(&harness), 1);
+        harness.key_press(egui::Key::ArrowRight);
+        harness.run_steps(2);
+        assert_eq!(slide(&harness), 2);
+        harness.key_press(egui::Key::ArrowLeft);
+        harness.run_steps(2);
+        assert_eq!(slide(&harness), 1);
+    }
+
     #[test]
     fn home_needs_an_open_presentation() {
         let mut app = SlideApp::new(Session::new(), Services::default());
