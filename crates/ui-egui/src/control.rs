@@ -74,7 +74,7 @@ pub fn inspect(app: &SlideApp, ctx: &egui::Context) -> Value {
         "canvasScale": app.canvas_scale,
         "dialog": app.dialog.as_ref().map(|d| d.id.clone()),
         "home": app.home_open(),
-        "showing": app.show.as_ref().map(|s| json!({"slide": s.state.slide, "step": s.state.step, "ended": s.ended})),
+        "showing": app.show.as_ref().map(|s| json!({"slide": s.state.slide, "step": s.state.step, "ended": s.ended, "askKeep": s.ask_keep(), "inkTool": s.ink().tool().name(), "strokes": s.ink().strokes(s.state.slide).len(), "totalStrokes": s.ink().count()})),
         "documents": app.session.documents().iter().map(|d| json!({"title": d.title(), "dirty": d.is_dirty(), "path": d.path})).collect::<Vec<_>>(),
         "status": app.status.as_ref().map(|s| s.0.clone()),
         "perf": {"frameMs": app.perf.frame_ms, "renderMs": app.perf.render_ms, "fps": app.perf.fps},
@@ -133,12 +133,25 @@ pub fn handle(app: &mut SlideApp, ctx: &egui::Context, req: &ControlRequest) -> 
         }
         "ui.key" => {
             let Some(k) = s("key") else { return err("missing `key`") };
-            if let Some(show) = app.show.as_ref()
-                && !show.ended
+            // Keys reach the show whenever it is up — including the end screen and the modal
+            // keep-ink prompt (the show covers the whole window; the editor must not see them).
+            if app.show.is_some()
                 && let Some(key) = key_from(k)
             {
-                app.synthetic.push(egui::Event::Key { key, physical_key: None, pressed: true, repeat: false, modifiers: egui::Modifiers::NONE });
-                app.synthetic.push(egui::Event::Key { key, physical_key: None, pressed: false, repeat: false, modifiers: egui::Modifiers::NONE });
+                let b = |n: &str| p.get(n).and_then(Value::as_bool).unwrap_or(false);
+                let mut mods = egui::Modifiers::NONE;
+                mods.shift = b("shift");
+                mods.alt = b("alt");
+                if b("cmd") || b("ctrl") {
+                    mods.command = true;
+                    if cfg!(target_os = "macos") {
+                        mods.mac_cmd = true;
+                    } else {
+                        mods.ctrl = true;
+                    }
+                }
+                app.synthetic.push(egui::Event::Key { key, physical_key: None, pressed: true, repeat: false, modifiers: mods });
+                app.synthetic.push(egui::Event::Key { key, physical_key: None, pressed: false, repeat: false, modifiers: mods });
                 return ok(json!({"show": true}));
             }
             wrap(app.session.key(k, mods_from(p)).map_err(|e| e.to_string()))
@@ -280,15 +293,8 @@ pub fn handle(app: &mut SlideApp, ctx: &egui::Context, req: &ControlRequest) -> 
             ok(Value::Null)
         }
         "show.end" => {
-            if app.show.is_some() {
-                app.synthetic.push(egui::Event::Key {
-                    key: egui::Key::Escape,
-                    physical_key: None,
-                    pressed: true,
-                    repeat: false,
-                    modifiers: egui::Modifiers::NONE,
-                });
-            }
+            // `keep` answers the keep-ink prompt in advance (otherwise it opens and waits).
+            app.end_show(p.get("keep").and_then(Value::as_bool));
             ok(Value::Null)
         }
         "app.open" => {

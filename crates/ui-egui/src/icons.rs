@@ -141,6 +141,7 @@ icons! {
     Pencil => "pencil",
     HighlighterPen => "highlighter-pen",
     Eraser => "eraser",
+    LaserPointer => "laser-pointer",
     LassoSelect => "lasso-select",
     InkToShape => "ink-to-shape",
     InkToText => "ink-to-text",
@@ -1522,6 +1523,15 @@ fn draw(p: &Pen<'_>, icon: Icon) {
             p.poly(&m(&[(-8.0, -4.0), (-1.0, -4.0), (-1.0, 4.0), (-8.0, 4.0)]), R, N);
             p.rshape(&m(&[(-8.0, -4.0), (8.0, -4.0), (8.0, 4.0), (-8.0, 4.0)]), 1.0, N, K);
             p.seg((12.0, 21.0), (21.0, 21.0), K);
+        }
+        I::LaserPointer => {
+            // Laser dot with a halo and sparkle rays.
+            p.circle((12.0, 12.0), 7.0, R.a(0.4), N);
+            p.circle((12.0, 12.0), 3.4, R, N);
+            p.circle((12.0, 12.0), 1.6, W, N);
+            for (a, b) in [((19.0, 5.0), (21.0, 3.0)), ((19.0, 19.0), (21.0, 21.0)), ((5.0, 19.0), (3.0, 21.0)), ((5.0, 5.0), (3.0, 3.0))] {
+                p.seg(a, b, K);
+            }
         }
         I::LassoSelect => {
             let mut e = arc_pts((13.0, 9.0), 8.5, 6.0, 120.0, 480.0);
