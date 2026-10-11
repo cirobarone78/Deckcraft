@@ -373,6 +373,12 @@ impl Session {
             if x.bounds().inflate(tol, tol).contains(p)
                 && !matches!(self.hit_test(p, tol), Some(Hit::Resize { .. } | Hit::Rotate { .. } | Hit::Adjust { .. }))
             {
+                // A click on an equation edits it, where it sits.
+                if let Some((pi, ri)) = math_run_at(st, sh, p) {
+                    let id = sh.id;
+                    self.ui_requests.push(equation_dialog(id, None, pi, ri));
+                    return Ok(Value::Null);
+                }
                 let pos = text_pos(st, sh, p);
                 let shift = mods.shift;
                 self.select(|_, sel| {
@@ -434,7 +440,9 @@ impl Session {
                     ids.iter().filter_map(|i| st.shape(*i).filter(|s| !s.locked).map(|s| (*i, xfrm_of(&st.doc, &st.selection, s)))).collect();
                 // A click (no drag) on text puts the caret there; unselected text boxes and
                 // placeholders take the caret straight away like PowerPoint.
-                let enter_text = (text && !toggle && (selected || is_text_first(st, id))).then_some((id, p));
+                // An equation under the click edits in place on a plain click, selected or not.
+                let on_equation = text && !toggle && st.shape(id).is_some_and(|sh| math_run_at(st, sh, p).is_some());
+                let enter_text = (text && !toggle && (selected || is_text_first(st, id) || on_equation)).then_some((id, p));
                 let ids2 = ids.clone();
                 self.select(|_, sel| {
                     sel.shapes = ids2;
@@ -673,9 +681,15 @@ impl Session {
                 // Plain click on text: caret at the click.
                 let st = self.doc()?;
                 if let Some(sh) = st.shape(id) {
-                    let pos = text_pos(st, sh, at);
-                    self.execute("text.edit", &json!({"id": id, "at": [pos.0, pos.1]}))?;
-                    out = json!({"editing": id});
+                    if let Some((pi, ri)) = math_run_at(st, sh, at) {
+                        // A click on an equation edits it in place (the editor opens over it).
+                        self.ui_requests.push(equation_dialog(id, None, pi, ri));
+                        out = json!({"editing": id, "equation": [pi, ri]});
+                    } else {
+                        let pos = text_pos(st, sh, at);
+                        self.execute("text.edit", &json!({"id": id, "at": [pos.0, pos.1]}))?;
+                        out = json!({"editing": id});
+                    }
                 }
             }
             Some(Drag::Marquee { start, add }) => {
@@ -1416,6 +1430,37 @@ mod tests {
     fn dbl(s: &mut Session, x: f64, y: f64) {
         let ev = PointerEvent { kind: PointerKind::DoubleClick, x, y, ..Default::default() };
         s.pointer(ev).unwrap();
+    }
+
+    fn ptr(s: &mut Session, kind: PointerKind, x: f64, y: f64) {
+        s.pointer(PointerEvent { kind, x, y, ..Default::default() }).unwrap();
+    }
+
+    /// A single click on an equation edits it (as in WordCraft); a drag still moves the box.
+    #[test]
+    fn a_single_click_on_an_equation_edits_it_and_a_drag_moves_it() {
+        let mut s = Session::with_new();
+        let r = s.execute("insert.equation", &json!({"linear": "a^2+b^2=c^2", "rect": [100.0, 100.0, 300.0, 50.0]})).unwrap();
+        let id = r["id"].as_u64().unwrap();
+        // Nothing selected: one click both selects the box and opens the editor.
+        s.execute("edit.select", &json!({"ids": []})).unwrap();
+        s.ui_requests.clear();
+        ptr(&mut s, PointerKind::Down, 150.0, 125.0);
+        ptr(&mut s, PointerKind::Up, 150.0, 125.0);
+        assert_eq!(
+            s.ui_requests,
+            vec![crate::UiRequest::Dialog { id: "equation".into(), params: json!({"edit": true, "id": id, "paragraph": 0, "run": 0}) }]
+        );
+        // A drag from the same place moves the box and opens nothing.
+        s.ui_requests.clear();
+        s.execute("edit.select", &json!({"ids": []})).unwrap();
+        let before = s.doc().unwrap().shape(ShapeId(id as u32)).map(|sh| xfrm_of(&s.doc().unwrap().doc, &s.doc().unwrap().selection, sh).x).unwrap();
+        ptr(&mut s, PointerKind::Down, 150.0, 125.0);
+        ptr(&mut s, PointerKind::Drag, 230.0, 125.0);
+        ptr(&mut s, PointerKind::Up, 230.0, 125.0);
+        assert!(s.ui_requests.is_empty(), "{:?}", s.ui_requests);
+        let after = s.doc().unwrap().shape(ShapeId(id as u32)).map(|sh| xfrm_of(&s.doc().unwrap().doc, &s.doc().unwrap().selection, sh).x).unwrap();
+        assert!(after > before + 50.0, "{before} -> {after}");
     }
 
     #[test]
