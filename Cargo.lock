@@ -1136,6 +1136,7 @@ dependencies = [
  "deckcraft-geom",
  "deckcraft-model",
  "equashion-math",
+ "kurbo",
  "unicode-bidi",
  "unicode-linebreak",
  "unicode-segmentation",
