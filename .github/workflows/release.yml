@@ -447,7 +447,7 @@ jobs:
     name: Draft GitHub Release
     # Every build is required, so the draft always has the full set the README lists. Needing the
     # signed jobs also keeps branch dry runs from drafting a release.
-    needs: [version, macos, windows, linux, flatpak, freebsd, web]
+    needs: [version, macos, windows, linux, linux-riscv64, flatpak, freebsd, web]
     runs-on: ubuntu-latest
     environment: release
     permissions:
