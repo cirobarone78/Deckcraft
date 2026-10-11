@@ -10,6 +10,7 @@
 pub mod cmd;
 pub mod connect;
 pub mod fonts;
+pub mod equashion_bridge;
 pub mod guard;
 pub mod keys;
 pub mod links;
