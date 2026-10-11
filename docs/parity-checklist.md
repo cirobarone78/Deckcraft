@@ -50,7 +50,7 @@ Open P0 items: Start screen (new, templates/themes, recent), Contextual tabs (Sh
 | Application shell | Command palette / Tell me search | P1 | D |
 | Application shell | Keyboard shortcuts for every common command | P0 | D |
 | Application shell | Status bar (slide counter, notes, comments, views, zoom) | P0 | D |
-| Application shell | Light and dark appearance | P1 | D |
+| Application shell | Light, dark and System interface appearance | P1 | D |
 | Application shell | Multiple open presentations | P1 | P |
 | Application shell | Preferences (autosave, units, defaults) | P2 | P |
 | Files | New blank presentation | P0 | D |

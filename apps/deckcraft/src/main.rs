@@ -12,6 +12,7 @@
 #![deny(clippy::unwrap_used, clippy::expect_used, clippy::panic, clippy::unimplemented, clippy::todo, clippy::unreachable)]
 #![forbid(unsafe_code)]
 
+mod appearance;
 mod audio;
 mod control_server;
 #[cfg(any(target_os = "windows", test))]
@@ -40,6 +41,10 @@ impl eframe::App for App {
 
 /// The per-user settings directory: `ui.json`, `prefs.json` and `logs/` live here.
 fn config_dir() -> Option<std::path::PathBuf> {
+    // Explicit settings roots also allow native acceptance checks without touching live prefs.
+    if let Some(path) = std::env::var_os("DECKCRAFT_CONFIG_DIR").filter(|p| !p.is_empty()) {
+        return Some(std::path::PathBuf::from(path));
+    }
     if cfg!(target_os = "macos") {
         std::env::var_os("HOME").map(|h| std::path::PathBuf::from(h).join("Library/Application Support/DeckCraft"))
     } else if cfg!(windows) {
@@ -199,6 +204,7 @@ fn main() -> eframe::Result {
         Box::new(move |cc| {
             let mut app = SlideApp::new(Session::new(), services());
             load_prefs(&mut app);
+            app.services.system_theme = appearance::service(cc.egui_ctx.clone());
             // AutoRecover: reopen what a previous run left unsaved, then keep it current.
             if std::env::var_os("DECKCRAFT_NO_RECOVERY").is_none() {
                 app.session.recovery_dir = deckcraft_engine::recovery::default_dir();

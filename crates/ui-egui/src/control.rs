@@ -67,6 +67,11 @@ pub fn inspect(app: &SlideApp, ctx: &egui::Context) -> Value {
     let r = ctx.content_rect();
     json!({
         "ui": serde_json::to_value(&app.ui).unwrap_or_default(),
+        "appearance": {
+            "selected": app.ui.brightness,
+            "resolved": if crate::theme::Tokens::get(ctx).dark { "dark" } else { "light" },
+            "system": ctx.system_theme().map(|t| if t == egui::Theme::Dark { "dark" } else { "light" }),
+        },
         "tool": serde_json::to_value(&app.session.tool.kind).unwrap_or_default(),
         "window": [r.width(), r.height()],
         "canvasRect": app.canvas_rect.map(|c| json!([c.left(), c.top(), c.width(), c.height()])),

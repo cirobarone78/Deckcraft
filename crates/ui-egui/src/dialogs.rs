@@ -716,10 +716,7 @@ fn body(app: &mut SlideApp, ui: &mut Ui, d: &mut Dialog) -> bool {
         }
         "preferences" => {
             ui.label(egui::RichText::new("General").font(theme::bold(13.0)));
-            let mut dark = app.ui.brightness == theme::Brightness::Dark;
-            if ui.checkbox(&mut dark, "Dark appearance").changed() {
-                let _ = app.run("view.dark", json!({"on": dark}));
-            }
+            theme::appearance_selector(app, ui, "preferences_appearance");
             let mut scale = app.ui.ui_scale;
             if ui.add(egui::Slider::new(&mut scale, 0.75..=1.75).text("Interface size")).changed() {
                 app.ui.ui_scale = scale;

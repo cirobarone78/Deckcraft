@@ -40,9 +40,13 @@ pub type DownloadFn = Box<dyn FnMut(&str, &[u8])>;
 /// Files `(name, bytes)` delivered asynchronously by the host (web file picker, dropped files).
 pub type Inbox = std::sync::Arc<std::sync::Mutex<Vec<(String, Vec<u8>)>>>;
 
+/// An optional desktop appearance feed for hosts whose window backend cannot report it.
+pub type SystemThemeFn = Box<dyn FnMut() -> Option<egui::Theme>>;
+
 /// Platform services injected by the host (desktop or web).
 #[derive(Default)]
 pub struct Services {
+    pub system_theme: Option<SystemThemeFn>,
     /// Open-file dialog for a purpose (`open`, `picture`, `audio`, `video`) → path.
     pub pick_open: Option<PickFn>,
     /// Save dialog with a suggested name → path.
@@ -146,6 +150,7 @@ pub const UI_COMMANDS: &[(&str, &str, Option<&str>, &str)] = &[
     ("view.tab", "Ribbon Tab", None, "{tab}"),
     ("view.collapseRibbon", "Collapse the Ribbon", Some("Cmd+F1"), "{}"),
     ("view.dark", "Dark Mode", None, "{on?: bool}"),
+    ("view.appearance", "Interface Appearance", None, "{brightness: system|light|dark}"),
     ("view.grayscale", "Grayscale", None, "{on?: bool}"),
     ("show.start", "Slide Show", Some("F5"), "{from?: index}"),
     ("show.presenter", "Presenter View", None, "{on?: bool}"),
@@ -200,6 +205,7 @@ pub struct SlideApp {
     pending_shots: Vec<(u64, Option<String>, Sender<ControlResponse>, f64)>,
     styled: bool,
     restyle: bool,
+    resolved_brightness: Option<theme::Brightness>,
     fonts_ready: bool,
     last_time: f64,
     /// When AutoRecover data was last written (seconds, egui time).
@@ -238,6 +244,7 @@ impl SlideApp {
             pending_shots: vec![],
             styled: false,
             restyle: true,
+            resolved_brightness: None,
             fonts_ready: false,
             last_time: 0.0,
             last_recovery: 0.0,
@@ -325,8 +332,18 @@ impl SlideApp {
             }
             "view.collapseRibbon" => self.ui.ribbon_collapsed = !self.ui.ribbon_collapsed,
             "view.dark" => {
-                let on = self.flag(p, self.ui.brightness == theme::Brightness::Dark);
+                let current = if self.ui.brightness == theme::Brightness::System {
+                    self.resolved_brightness.unwrap_or(theme::Brightness::Light)
+                } else {
+                    self.ui.brightness
+                };
+                let on = self.flag(p, current == theme::Brightness::Dark);
                 self.ui.brightness = if on { theme::Brightness::Dark } else { theme::Brightness::Light };
+                self.restyle = true;
+            }
+            "view.appearance" => {
+                let value = p.get("brightness").ok_or("missing `brightness`")?;
+                self.ui.brightness = serde_json::from_value(value.clone()).map_err(|_| "brightness must be system, light or dark")?;
                 self.restyle = true;
             }
             "view.grayscale" => self.ui.grayscale = self.flag(p, self.ui.grayscale),
@@ -541,10 +558,6 @@ impl SlideApp {
         } else {
             self.fonts_ready = true;
         }
-        if self.restyle {
-            theme::apply(ctx, &theme::Tokens::for_brightness(self.ui.brightness));
-            self.restyle = false;
-        }
         let now = ctx.input(|i| i.time);
         let dt = now - self.last_time;
         if dt > 0.0 {
@@ -552,6 +565,19 @@ impl SlideApp {
         }
         self.last_time = now;
         self.drain_control(ctx);
+        // Always recover native inheritance, including after a restored host theme pin.
+        ctx.set_theme(egui::ThemePreference::System);
+        let system = if self.ui.brightness == theme::Brightness::System {
+            self.services.system_theme.as_mut().and_then(|read| read()).or_else(|| ctx.system_theme())
+        } else {
+            None
+        };
+        let resolved = self.ui.brightness.resolve(system);
+        if self.restyle || self.resolved_brightness != Some(resolved) {
+            theme::apply(ctx, &theme::Tokens::for_brightness(resolved));
+            self.resolved_brightness = Some(resolved);
+            self.restyle = false;
+        }
         if self.fonts_ready {
             self.drain_inbox();
         }
