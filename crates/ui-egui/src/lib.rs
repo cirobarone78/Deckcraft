@@ -11,6 +11,7 @@ pub mod canvas;
 pub mod control;
 pub mod credits;
 pub mod dialogs;
+pub mod equation_editor;
 pub mod fillui;
 pub mod icons;
 pub mod media;
@@ -184,6 +185,8 @@ pub struct SlideApp {
     pub textures: textures::Textures,
     pub control_rx: Option<Receiver<ControlRequest>>,
     pub dialog: Option<dialogs::Dialog>,
+    /// The equation editor (equaSHion's widget) while the Equation dialog is open.
+    pub(crate) equation: equation_editor::EquationHost,
     pub show: Option<show::Show>,
     /// Audio/video playback (editor control bar, slide show, `media.*` commands).
     pub media: media::MediaHost,
@@ -239,6 +242,7 @@ impl SlideApp {
             textures: textures::Textures::default(),
             control_rx: None,
             dialog: None,
+            equation: Default::default(),
             show: None,
             media: media::MediaHost::new(audio_out),
             status: None,
