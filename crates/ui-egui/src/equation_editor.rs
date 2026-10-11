@@ -189,7 +189,7 @@ pub fn in_place(app: &mut SlideApp, ctx: &egui::Context, d: &mut Dialog) -> bool
         .fixed_pos(anchor)
         .pivot(egui::Align2::LEFT_CENTER)
         .show(ctx, |ui| {
-            egui::Frame::new().fill(egui::Color32::from_rgba_unmultiplied(255, 255, 255, 242)).corner_radius(3).show(ui, |ui| {
+            egui::Frame::new().fill(egui::Color32::from_rgba_unmultiplied(255, 255, 255, 255)).corner_radius(3).show(ui, |ui| {
                 // The widget draws its ink in the "strong" colour on this near-white backing.
                 ui.visuals_mut().widgets.active.fg_stroke.color = egui::Color32::BLACK;
                 ui.visuals_mut().selection.stroke.color = t.accent;
