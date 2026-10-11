@@ -117,6 +117,8 @@ pub struct EquationPlace {
     pub width: f64,
     pub ascent: f64,
     pub descent: f64,
+    /// Laid out in display style.
+    pub display: bool,
 }
 
 /// An underline, strikethrough or highlight box.
@@ -2015,6 +2017,7 @@ fn layout_scaled(ctx: &Ctx, shape: &Shape, body: &TextBody, bp: &BodyProps, opts
                     width: m.w,
                     ascent: m.asc,
                     descent: m.desc,
+                    display: m.display,
                 });
                 if let Some(hl) = st.highlight {
                     out.decos.push(Deco { rect: Rect::new(cx, line.top, cx1, line.bottom), color: hl, behind: true, para: line.para, path: None });

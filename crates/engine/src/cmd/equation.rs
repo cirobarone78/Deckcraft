@@ -381,6 +381,9 @@ fn get(s: &mut Session, p: &Value) -> Result<Value> {
                 o.insert("baseline".into(), json!(b));
                 o.insert("size".into(), json!(z));
             }
+            if let Some(dp) = d.display {
+                o.insert("displayStyle".into(), json!(dp));
+            }
         }
     }
     Ok(v)
@@ -393,6 +396,7 @@ struct Drawn {
     rect: [f64; 4],
     baseline: Option<f64>,
     size: Option<f64>,
+    display: Option<bool>,
 }
 
 fn drawn(s: &Session, id: ShapeId, cell: Cell, pi: usize, ri: usize) -> Option<Drawn> {
@@ -404,7 +408,7 @@ fn drawn(s: &Session, id: ShapeId, cell: Cell, pi: usize, ri: usize) -> Option<D
         let corners = [aff * Point::new(0.0, 0.0), aff * Point::new(x.w, 0.0), aff * Point::new(x.w, x.h), aff * Point::new(0.0, x.h)];
         let (x0, x1) = corners.iter().fold((f64::MAX, f64::MIN), |a, p| (a.0.min(p.x), a.1.max(p.x)));
         let (y0, y1) = corners.iter().fold((f64::MAX, f64::MIN), |a, p| (a.0.min(p.y), a.1.max(p.y)));
-        Drawn { rect: [x0, y0, x1 - x0, y1 - y0], baseline: None, size: None }
+        Drawn { rect: [x0, y0, x1 - x0, y1 - y0], baseline: None, size: None, display: None }
     };
     if cell.is_some() {
         return Some(whole);
@@ -416,7 +420,7 @@ fn drawn(s: &Session, id: ShapeId, cell: Cell, pi: usize, ri: usize) -> Option<D
     let Some(e) = l.equations.iter().find(|e| e.para == pi && e.ch == at) else { return Some(whole) };
     let (a, b) = (aff * Point::new(e.x, e.baseline - e.ascent), aff * Point::new(e.x + e.width, e.baseline + e.descent));
     let base = aff * Point::new(e.x, e.baseline);
-    Some(Drawn { rect: [a.x.min(b.x), a.y.min(b.y), (b.x - a.x).abs(), (b.y - a.y).abs()], baseline: Some(base.y), size: Some(e.size) })
+    Some(Drawn { rect: [a.x.min(b.x), a.y.min(b.y), (b.x - a.x).abs(), (b.y - a.y).abs()], baseline: Some(base.y), size: Some(e.size), display: Some(e.display) })
 }
 
 fn place(s: &mut Session, p: &Value) -> Result<Value> {
@@ -426,6 +430,9 @@ fn place(s: &mut Session, p: &Value) -> Result<Value> {
     if let (Some(b), Some(z), Some(o)) = (d.baseline, d.size, v.as_object_mut()) {
         o.insert("baseline".into(), json!(b));
         o.insert("size".into(), json!(z));
+        if let Some(dp) = d.display {
+            o.insert("displayStyle".into(), json!(dp));
+        }
     }
     Ok(v)
 }

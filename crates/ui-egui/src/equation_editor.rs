@@ -202,6 +202,10 @@ pub fn in_place(app: &mut SlideApp, ctx: &egui::Context, d: &mut Dialog) -> bool
         _ => (slide.center().x - 70.0, slide.center().y, 24.0 * f64::from(scale)),
     };
     o.widget.set_font_size(pt.clamp(4.0, 1200.0));
+    // Laid out in the style the slide draws it in (alone in its paragraph: display).
+    if let Some(d) = placed.as_ref().and_then(|v| v.get("displayStyle")).and_then(Value::as_bool) {
+        o.widget.set_display_style(d);
+    }
     // The canvas's top-left: its baseline on the equation's (a guess until it has been drawn).
     let base_in_canvas = o.widget.inline_baseline().unwrap_or((pad.y + 0.8 * pt as f32).max(1.0));
     let top_left = egui::pos2(left - pad.x, baseline - base_in_canvas);

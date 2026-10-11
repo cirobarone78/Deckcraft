@@ -39,6 +39,8 @@ pub(crate) struct MathBox {
     pub w: f64,
     pub asc: f64,
     pub desc: f64,
+    /// Laid out in display style (a displayed equation, or alone in its paragraph).
+    pub display: bool,
     pub items: Vec<Item>,
 }
 
@@ -100,7 +102,7 @@ pub(crate) fn layout_math(m: &Math, size: f64, bold: bool, display: bool) -> Mat
     let b = equashion_layout::layout_math(f, m, DEFAULT_FAMILY, size, bold, display);
     let mut prims = Vec::new();
     equashion_layout::emit(&b, 0.0, 0.0, Rgb::BLACK, &mut prims);
-    MathBox { w: b.width(), asc: b.ascent(), desc: b.descent(), items: items_of(prims, f) }
+    MathBox { w: b.width(), asc: b.ascent(), desc: b.descent(), display, items: items_of(prims, f) }
 }
 
 type Key = (String, u64, bool, bool);
