@@ -38,8 +38,12 @@ impl eframe::App for App {
     }
 }
 
-/// The per-user settings directory: `ui.json`, `prefs.json` and `logs/` live here.
+/// The settings directory: `ui.json`, `prefs.json` and `logs/` live here (and `Recovery/` when
+/// portable).
 fn config_dir() -> Option<std::path::PathBuf> {
+    if let Some(d) = portable_dir() {
+        return Some(d.clone());
+    }
     if cfg!(target_os = "macos") {
         std::env::var_os("HOME").map(|h| std::path::PathBuf::from(h).join("Library/Application Support/DeckCraft"))
     } else if cfg!(windows) {
@@ -49,6 +53,32 @@ fn config_dir() -> Option<std::path::PathBuf> {
             .map(std::path::PathBuf::from)
             .or_else(|| std::env::var_os("HOME").map(|h| std::path::PathBuf::from(h).join(".config")))
             .map(|c| c.join("deckcraft"))
+    }
+}
+
+/// Portable mode (#200): a `portable.txt` beside the executable keeps every setting, log and
+/// recovery file in `DeckCraftData` there instead of the user's profile. Resolved once.
+fn portable_dir() -> Option<&'static std::path::PathBuf> {
+    static DIR: std::sync::OnceLock<Option<std::path::PathBuf>> = std::sync::OnceLock::new();
+    DIR.get_or_init(|| std::env::current_exe().ok().and_then(|exe| portable_data(exe.parent()?))).as_ref()
+}
+
+fn portable_data(exe_dir: &std::path::Path) -> Option<std::path::PathBuf> {
+    if !exe_dir.join("portable.txt").is_file() {
+        return None;
+    }
+    let data = exe_dir.join("DeckCraftData");
+    // A folder can exist yet be read-only (a locked USB stick, Program Files): prove a write works.
+    let probe = data.join(".write-test");
+    match std::fs::create_dir_all(&data).and_then(|()| std::fs::write(&probe, b"")) {
+        Ok(()) => {
+            let _ = std::fs::remove_file(&probe);
+            Some(data)
+        }
+        Err(e) => {
+            eprintln!("deckcraft: portable.txt found but {} isn't writable ({e}); using the user settings folder", data.display());
+            None
+        }
     }
 }
 
@@ -201,7 +231,7 @@ fn main() -> eframe::Result {
             load_prefs(&mut app);
             // AutoRecover: reopen what a previous run left unsaved, then keep it current.
             if std::env::var_os("DECKCRAFT_NO_RECOVERY").is_none() {
-                app.session.recovery_dir = deckcraft_engine::recovery::default_dir();
+                app.session.recovery_dir = portable_dir().map(|d| d.join("Recovery")).or_else(deckcraft_engine::recovery::default_dir);
                 if let Ok(v) = app.session.execute("file.recovery.open", &serde_json::json!({}))
                     && let Some(n) = v.get("opened").and_then(|o| o.as_array()).map(Vec::len).filter(|n| *n > 0)
                 {
@@ -227,4 +257,23 @@ fn main() -> eframe::Result {
             Ok(Box::new(App(app)))
         }),
     )
+}
+
+#[cfg(test)]
+mod tests {
+    #![allow(clippy::unwrap_used)]
+
+    use super::*;
+
+    #[test]
+    fn portable_txt_beside_the_exe_keeps_settings_there() {
+        let exe_dir = std::env::temp_dir().join(format!("deckcraft-portable-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&exe_dir);
+        std::fs::create_dir_all(&exe_dir).unwrap();
+        assert_eq!(portable_data(&exe_dir), None, "no marker: the user settings folder");
+        std::fs::write(exe_dir.join("portable.txt"), b"").unwrap();
+        assert_eq!(portable_data(&exe_dir), Some(exe_dir.join("DeckCraftData")));
+        assert!(exe_dir.join("DeckCraftData").is_dir());
+        let _ = std::fs::remove_dir_all(&exe_dir);
+    }
 }

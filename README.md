@@ -127,7 +127,9 @@ emerge --ask app-office/deckcraft-bin
 The desktop app writes its `log` records to standard error and to `logs/deckcraft.log` in the
 settings directory, beside `ui.json` and `prefs.json` (Linux `~/.config/deckcraft/logs/`, or
 `$XDG_CONFIG_HOME/deckcraft/logs/`; macOS `~/Library/Application Support/DeckCraft/logs/`; Windows
-`%APPDATA%\DeckCraft\logs\`). A start from a desktop menu or the Dock has no terminal, so this file
+`%APPDATA%\DeckCraft\logs\`). **Portable mode:** put an empty `portable.txt` beside the executable
+and settings, logs and crash-recovery files go to a `DeckCraftData` folder there instead (if that
+folder can't be written, the usual one is used). A start from a desktop menu or the Dock has no terminal, so this file
 is what to attach to a bug report: the crash guard's panic report, a failed crash-recovery save,
 PowerPoint parts skipped on import and audio output problems land there. Each launch moves the
 previous log to `deckcraft.1.log` (and that one to `deckcraft.2.log`), so the log of a run that
