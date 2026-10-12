@@ -34,7 +34,7 @@ pub use tools::{Mods, PointerEvent, PointerKind, ToolKind};
 pub enum EngineError {
     #[error("{}", unknown_command(.0))]
     UnknownCommand(String),
-    #[error("command `{0}` is not available right now: {1}.{hint}", hint = cmd::how_to_enable(.1))]
+    #[error("command `{0}` is not available right now: {1}.{hint}", hint = cmd::how_to_enable(.0, .1))]
     Disabled(String, String),
     #[error("invalid parameters for `{cmd}`: {msg}.{}", takes(cmd))]
     BadParams { cmd: String, msg: String },

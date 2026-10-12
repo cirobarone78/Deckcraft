@@ -593,6 +593,32 @@ fn a_params_doc_spells_out_each_parameter() {
 }
 
 #[test]
+fn a_command_not_available_names_only_keys_it_takes() {
+    for c in command_specs() {
+        let Err(reason) = (c.enabled)(&Session::with_new()) else { continue };
+        let keys = cmd::param_keys(c.params).unwrap();
+        let err = EngineError::Disabled(c.id.into(), reason).to_string();
+        assert!(!err.contains("`ids`") || keys.contains(&"ids"), "{err}");
+        assert!(!err.contains("`id`") || keys.contains(&"id"), "{err}");
+    }
+    let mut s = session();
+    assert_eq!(
+        said(&mut s, "shape.setDefault", json!({})),
+        "command `shape.setDefault` is not available right now: nothing selected. Acts on the selected shapes. edit.select {\"ids\": […]} selects shapes."
+    );
+    assert_eq!(
+        said(&mut s, "table.style", json!({"style": "grid"})),
+        "command `table.style` is not available right now: nothing selected. Acts on the shape in `id`, else on the selected shapes. \
+         edit.select {\"ids\": […]} selects shapes."
+    );
+    assert_eq!(
+        said(&mut s, "arrange.group", json!({})),
+        "command `arrange.group` is not available right now: select two or more objects. Acts on two or more shapes: the shapes in \
+         `ids`, else the selected ones. edit.select {\"ids\": […]} selects shapes."
+    );
+}
+
+#[test]
 fn what_a_command_acts_on_names_only_keys_it_takes() {
     for c in command_specs() {
         let keys = cmd::param_keys(c.params).unwrap();
