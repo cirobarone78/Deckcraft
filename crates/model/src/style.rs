@@ -145,6 +145,8 @@ pub struct PictureAdjust {
     pub grayscale: bool,
     /// Recolour duotone (dark, light).
     pub duotone: Option<(ColorRef, ColorRef)>,
+    /// Black and white (`a:biLevel`): luminance threshold 0..1; below it black, at or above it white.
+    pub bilevel: Option<f64>,
     /// Make a colour transparent (Set Transparent Color).
     pub clear_color: Option<Rgba>,
     pub sharpen: f64,

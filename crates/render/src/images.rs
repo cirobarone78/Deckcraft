@@ -76,6 +76,9 @@ fn adjust_key(a: &PictureAdjust) -> u64 {
     mix(a.saturation.unwrap_or(1.0).to_bits());
     mix(a.grayscale as u64);
     mix(a.sharpen.to_bits());
+    if let Some(t) = a.bilevel {
+        mix(t.to_bits() ^ 1 << 63);
+    }
     if let Some(c) = a.clear_color {
         mix(((c.r as u64) << 16) | ((c.g as u64) << 8) | c.b as u64 | 1 << 40);
     }
@@ -230,7 +233,8 @@ pub(crate) fn gif_pixmap(bytes: &Arc<Vec<u8>>, adj: &PictureAdjust, t: f64) -> O
 
 fn apply_adjust(img: &mut image::RgbaImage, a: &PictureAdjust) {
     let sat = a.saturation.unwrap_or(1.0);
-    if a.brightness == 0.0 && a.contrast == 0.0 && sat == 1.0 && !a.grayscale && a.clear_color.is_none() && a.duotone.is_none() {
+    if a.brightness == 0.0 && a.contrast == 0.0 && sat == 1.0 && !a.grayscale && a.clear_color.is_none() && a.duotone.is_none() && a.bilevel.is_none()
+    {
         return;
     }
     let b = a.brightness.clamp(-1.0, 1.0) * 255.0;
@@ -251,6 +255,10 @@ fn apply_adjust(img: &mut image::RgbaImage, a: &PictureAdjust) {
         for v in &mut rgb {
             *v = y + (*v - y) * s;
             *v = (*v - 128.0) * cf + 128.0 + b;
+        }
+        if let Some(t) = a.bilevel {
+            let y = 0.299 * rgb[0] + 0.587 * rgb[1] + 0.114 * rgb[2];
+            rgb = [if y < t * 255.0 { 0.0 } else { 255.0 }; 3];
         }
         for (i, v) in rgb.iter().enumerate() {
             if let Some(ch) = p.0.get_mut(i) {
@@ -278,5 +286,30 @@ mod tests {
         let a = decode_anim(&out, &PictureAdjust::default()).expect("animated");
         assert_eq!(a.frames.len(), GIF_MAX_FRAMES);
         assert_eq!(a.ends.len(), GIF_MAX_FRAMES);
+    }
+
+    #[test]
+    fn bilevel_turns_each_pixel_black_or_white_by_luminance_and_keeps_alpha() {
+        use image::{Rgba, RgbaImage};
+        let mut img = RgbaImage::new(4, 1);
+        img.put_pixel(0, 0, Rgba([0x2D, 0xC6, 0xD6, 128]));
+        img.put_pixel(1, 0, Rgba([0, 0, 128, 200]));
+        img.put_pixel(2, 0, Rgba([64, 64, 64, 255]));
+        img.put_pixel(3, 0, Rgba([63, 63, 63, 0]));
+        let mut quarter = img.clone();
+        apply_adjust(&mut quarter, &PictureAdjust { bilevel: Some(0.25), ..Default::default() });
+        let px: Vec<[u8; 4]> = quarter.pixels().map(|p| p.0).collect();
+        assert_eq!(px, vec![[255, 255, 255, 128], [0, 0, 0, 200], [255, 255, 255, 255], [0, 0, 0, 0]]);
+        apply_adjust(&mut img, &PictureAdjust { bilevel: Some(0.7), ..Default::default() });
+        assert_eq!(img.get_pixel(0, 0).0, [0, 0, 0, 128]);
+    }
+
+    #[test]
+    fn bilevel_is_part_of_the_cache_key() {
+        let plain = PictureAdjust::default();
+        let bw = PictureAdjust { bilevel: Some(0.5), ..Default::default() };
+        let bw2 = PictureAdjust { bilevel: Some(0.25), ..Default::default() };
+        assert_ne!(adjust_key(&plain), adjust_key(&bw));
+        assert_ne!(adjust_key(&bw), adjust_key(&bw2));
     }
 }
