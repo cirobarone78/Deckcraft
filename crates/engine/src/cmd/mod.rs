@@ -57,6 +57,10 @@ pub struct CommandInfo {
 
 impl CommandSpec {
     pub fn acts_on(&self) -> Option<String> {
+        self.acts_on_for(&(self.enabled)(&Session::with_new()).err()?)
+    }
+
+    pub(crate) fn acts_on_for(&self, reason: &str) -> Option<String> {
         let keys = param_keys(self.params).unwrap_or_default();
         let named = if keys.contains(&"ids") {
             Some("the shapes in `ids`")
@@ -65,8 +69,7 @@ impl CommandSpec {
         } else {
             None
         };
-        let reason = (self.enabled)(&Session::with_new()).err()?;
-        Some(match (reason.as_str(), named) {
+        Some(match (reason, named) {
             (SELECT_TEXT_OR_SHAPE, _) => "Acts on the selected text or shapes.".into(),
             (NOTHING_SELECTED, Some(n)) => format!("Acts on {n}, else on the selected shapes."),
             (NOTHING_SELECTED, None) => "Acts on the selected shapes.".into(),
@@ -122,17 +125,19 @@ pub fn has_text_or_shapes(s: &Session) -> std::result::Result<(), String> {
     has_doc(s)?;
     if s.active().is_some_and(|d| d.selection.text.is_some() || !d.selection.shapes.is_empty()) { Ok(()) } else { Err(SELECT_TEXT_OR_SHAPE.into()) }
 }
-pub(crate) fn how_to_enable(reason: &str) -> &'static str {
+pub(crate) fn how_to_enable(cmd: &str, reason: &str) -> String {
     match reason {
-        "no presentation open" => " file.new or file.open opens one.",
-        "no slides" => " slide.new adds one.",
-        NOTHING_SELECTED => " It acts on `ids` or on the selected shapes; edit.select {\"ids\": […]} selects shapes.",
-        SELECT_TWO => " It acts on `ids` or on the selected shapes; edit.select {\"ids\": […]} selects them.",
-        NO_TEXT_POINT => " text.edit {\"id\": …} starts editing a shape's text.",
-        SELECT_TEXT_OR_SHAPE => {
-            " It acts on the selected text or shapes; shape.insert selects the shape it inserts, edit.select {\"ids\": […]} selects others."
+        "no presentation open" => " file.new or file.open opens one.".into(),
+        "no slides" => " slide.new adds one.".into(),
+        NOTHING_SELECTED | SELECT_TWO => {
+            let acts = find_command(cmd).and_then(|c| c.acts_on_for(reason)).map(|a| format!(" {a}")).unwrap_or_default();
+            format!("{acts} edit.select {{\"ids\": […]}} selects shapes.")
         }
-        _ => "",
+        NO_TEXT_POINT => " text.edit {\"id\": …} starts editing a shape's text.".into(),
+        SELECT_TEXT_OR_SHAPE => {
+            " It acts on the selected text or shapes; shape.insert selects the shape it inserts, edit.select {\"ids\": […]} selects others.".into()
+        }
+        _ => String::new(),
     }
 }
 

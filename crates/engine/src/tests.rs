@@ -593,6 +593,27 @@ fn a_params_doc_spells_out_each_parameter() {
 }
 
 #[test]
+fn a_command_not_available_names_only_keys_it_takes() {
+    for c in command_specs().iter().filter(|c| c.acts_on().is_some_and(|a| a.contains("shapes"))) {
+        let keys = cmd::param_keys(c.params).unwrap();
+        let err = EngineError::Disabled(c.id.into(), cmd::NOTHING_SELECTED.into()).to_string();
+        let hint = err.split_once("nothing selected.").map(|(_, h)| h).unwrap_or_default().replace("edit.select {\"ids\"", "");
+        assert!(!hint.contains("`ids`") || keys.contains(&"ids"), "{err}");
+        assert!(!hint.contains("`id`") || keys.contains(&"id"), "{err}");
+    }
+    let mut s = session();
+    assert_eq!(
+        said(&mut s, "shape.setDefault", json!({})),
+        "command `shape.setDefault` is not available right now: nothing selected. Acts on the selected shapes. edit.select {\"ids\": […]} selects shapes."
+    );
+    assert_eq!(
+        said(&mut s, "table.style", json!({"style": "grid"})),
+        "command `table.style` is not available right now: nothing selected. Acts on the shape in `id`, else on the selected shapes. \
+         edit.select {\"ids\": […]} selects shapes."
+    );
+}
+
+#[test]
 fn what_a_command_acts_on_names_only_keys_it_takes() {
     for c in command_specs() {
         let keys = cmd::param_keys(c.params).unwrap();
