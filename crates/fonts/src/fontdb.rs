@@ -436,6 +436,15 @@ pub(crate) fn last_resort_face() -> Arc<FontFace> {
     .clone()
 }
 
+/// Every face in a font file (TTF/OTF/TTC bytes) that parses.
+fn parse_faces(bytes: Vec<u8>) -> Vec<FontFace> {
+    let data = Arc::new(bytes);
+    enumerate_faces(&data)
+        .into_iter()
+        .filter_map(|(i, family, style, coords)| make_face(FontBytes::Owned(data.clone()), i, family, style, coords))
+        .collect()
+}
+
 fn make_face(bytes: FontBytes, index: u32, family: String, style: String, coords: Vec<([u8; 4], f32)>) -> Option<FontFace> {
     let data: &[u8] = match &bytes {
         FontBytes::Static(b) => b,
@@ -600,16 +609,21 @@ impl FontDb {
     /// Add a user font (TTF/OTF/TTC bytes). Returns the number of faces added (0 if unparseable or
     /// every face was already present).
     pub fn add_font(&self, bytes: Vec<u8>) -> usize {
-        let data = Arc::new(bytes);
+        self.add_faces(parse_faces(bytes))
+    }
+
+    /// Add parsed faces in one step, skipping any already present. Lookups see all of them or
+    /// none: a family loaded on one thread is never seen half-loaded on another (its Bold
+    /// without its Regular, say, which a lookup for Regular would then pick).
+    fn add_faces(&self, new: Vec<FontFace>) -> usize {
+        let mut faces = self.faces.write().unwrap_or_else(|e| e.into_inner());
         let mut added = 0;
-        for (i, family, style, coords) in enumerate_faces(&data) {
-            if self.read_faces().iter().any(|f| f.family.eq_ignore_ascii_case(&family) && f.style.eq_ignore_ascii_case(&style)) {
+        for f in new {
+            if faces.iter().any(|g| g.family.eq_ignore_ascii_case(&f.family) && g.style.eq_ignore_ascii_case(&f.style)) {
                 continue;
             }
-            if let Some(f) = make_face(FontBytes::Owned(data.clone()), i, family, style, coords) {
-                self.faces.write().unwrap_or_else(|e| e.into_inner()).push(Arc::new(f));
-                added += 1;
-            }
+            faces.push(Arc::new(f));
+            added += 1;
         }
         added
     }
@@ -677,6 +691,12 @@ impl FontDb {
         n
     }
 
+    /// Is `family` among the installed fonts?
+    #[cfg(not(target_arch = "wasm32"))]
+    fn has_cataloged(&self, family: &str) -> bool {
+        self.read_catalog().iter().any(|c| c.family.eq_ignore_ascii_case(family))
+    }
+
     /// Load the files of the installed `family`. Returns whether any face was added.
     #[cfg(not(target_arch = "wasm32"))]
     fn load_cataloged(&self, family: &str) -> bool {
@@ -687,13 +707,9 @@ impl FontDb {
             p.dedup();
             p
         };
-        let mut any = false;
-        for p in paths {
-            if let Ok(data) = std::fs::read(&p) {
-                any |= self.add_font(data) > 0;
-            }
-        }
-        any
+        // Parse every file of the family first, then add them together.
+        let faces: Vec<FontFace> = paths.iter().filter_map(|p| std::fs::read(p).ok()).flat_map(parse_faces).collect();
+        self.add_faces(faces) > 0
     }
 
     /// Resolve a family + style to a face, falling back to the closest style of the family, then to
@@ -723,11 +739,12 @@ impl FontDb {
         if let Some(f) = self.find(family, style) {
             return Some(f);
         }
+        // Look again after loading whether or not this call added the faces: another thread
+        // may have loaded the family in the meantime.
         #[cfg(not(target_arch = "wasm32"))]
-        if self.load_cataloged(family)
-            && let Some(f) = self.find(family, style)
-        {
-            return Some(f);
+        if self.has_cataloged(family) {
+            self.load_cataloged(family);
+            return self.find(family, style);
         }
         None
     }
@@ -919,5 +936,38 @@ impl OutlinePen for FlipPen {
     }
     fn close(&mut self) {
         self.0.close_path();
+    }
+}
+
+#[cfg(all(test, not(target_arch = "wasm32")))]
+mod load_race_tests {
+    use super::*;
+
+    /// Threads resolving the same installed family at once all get it: none sees it half-loaded
+    /// or, finding another thread already loaded it, takes it for missing.
+    #[test]
+    fn a_family_loaded_by_another_thread_is_still_found() {
+        // An installed family with several faces, copied into a folder of its own (skipped on a
+        // machine without one).
+        let cat = FontDb::global().read_catalog().clone();
+        let mut by_family: std::collections::BTreeMap<String, Vec<std::path::PathBuf>> = Default::default();
+        for c in &cat {
+            by_family.entry(c.family.clone()).or_default().push(c.path.clone());
+        }
+        let Some((family, paths)) = by_family.into_iter().find(|(f, p)| p.len() >= 2 && p.len() <= 8 && !f.is_empty()) else { return };
+        let dir = std::env::temp_dir().join(format!("deckcraft-font-race-{}", std::process::id()));
+        let _ = std::fs::create_dir_all(&dir);
+        for (i, p) in paths.iter().enumerate() {
+            let _ = std::fs::copy(p, dir.join(format!("{i}-{}", p.file_name().and_then(|n| n.to_str()).unwrap_or("f.ttf"))));
+        }
+        for _ in 0..30 {
+            let db = FontDb::with_font_dirs(vec![dir.clone()]);
+            let got: Vec<String> = std::thread::scope(|s| {
+                let handles: Vec<_> = (0..8).map(|_| s.spawn(|| db.face(&family, "Regular").family.clone())).collect();
+                handles.into_iter().filter_map(|h| h.join().ok()).collect()
+            });
+            assert!(got.iter().all(|f| f.eq_ignore_ascii_case(&family)), "{family}: {got:?}");
+        }
+        let _ = std::fs::remove_dir_all(&dir);
     }
 }
