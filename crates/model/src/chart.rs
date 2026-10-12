@@ -427,6 +427,17 @@ pub struct ChartKept {
     pub parts: Vec<ChartPart>,
 }
 
+impl ChartKept {
+    /// The workbook that holds the chart data (the target of `c:externalData`): the embedded
+    /// package, or an older embedded OLE object. `None` when the chart has none, or links to an
+    /// outside file.
+    pub fn workbook(&self) -> Option<&ChartPart> {
+        let norm = |n: &str| n.trim_start_matches('/').to_ascii_lowercase();
+        let rel = self.rels.iter().find(|r| !r.external && (r.rel_type.ends_with("/package") || r.rel_type.ends_with("/oleObject")))?;
+        self.parts.iter().find(|p| norm(&p.name) == norm(&rel.part))
+    }
+}
+
 impl Default for Chart {
     fn default() -> Self {
         Chart {

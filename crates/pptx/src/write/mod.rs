@@ -61,6 +61,8 @@ pub struct Exp<'a> {
     n_chartex: u32,
     /// Parts kept from an unchanged chart (`ppt/…/keptN.ext`).
     n_kept: u32,
+    /// Chart workbooks written for edited and new charts (`ppt/embeddings/workbookN.xlsx`).
+    n_embedding: u32,
     pub slide_parts: HashMap<SlideId, String>,
     pub table_styles: Vec<String>,
     placeholder: Option<String>,
@@ -209,17 +211,40 @@ impl Exp<'_> {
         Some(o.rels.add_new(RT_CHARTEX, &opc::relative(&o.name, &name), false))
     }
 
-    pub fn chart_rel(&mut self, o: &mut Out, c: &deckcraft_model::Chart) -> String {
+    /// A chart part: the original one with its kept parts when the chart is unchanged, else one
+    /// written from the model with a workbook generated from the chart data (what PowerPoint's
+    /// Edit Data opens) when `workbook` is set. The plain-chart fallback of an Office 2016 chart
+    /// has none: the workbook belongs to the `chartEx` part.
+    pub fn chart_rel(&mut self, o: &mut Out, c: &deckcraft_model::Chart, workbook: bool) -> String {
         self.n_chart += 1;
         let name = format!("ppt/charts/chart{}.xml", self.n_chart);
-        let (xml, preserved) = chart::chart_xml(c);
-        self.pkg.xml_part(&name, CT_CHART, xml);
-        if preserved {
+        if let Some(xml) = chart::kept_chart_xml(c) {
+            self.pkg.xml_part(&name, CT_CHART, xml);
             chart::write_kept(&mut self.pkg, &name, c, &mut self.n_kept);
-        } else if !c.kept.parts.is_empty() {
-            log::warn!("pptx: chart data changed; the embedded workbook was not written back");
+        } else {
+            if !c.kept.parts.is_empty() {
+                log::warn!("pptx: chart changed; its workbook is written from the chart data");
+            }
+            let mut co = Out::new(&name);
+            let workbook = if workbook { self.new_workbook(&mut co, c) } else { None };
+            self.pkg.xml_part(&name, CT_CHART, chart::build_chart_xml(c, workbook.as_deref()));
+            self.pkg.rels(&name, &co.rels);
         }
         o.rels.add_new("chart", &opc::relative(&o.name, &name), false)
+    }
+    /// The relationship from chart part `co` to a workbook generated from the chart data, laid out
+    /// where the generated chart part's formulas point.
+    fn new_workbook(&mut self, co: &mut Out, c: &deckcraft_model::Chart) -> Option<String> {
+        let data = chart::workbook_xlsx(c)?;
+        let part = self.embedding("xlsx", chart::CT_XLSX, data);
+        Some(co.rels.add("package", &opc::relative(&co.name, &part), false))
+    }
+    /// A new part under `ppt/embeddings/`.
+    fn embedding(&mut self, ext: &str, content_type: &str, data: Vec<u8>) -> String {
+        self.n_embedding += 1;
+        let name = format!("ppt/embeddings/workbook{}.{ext}", self.n_embedding);
+        self.pkg.binary(&name, content_type, data);
+        name
     }
 }
 
@@ -539,6 +564,7 @@ pub fn export(p: &Presentation, main_ct: &str) -> Result<Vec<u8>, PptxError> {
         n_tags: 0,
         n_chartex: 0,
         n_kept: 0,
+        n_embedding: 0,
         slide_parts: HashMap::new(),
         table_styles: vec![],
         placeholder: None,
