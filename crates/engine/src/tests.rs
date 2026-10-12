@@ -586,9 +586,13 @@ fn a_call_refuses_parameters_the_command_does_not_take() {
         said(&mut s, "slide.new", json!([1]))
             .starts_with("invalid parameters for `slide.new`: parameters are a JSON object, not an array. `slide.new` takes {layout?: ")
     );
-    assert_eq!(s.doc().unwrap().current_slide().unwrap().shapes.len(), 2);
+    assert_eq!(s.doc().unwrap().current_slide().unwrap().shapes.len(), 2, "a refused call inserts nothing");
     let id = insert(&mut s, "Hi");
     assert_eq!(said(&mut s, "shape.resize", json!({"id": id, "w": 50})), format!("changed shape {id} on slide index 0"));
+    assert_eq!(
+        said(&mut s, "shape.inspect", json!({"ids": [id]})),
+        "`shape.inspect` was given `ids`, which it doesn't take. `shape.inspect` takes {id} → full shape JSON plus its effective box."
+    );
 }
 
 #[test]
@@ -601,8 +605,9 @@ fn an_unknown_command_names_the_commands_like_it() {
 
 #[test]
 fn a_command_not_available_names_only_keys_it_takes() {
+    let fresh = Session::with_new();
     for c in command_specs() {
-        let Err(reason) = (c.enabled)(&Session::with_new()) else { continue };
+        let Err(reason) = (c.enabled)(&fresh) else { continue };
         let keys = cmd::param_keys(c.params).unwrap();
         let err = EngineError::Disabled(c.id.into(), reason).to_string();
         assert!(!err.contains("`ids`") || keys.contains(&"ids"), "{err}");
@@ -680,7 +685,11 @@ fn a_call_that_returns_nothing_says_what_changed() {
     s.call("slide.new", &json!({})).unwrap();
     assert_eq!(said(&mut s, "design.background", json!({"color": "#445566", "all": true})), "changed the background of every slide");
     assert_eq!(said(&mut s, "design.background", json!({"reset": true, "index": 1})), "changed the background of slide index 1");
-    assert_eq!(said(&mut s, "design.background", json!({"color": "#445566", "all": true})), "changed the background of slide index 1");
+    assert_eq!(
+        said(&mut s, "design.background", json!({"color": "#445566", "all": true})),
+        "changed the background of slide index 1",
+        "only the slide that was reset changes"
+    );
 }
 
 #[test]

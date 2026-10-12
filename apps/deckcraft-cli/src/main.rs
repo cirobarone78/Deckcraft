@@ -4,7 +4,7 @@
 //! deckcraft-cli info FILE                       # slides, titles, layouts (JSON)
 //! deckcraft-cli render (FILE | --sample) [--slide N | --all] [--scale S] OUT.png|OUT_DIR
 //! deckcraft-cli convert IN OUT                  # .deckcraft ⇄ .pptx, outline .txt, .png (first slide)
-//! deckcraft-cli run [--in FILE | --sample] [--cmd ID[=JSON]]... [--save OUT] [--export OUT] [--print]
+//! deckcraft-cli run [--in FILE | --sample] [--cmd COMMAND[=PARAMS]]... [--save OUT] [--export OUT] [--print]
 //! deckcraft-cli commands [FILTER]               # list commands (JSON)
 //! deckcraft-cli describe ID                     # one command
 //! deckcraft-cli app [--port PORT] COMMAND [JSON] | --method METHOD [JSON]   # drive the running app
@@ -35,7 +35,7 @@ macro_rules! outln {
 const USAGE: &str = "usage: deckcraft-cli info FILE
        deckcraft-cli render (FILE | --sample) [--slide N | --all] [--scale S] [--edit] OUT
        deckcraft-cli convert IN OUT
-       deckcraft-cli run [--in FILE | --sample] [--cmd ID[=JSON]]... [--save OUT] [--export OUT] [--print]
+       deckcraft-cli run [--in FILE | --sample] [--cmd COMMAND[=PARAMS]]... [--save OUT] [--export OUT] [--print]
        deckcraft-cli commands [FILTER]
        deckcraft-cli describe COMMAND
        deckcraft-cli app [--port PORT] COMMAND [JSON] | --method METHOD [JSON]

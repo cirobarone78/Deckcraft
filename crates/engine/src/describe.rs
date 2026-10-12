@@ -34,7 +34,10 @@ pub(crate) fn no_shape(st: &DocState, id: ShapeId) -> String {
         Some((there, go)) => {
             format!("shape {id} is on {there}, but shape ids are looked up on {here}, the one being edited; {go} switches to {there}")
         }
-        None => format!("no shape {id} in the presentation; slide.inspect lists the shapes of {here}, the one being edited"),
+        None if st.selection.target == Target::Slides => {
+            format!("no shape {id} in the presentation; slide.inspect lists the shapes of {here}, the one being edited")
+        }
+        None => format!("no shape {id} in the presentation; shape ids are looked up on {here}, the one being edited"),
     }
 }
 
