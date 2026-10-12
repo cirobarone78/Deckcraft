@@ -566,6 +566,21 @@ fn every_params_doc_names_its_keys() {
 }
 
 #[test]
+fn a_params_doc_spells_out_each_parameter() {
+    use cmd::Param;
+    let p = |name, optional, about, or| Param { name, optional, about, or };
+    assert_eq!(
+        cmd::parse_params("{preset: rect|roundRect, rect?: [x,y,w,h] pt, index? (else selected shapes)} → {id}").unwrap(),
+        [p("preset", false, "rect|roundRect", false), p("rect", true, "[x,y,w,h] pt", false), p("index", true, "(else selected shapes)", false)]
+    );
+    assert_eq!(
+        cmd::parse_params("{color? | none?: true, ids?}").unwrap(),
+        [p("color", true, "", false), p("none", true, "true", true), p("ids", true, "", false)]
+    );
+    assert_eq!(cmd::parse_params("{index} | {id}").unwrap(), [p("index", false, "", false), p("id", false, "", true)]);
+}
+
+#[test]
 fn a_call_refuses_parameters_the_command_does_not_take() {
     let mut s = session();
     assert_eq!(

@@ -179,40 +179,87 @@ pub(crate) fn similar_commands(id: &str) -> Vec<&'static str> {
         .collect()
 }
 
-/// Top-level keys a params doc names: `{preset, rect?: [x,y,w,h] pt} | {id}` gives preset, rect,
-/// id. Text after `→` is the result and is skipped. Errs where the doc strays from that grammar.
 pub(crate) fn param_keys(doc: &str) -> std::result::Result<Vec<&str>, String> {
-    let doc = doc.split('→').next().unwrap_or_default();
     let mut keys = vec![];
+    for p in parse_params(doc)? {
+        if !keys.contains(&p.name) {
+            keys.push(p.name);
+        }
+    }
+    Ok(keys)
+}
+
+#[derive(Debug, PartialEq)]
+pub struct Param<'a> {
+    pub name: &'a str,
+    pub optional: bool,
+    /// What the doc says of it: its values, unit or remark (`rect|roundRect|…`, `[x,y,w,h] pt`).
+    pub about: &'a str,
+    /// An alternative to the parameter before it (`{index} | {id}`, `color? | none?`).
+    pub or: bool,
+}
+
+/// The top-level parameters of a params doc: `{preset, rect?: [x,y,w,h] pt} | {id}` gives preset,
+/// rect (optional, `[x,y,w,h] pt`) and id (an alternative). Text after `→` is the result and is
+/// skipped. Errs where the doc strays from that grammar.
+pub fn parse_params(doc: &str) -> std::result::Result<Vec<Param<'_>>, String> {
+    let doc = doc.split('→').next().unwrap_or_default();
+    let mut params: Vec<Param> = vec![];
     let mut open: Vec<char> = vec![];
     let mut expect_key = false;
+    let mut or = false;
+    let mut objects = 0;
+    let mut about_from: Option<usize> = None;
     let mut chars = doc.char_indices().peekable();
     let mut prev = ' ';
+    fn end_about<'a>(doc: &'a str, params: &mut [Param<'a>], from: &mut Option<usize>, to: usize) {
+        if let (Some(f), Some(p)) = (from.take(), params.last_mut()) {
+            p.about = doc.get(f..to).unwrap_or_default().trim();
+        }
+    }
     while let Some((i, c)) = chars.next() {
         let in_object = open == ['{'];
         match c {
             '{' | '[' | '(' => {
                 open.push(c);
-                expect_key = open == ['{'];
+                if open == ['{'] {
+                    expect_key = true;
+                    objects += 1;
+                    or = objects > 1;
+                }
             }
             '}' | ']' | ')' => {
+                if in_object {
+                    end_about(doc, &mut params, &mut about_from, i);
+                }
                 open.pop();
             }
-            ',' if in_object => expect_key = true,
-            '|' if in_object && prev == ' ' && chars.peek().is_some_and(|(_, n)| *n == ' ') => expect_key = true,
+            ',' if in_object => {
+                end_about(doc, &mut params, &mut about_from, i);
+                expect_key = true;
+            }
+            '|' if in_object && prev == ' ' && chars.peek().is_some_and(|(_, n)| *n == ' ') => {
+                end_about(doc, &mut params, &mut about_from, i);
+                expect_key = true;
+                or = true;
+            }
             c if in_object && expect_key && (c.is_ascii_alphabetic() || c == '_') => {
                 let mut end = i + c.len_utf8();
                 while let Some((j, n)) = chars.peek().copied().filter(|(_, n)| n.is_ascii_alphanumeric() || *n == '_') {
                     end = j + n.len_utf8();
                     chars.next();
                 }
-                if !keys.contains(&&doc[i..end]) {
-                    keys.push(&doc[i..end]);
-                }
-                let rest = doc[end..].trim_start_matches('?').trim_start();
-                if !rest.starts_with([':', ',', '}', '|', '(']) {
-                    return Err(format!("`{}` is followed by `{}`", &doc[i..end], rest.chars().take(12).collect::<String>()));
-                }
+                let after = doc.get(end..).unwrap_or_default();
+                let rest = after.trim_start_matches('?').trim_start();
+                let at = doc.len() - rest.len();
+                about_from = match rest.chars().next() {
+                    Some(':') => Some(at + 1),
+                    Some('(') => Some(at),
+                    Some(',' | '}' | '|') => None,
+                    _ => return Err(format!("`{}` is followed by `{}`", &doc[i..end], rest.chars().take(12).collect::<String>())),
+                };
+                params.push(Param { name: &doc[i..end], optional: after.starts_with('?'), about: "", or });
+                or = false;
                 expect_key = false;
             }
             c if in_object && expect_key && !c.is_whitespace() => return Err(format!("expected a key at `{}`", &doc[i..])),
@@ -220,7 +267,7 @@ pub(crate) fn param_keys(doc: &str) -> std::result::Result<Vec<&str>, String> {
         }
         prev = c;
     }
-    Ok(keys)
+    Ok(params)
 }
 
 pub(crate) fn check_params(spec: &CommandSpec, p: &Value) -> Result<()> {

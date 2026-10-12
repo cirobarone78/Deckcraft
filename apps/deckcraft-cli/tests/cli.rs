@@ -14,9 +14,86 @@ fn stderr(o: &Output) -> String {
     String::from_utf8_lossy(&o.stderr).into_owned()
 }
 
+const SUBCOMMANDS: [&str; 9] = ["info", "render", "convert", "run", "commands", "describe", "app", "mcp", "links"];
+
 #[test]
-fn an_unknown_subcommand_is_named_before_the_usage() {
-    assert!(stderr(&cli(&["frobnicate"])).starts_with("deckcraft-cli: unknown subcommand `frobnicate`\nusage:"));
+fn an_unknown_subcommand_is_named_before_the_overview() {
+    assert!(stderr(&cli(&["frobnicate"])).starts_with("deckcraft-cli: unknown subcommand `frobnicate`\n\ndeckcraft-cli works on"));
+}
+
+#[test]
+fn help_lists_every_subcommand_with_a_run_example() {
+    for flag in ["help", "--help", "-h"] {
+        let out = stdout(&cli(&[flag]));
+        for sub in SUBCOMMANDS {
+            assert!(out.contains(&format!("\n  {sub} ")), "{flag} lacks {sub}: {out}");
+        }
+        assert!(out.contains("deckcraft-cli run --cmd 'slide.new={\"title\":\"Q3 results\"}' --save q3.deckcraft"), "{out}");
+    }
+}
+
+#[test]
+fn every_subcommand_answers_help_and_does_nothing_else() {
+    let dir = std::env::temp_dir().join(format!("dc-cli-help-{}", std::process::id()));
+    std::fs::create_dir_all(&dir).unwrap();
+    for sub in SUBCOMMANDS {
+        for args in [vec![sub, "--help"], vec![sub, "-h", "out.png"], vec!["help", sub]] {
+            let o = Command::new(env!("CARGO_BIN_EXE_deckcraft-cli")).current_dir(&dir).args(&args).output().unwrap();
+            assert!(stdout(&o).starts_with(&format!("usage: deckcraft-cli {sub}")), "{args:?}");
+        }
+    }
+    assert_eq!(std::fs::read_dir(&dir).unwrap().count(), 0, "help wrote nothing");
+    std::fs::remove_dir_all(&dir).unwrap();
+}
+
+#[test]
+fn run_help_says_what_the_ids_do_not() {
+    let out = stdout(&cli(&["run", "--help"]));
+    for fact in [
+        "COMMAND is a command id, then `=`, then the command's parameters as one\nJSON object.",
+        "points on a 960×540 slide",
+        "Shape ids are looked up on the current slide only.",
+        "format.* acts\n  on the selected text or shapes",
+    ] {
+        assert!(out.contains(fact), "{fact}: {out}");
+    }
+}
+
+#[test]
+fn describe_spells_out_a_command() {
+    assert_eq!(
+        stdout(&cli(&["describe", "shape.insert"])),
+        "shape.insert: Shapes, in Insert ▸ Illustrations.
+
+Parameters:
+  preset          rect|roundRect|ellipse|triangle|rightArrow|star5|… (see shape.presets)
+  rect            [x,y,w,h] pt
+  text, optional  string
+  adj, optional   [number] (preset adjustments)
+  flip, optional  h|v|hv
+
+Run it with: deckcraft-cli run --cmd 'shape.insert={…}'
+"
+    );
+    assert_eq!(
+        stdout(&cli(&["describe", "format.size"])),
+        "format.size: Font Size, in Home ▸ Font.
+
+Parameters:
+  size  pt
+Acts on the selected text or shapes.
+
+Run it with: deckcraft-cli run --cmd 'format.size={…}'
+"
+    );
+    assert!(stdout(&cli(&["describe", "edit.copy"])).contains("Answers with {text}.\n"));
+    assert!(stdout(&cli(&["describe", "slide.go"])).contains("  index\n  or id\n"));
+}
+
+#[test]
+fn commands_lists_one_line_per_command() {
+    assert_eq!(stdout(&cli(&["commands", "format.size"])), "format.size — Font Size: {size: pt}\n");
+    assert_eq!(stdout(&cli(&["commands", "slide.next"])), "slide.next — Next Slide\n");
 }
 
 #[test]

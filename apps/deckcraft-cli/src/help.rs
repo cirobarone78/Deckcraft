@@ -1,0 +1,163 @@
+pub struct Subcommand {
+    pub name: &'static str,
+    pub usage: &'static str,
+    pub about: &'static str,
+    pub text: &'static str,
+}
+
+pub const SUBCOMMANDS: &[Subcommand] = &[
+    Subcommand {
+        name: "info",
+        usage: "info FILE",
+        about: "print a presentation's slides, layouts and theme as JSON",
+        text: "Prints FILE (.deckcraft or .pptx) as JSON: its slides (index, id, title, layout, how many shapes,
+notes, transition), its layouts, theme fonts, sections and slide size.
+
+The shapes of one slide, with their ids, boxes and text, come from the slide.inspect command:
+
+  deckcraft-cli run --in deck.deckcraft --print --cmd 'slide.inspect={\"index\":0}'",
+    },
+    Subcommand {
+        name: "render",
+        usage: "render (FILE | --sample) [--slide N | --all] [--scale S] [--edit] OUT",
+        about: "draw slides as PNG images",
+        text: "Draws slides of FILE, or of the sample presentation with --sample, as PNG images. FILE comes first;
+OUT is the image to write. With --all, OUT is a folder that gets one slide-01.png, slide-02.png… per
+slide. Prints each image's path and size.
+
+  --slide N   the slide at index N; indices start at 0, and 0 is the default
+  --scale S   pixels per point, 2 by default: a 960×540 slide becomes 1920×1080
+  --edit      draw what the editor shows: placeholder prompts and their dashed outlines
+
+  deckcraft-cli render deck.deckcraft --slide 2 slide-3.png",
+    },
+    Subcommand {
+        name: "convert",
+        usage: "convert IN OUT",
+        about: "save a presentation in the format OUT's extension names",
+        text: "Opens IN (.deckcraft or .pptx) and writes it to OUT, in the format OUT's extension names:
+.deckcraft, .pptx, .pdf, .txt or .md for the outline, .png or .jpg for the first slide. Any other
+extension is written as .deckcraft. Prints OUT.
+
+  deckcraft-cli convert deck.deckcraft deck.pptx",
+    },
+    Subcommand {
+        name: "run",
+        usage: "run [--in FILE | --sample] [--cmd COMMAND[=PARAMS]]... [--save OUT] [--export OUT] [--print]",
+        about: "run commands on a presentation, then save or export it",
+        text: "Runs commands, in order, on one presentation: FILE with --in, the sample presentation with --sample,
+else a new one with an empty title slide. Then --save writes it, in the format OUT's extension names
+(.deckcraft keeps everything; .pptx, .pdf), and --export writes an image or document of it (.png of
+the current slide, .pdf, .pptx).
+
+Each --cmd is one command: COMMAND is a command id, then `=`, then the command's parameters as one
+JSON object. Quote it for the shell. A command that needs no parameters is just its id.
+
+  deckcraft-cli run \\
+    --cmd 'slide.new={\"layout\":\"titleOnly\",\"title\":\"Q3 results\"}' \\
+    --cmd 'shape.insert={\"preset\":\"roundRect\",\"rect\":[80,160,320,120],\"text\":\"Revenue\"}' \\
+    --cmd 'format.size={\"size\":28}' \\
+    --save q3.deckcraft
+
+`deckcraft-cli commands` lists the command ids; `deckcraft-cli describe COMMAND` explains one and its
+parameters.
+
+What the ids don't say:
+- Positions and sizes are in points on a 960×540 slide, x to the right and y down; a rect is
+  [x, y, width, height].
+- Slide indices start at 0. slide.new inserts after the current slide and makes the new one current;
+  slide.go {\"index\": N} makes slide N current.
+- Shape ids are looked up on the current slide only.
+- A command that adds a shape (shape.insert, insert.textBox, insert.table…) selects it. format.* acts
+  on the selected text or shapes; edit.select {\"ids\": [...]} selects others. A command whose
+  parameters list `ids` acts on those shapes, else on the selected ones.
+
+If a command fails, run stops there and saves nothing. Without --print, run ends with one line, e.g.
+`OK: 3 commands ran, saved q3.deckcraft`; --print shows each command's answer instead, such as the id
+of an inserted shape.",
+    },
+    Subcommand {
+        name: "commands",
+        usage: "commands [FILTER]",
+        about: "list the commands run can use, one per line",
+        text: "Lists the commands that run --cmd, app and the MCP server take, one per line: the id, its name in
+the app and its parameters. FILTER keeps the commands whose id or name contains it.
+
+  deckcraft-cli commands format.
+
+In the parameters, `?` marks an optional one, a spaced ` | ` separates alternatives and `→` shows what
+the command answers. `deckcraft-cli describe COMMAND` spells one command out.",
+    },
+    Subcommand {
+        name: "describe",
+        usage: "describe COMMAND",
+        about: "explain one command and its parameters",
+        text: "Explains one command: what it is in the app, each of its parameters, what it answers, and how run
+calls it.
+
+  deckcraft-cli describe shape.insert",
+    },
+    Subcommand {
+        name: "app",
+        usage: "app [--port PORT] COMMAND [PARAMS] | --method METHOD [PARAMS]",
+        about: "run a command in the DeckCraft app started with --control",
+        text: "Sends one request to the DeckCraft app started with `deckcraft --control PORT` (port 7979 by default)
+and prints its answer as JSON. COMMAND [PARAMS] runs a command, as run --cmd does; --method METHOD
+[PARAMS] calls a control-channel method such as ui.screenshot. PARAMS is a JSON object.
+
+  deckcraft-cli app shape.insert '{\"preset\":\"star5\",\"rect\":[100,100,200,200]}'
+  deckcraft-cli app --method ui.screenshot '{\"path\":\"/tmp/shot.png\"}'",
+    },
+    Subcommand {
+        name: "mcp",
+        usage: "mcp [--connect PORT] [--sample]",
+        about: "serve the commands to an agent over MCP on stdio",
+        text: "Runs a Model Context Protocol server on stdin and stdout. It works on its own presentation without a
+window, or with --connect PORT (or host:port) on the DeckCraft app started with --control PORT.
+--sample opens the sample presentation.",
+    },
+    Subcommand {
+        name: "links",
+        usage: "links",
+        about: "print the DeckCraft community and project links",
+        text: "Prints the DeckCraft community and project links.",
+    },
+    Subcommand { name: "version", usage: "--version", about: "print the version", text: "Prints the version of deckcraft-cli." },
+];
+
+pub fn acts_on(c: &deckcraft_engine::CommandSpec) -> Option<&'static str> {
+    use deckcraft_engine::cmd::{NOTHING_SELECTED, SELECT_TWO};
+    match (c.enabled)(&deckcraft_engine::Session::with_new()).err()?.as_str() {
+        "select text or a shape" => Some("Acts on the selected text or shapes."),
+        NOTHING_SELECTED => Some("Acts on the shapes in `ids`, else on the selected shapes."),
+        SELECT_TWO => Some("Acts on two or more shapes: those in `ids`, else the selected ones."),
+        "no text insertion point" => Some("Acts on the text being edited; text.edit starts editing a shape's text."),
+        _ => None,
+    }
+}
+
+pub fn find(name: &str) -> Option<&'static Subcommand> {
+    SUBCOMMANDS.iter().find(|s| s.name == name)
+}
+
+pub fn overview() -> String {
+    let width = SUBCOMMANDS.iter().map(|s| s.usage.split(' ').next().unwrap_or_default().len()).max().unwrap_or_default();
+    let list: Vec<String> = SUBCOMMANDS.iter().map(|s| format!("  {:<width$}  {}", s.usage.split(' ').next().unwrap_or_default(), s.about)).collect();
+    format!(
+        "deckcraft-cli works on DeckCraft presentations (.deckcraft, .pptx) without a window.
+
+{}
+
+A presentation is edited by running commands on it:
+
+  deckcraft-cli run --cmd 'slide.new={{\"title\":\"Q3 results\"}}' --save q3.deckcraft
+
+`deckcraft-cli help SUBCOMMAND`, or `deckcraft-cli SUBCOMMAND --help`, explains one subcommand;
+`deckcraft-cli help run` explains commands.",
+        list.join("\n")
+    )
+}
+
+pub fn subcommand(s: &Subcommand) -> String {
+    format!("usage: deckcraft-cli {}\n\n{}", s.usage, s.text)
+}
