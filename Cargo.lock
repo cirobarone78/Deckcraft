@@ -1141,6 +1141,7 @@ dependencies = [
  "deckcraft-text",
  "egui",
  "egui_kittest",
+ "image",
  "js-sys",
  "log",
  "serde",

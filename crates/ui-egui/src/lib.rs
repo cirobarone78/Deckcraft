@@ -17,6 +17,7 @@ pub mod menus;
 pub mod panes;
 pub mod ribbon;
 pub mod show;
+pub mod show_ink;
 pub mod sorter;
 pub mod status;
 pub mod textures;
@@ -149,7 +150,7 @@ pub const UI_COMMANDS: &[(&str, &str, Option<&str>, &str)] = &[
     ("view.grayscale", "Grayscale", None, "{on?: bool}"),
     ("show.start", "Slide Show", Some("F5"), "{from?: index}"),
     ("show.presenter", "Presenter View", None, "{on?: bool}"),
-    ("show.end", "End Show", None, "{}"),
+    ("show.end", "End Show", None, "{keep?: bool (answer the keep-ink prompt)}"),
     ("app.home", "Home", None, "{on?}"),
     ("app.about", "About DeckCraft", None, "{}"),
     ("app.palette", "Command Palette", Some("Cmd+Shift+P"), "{}"),
@@ -336,8 +337,9 @@ impl SlideApp {
             }
             "show.presenter" => self.ui.presenter_view = self.flag(p, self.ui.presenter_view),
             "show.end" => {
-                self.show = None;
-                self.media.stop_owned(media::Owner::Show);
+                // Route through the show's own exit path (fullscreen off, keep-ink prompt),
+                // same as the control channel's `show.end`.
+                self.end_show(p.get("keep").and_then(Value::as_bool));
             }
             "app.home" => {
                 let on = self.flag(p, self.home.is_some());
@@ -370,6 +372,27 @@ impl SlideApp {
         if let Some(d) = self.session.active() {
             self.show = Some(show::Show::new(&d.doc, from, reading, self.ui.presenter_view && !reading));
         }
+    }
+
+    /// End the running show through its normal exit path (fullscreen off, keep-ink prompt).
+    /// `keep` answers the prompt in advance (automation): true = keep ink, false = discard.
+    pub fn end_show(&mut self, keep: Option<bool>) {
+        let Some(show) = self.show.as_mut() else { return };
+        if let Some(k) = keep
+            && show.ink().any()
+            && !show.preview_only
+        {
+            show.set_pending_keep(k);
+        }
+        if show.ask_keep() {
+            // The prompt is already open: the pending answer is enough, no extra Escape
+            // (which would mean Discard).
+            return;
+        }
+        let key =
+            |key: egui::Key, pressed: bool| egui::Event::Key { key, physical_key: None, pressed, repeat: false, modifiers: egui::Modifiers::NONE };
+        self.synthetic.push(key(egui::Key::Escape, true));
+        self.synthetic.push(key(egui::Key::Escape, false));
     }
 
     fn pick_and_open(&mut self) {
