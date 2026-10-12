@@ -15,15 +15,6 @@ fn stderr(o: &Output) -> String {
 }
 
 #[test]
-fn help_explains_run() {
-    for flag in ["help", "--help", "-h"] {
-        let out = stdout(&cli(&[flag]));
-        assert!(out.contains("--cmd COMMAND[=PARAMS]") && out.contains("COMMAND is a command id"), "{out}");
-    }
-    assert!(stdout(&cli(&["run", "--help"])).starts_with("run applies each --cmd in order"));
-}
-
-#[test]
 fn an_unknown_subcommand_is_named_before_the_usage() {
     assert!(stderr(&cli(&["frobnicate"])).starts_with("deckcraft-cli: unknown subcommand `frobnicate`\nusage:"));
 }

@@ -4,12 +4,12 @@
 //! deckcraft-cli info FILE                       # slides, titles, layouts (JSON)
 //! deckcraft-cli render (FILE | --sample) [--slide N | --all] [--scale S] OUT.png|OUT_DIR
 //! deckcraft-cli convert IN OUT                  # .deckcraft ⇄ .pptx, outline .txt, .png (first slide)
-//! deckcraft-cli run [--in FILE | --sample] [--cmd COMMAND[=PARAMS]]... [--save OUT] [--export OUT] [--print]
+//! deckcraft-cli run [--in FILE | --sample] [--cmd ID[=JSON]]... [--save OUT] [--export OUT] [--print]
 //! deckcraft-cli commands [FILTER]               # list commands (JSON)
-//! deckcraft-cli describe COMMAND                # one command
-//! deckcraft-cli app [--port PORT] COMMAND [PARAMS] | --method METHOD [PARAMS]   # drive the running app
+//! deckcraft-cli describe ID                     # one command
+//! deckcraft-cli app [--port PORT] COMMAND [JSON] | --method METHOD [JSON]   # drive the running app
 //! deckcraft-cli mcp [--connect PORT] [--sample] # MCP server over stdio
-//! deckcraft-cli links | --version | help
+//! deckcraft-cli links | --version
 //! ```
 #![deny(clippy::unwrap_used, clippy::expect_used, clippy::panic, clippy::unimplemented, clippy::todo, clippy::unreachable)]
 #![forbid(unsafe_code)]
@@ -35,24 +35,12 @@ macro_rules! outln {
 const USAGE: &str = "usage: deckcraft-cli info FILE
        deckcraft-cli render (FILE | --sample) [--slide N | --all] [--scale S] [--edit] OUT
        deckcraft-cli convert IN OUT
-       deckcraft-cli run [--in FILE | --sample] [--cmd COMMAND[=PARAMS]]... [--save OUT] [--export OUT] [--print]
+       deckcraft-cli run [--in FILE | --sample] [--cmd ID[=JSON]]... [--save OUT] [--export OUT] [--print]
        deckcraft-cli commands [FILTER]
        deckcraft-cli describe COMMAND
-       deckcraft-cli app [--port PORT] COMMAND [PARAMS] | --method METHOD [PARAMS]
+       deckcraft-cli app [--port PORT] COMMAND [JSON] | --method METHOD [JSON]
        deckcraft-cli mcp [--connect PORT] [--sample]
-       deckcraft-cli links | --version | help";
-
-const RUN_HELP: &str = "run applies each --cmd in order to one presentation, then --save and --export write it.
-COMMAND is a command id: `commands` lists them, `describe COMMAND` gives its parameters.
-PARAMS is the command's parameters as a JSON object, for example:
-
-  deckcraft-cli run --cmd 'slide.new={\"layout\":\"titleOnly\",\"title\":\"Q3\"}' \\
-    --cmd 'shape.insert={\"preset\":\"roundRect\",\"rect\":[80,160,320,120],\"text\":\"Revenue\"}' \\
-    --cmd 'format.size={\"size\":28}' --print --save q3.deckcraft
-
-Shape ids are looked up on the current slide. shape.insert selects the shape it inserts, and
-format.* acts on the selected text or shapes. --print shows each command's answer; without it,
-run ends with one OK line.";
+       deckcraft-cli links | --version";
 
 fn main() -> ExitCode {
     let args: Vec<String> = std::env::args().skip(1).collect();
@@ -60,14 +48,6 @@ fn main() -> ExitCode {
     match args.first().map(String::as_str) {
         Some("--version" | "-V" | "version") => {
             outln!("deckcraft-cli {}", env!("CARGO_PKG_VERSION"));
-            ExitCode::SUCCESS
-        }
-        Some("help" | "--help" | "-h") => {
-            outln!("{USAGE}\n\n{RUN_HELP}");
-            ExitCode::SUCCESS
-        }
-        Some("run") if rest.iter().any(|a| a == "--help" || a == "-h") => {
-            outln!("{RUN_HELP}");
             ExitCode::SUCCESS
         }
         Some("info") => report(info(rest)),

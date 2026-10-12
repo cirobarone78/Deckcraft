@@ -109,6 +109,9 @@ fn run_command_answers_in_words() {
 #[test]
 fn every_tool_takes_the_arguments_its_schema_declares() {
     let mut s = Server::new(Box::new(Headless::with_document()));
+    let dir = std::env::temp_dir().join(format!("dc-mcp-schema-{}", std::process::id()));
+    std::fs::create_dir_all(&dir).unwrap();
+    let path = dir.join("x").to_string_lossy().into_owned();
     let tools = call(&mut s, 1, "tools/list", json!({}));
     for t in tools["result"]["tools"].as_array().unwrap() {
         let name = t["name"].as_str().unwrap();
@@ -122,6 +125,7 @@ fn every_tool_takes_the_arguments_its_schema_declares() {
                     Some("boolean") => json!(false),
                     Some("array") => json!([]),
                     Some("object") => json!({}),
+                    _ if k == "path" => json!(path),
                     _ => json!("x"),
                 };
                 (k.clone(), v)
@@ -131,6 +135,7 @@ fn every_tool_takes_the_arguments_its_schema_declares() {
         let text = r["result"]["content"][0]["text"].as_str().unwrap_or_default();
         assert!(!text.contains("which it doesn't take"), "{name}: {text}");
     }
+    std::fs::remove_dir_all(&dir).unwrap();
 }
 
 #[test]

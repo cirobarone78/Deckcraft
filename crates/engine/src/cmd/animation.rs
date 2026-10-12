@@ -44,7 +44,7 @@ pub fn specs() -> Vec<CommandSpec> {
             "Effect Options",
             ["Animations", "Animation"],
             None,
-            "{option?, textBuild?: asOne|byParagraph|byWord|byLetter, index? (else selected shapes), ids?}",
+            "{option?, textBuild?: asOne|byParagraph|byWord|byLetter, index?, ids?}",
             has_slide,
             options
         ),
