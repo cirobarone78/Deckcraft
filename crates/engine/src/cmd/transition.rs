@@ -26,7 +26,7 @@ pub fn specs() -> Vec<CommandSpec> {
             "Timing",
             ["Transitions", "Timing"],
             None,
-            "{duration?: ms, onClick?: bool, after?: ms | null, index?}",
+            "{duration?: ms, onClick?: bool, after?: ms|null, index?}",
             has_slide,
             timing
         ),

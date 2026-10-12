@@ -22,6 +22,7 @@ use deckcraft_model::ShapeId;
 use serde::Serialize;
 use serde_json::Value;
 
+pub(crate) use crate::describe::none_at;
 use crate::{EngineError, Result, Session};
 
 pub type Run = fn(&mut Session, &Value) -> Result<Value>;
@@ -33,6 +34,9 @@ pub struct CommandSpec {
     /// Where it lives: `["Home", "Font"]` (ribbon tab and group) or `["Arrange"]` (menu).
     pub menu: &'static [&'static str],
     pub shortcut: Option<&'static str>,
+    /// The parameters as `list_commands` shows them, and the keys [`Session::call`] accepts, read
+    /// by `param_keys`: a spaced ` | ` separates alternative keys, so alternative values are
+    /// written unspaced (`ms|null`).
     pub params: &'static str,
     pub enabled: Enabled,
     pub run: Run,
@@ -70,15 +74,19 @@ impl CommandSpec {
 pub fn always(_: &Session) -> std::result::Result<(), String> {
     Ok(())
 }
+pub const NO_PRESENTATION: &str = "no presentation open";
+pub const NO_SLIDES: &str = "no slides";
 pub fn has_doc(s: &Session) -> std::result::Result<(), String> {
-    s.active().map(|_| ()).ok_or_else(|| "no presentation open".into())
+    s.active().map(|_| ()).ok_or_else(|| NO_PRESENTATION.into())
 }
 pub fn has_slide(s: &Session) -> std::result::Result<(), String> {
     has_doc(s)?;
-    if s.active().is_some_and(|d| !d.doc.slides.is_empty() || d.selection.target != crate::Target::Slides) { Ok(()) } else { Err("no slides".into()) }
+    if s.active().is_some_and(|d| !d.doc.slides.is_empty() || d.selection.target != crate::Target::Slides) { Ok(()) } else { Err(NO_SLIDES.into()) }
 }
 pub const NOTHING_SELECTED: &str = "nothing selected";
 pub const SELECT_TWO: &str = "select two or more objects";
+pub const NO_TEXT_POINT: &str = "no text insertion point";
+pub const SELECT_TEXT_OR_SHAPE: &str = "select text or a shape";
 pub fn has_selection(s: &Session) -> std::result::Result<(), String> {
     has_doc(s)?;
     if s.active().is_some_and(|d| !d.selection.shapes.is_empty()) { Ok(()) } else { Err(NOTHING_SELECTED.into()) }
@@ -89,17 +97,36 @@ pub fn has_two(s: &Session) -> std::result::Result<(), String> {
 }
 pub fn has_text(s: &Session) -> std::result::Result<(), String> {
     has_doc(s)?;
-    if s.active().is_some_and(|d| d.selection.text.is_some()) { Ok(()) } else { Err("no text insertion point".into()) }
+    if s.active().is_some_and(|d| d.selection.text.is_some()) { Ok(()) } else { Err(NO_TEXT_POINT.into()) }
 }
 /// Text editing or shapes with text selected (formatting commands apply to either).
 pub fn has_text_or_shapes(s: &Session) -> std::result::Result<(), String> {
     has_doc(s)?;
-    if s.active().is_some_and(|d| d.selection.text.is_some() || !d.selection.shapes.is_empty()) {
-        Ok(())
-    } else {
-        Err("select text or a shape".into())
+    if s.active().is_some_and(|d| d.selection.text.is_some() || !d.selection.shapes.is_empty()) { Ok(()) } else { Err(SELECT_TEXT_OR_SHAPE.into()) }
+}
+pub(crate) fn how_to_enable(cmd: &str, reason: &str) -> String {
+    match reason {
+        NO_PRESENTATION => " file.new or file.open opens one.".into(),
+        NO_SLIDES => " slide.new adds one.".into(),
+        NOTHING_SELECTED | SELECT_TWO => {
+            let keys = find_command(cmd).and_then(|c| param_keys(c.params).ok()).unwrap_or_default();
+            let named = if keys.contains(&"ids") {
+                "`ids` or on "
+            } else if keys.contains(&"id") {
+                "`id` or on "
+            } else {
+                ""
+            };
+            format!(" It acts on {named}the selected shapes; edit.select {{\"ids\": […]}} selects them.")
+        }
+        NO_TEXT_POINT => " text.edit {\"id\": …} starts editing a shape's text.".into(),
+        SELECT_TEXT_OR_SHAPE => {
+            " It acts on the selected text or shapes; shape.insert selects the shape it inserts, edit.select {\"ids\": […]} selects others.".into()
+        }
+        _ => String::new(),
     }
 }
+
 pub fn can_undo(s: &Session) -> std::result::Result<(), String> {
     if s.active().is_some_and(|d| !d.history.undo.is_empty()) { Ok(()) } else { Err("nothing to undo".into()) }
 }
@@ -148,6 +175,87 @@ pub fn find_command(id: &str) -> Option<&'static CommandSpec> {
     command_specs().iter().find(|c| c.id == id)
 }
 
+pub(crate) fn similar_commands(id: &str) -> Vec<&'static str> {
+    let q = id.to_lowercase();
+    if q.is_empty() {
+        return vec![];
+    }
+    let last = q.rsplit('.').next().unwrap_or_default();
+    command_specs()
+        .iter()
+        .map(|c| c.id)
+        .filter(|c| c.to_lowercase().contains(&q) || c.rsplit('.').next().is_some_and(|l| last.len() >= 3 && l.to_lowercase().starts_with(last)))
+        .take(8)
+        .collect()
+}
+
+/// Top-level keys a params doc names: `{preset, rect?: [x,y,w,h] pt} | {id}` gives preset, rect,
+/// id. Text after `→` is the result and is skipped. Errs where the doc strays from that grammar.
+pub(crate) fn param_keys(doc: &str) -> std::result::Result<Vec<&str>, String> {
+    let doc = doc.split('→').next().unwrap_or_default();
+    let mut keys = vec![];
+    let mut open: Vec<char> = vec![];
+    let mut expect_key = false;
+    let mut chars = doc.char_indices().peekable();
+    let mut prev = ' ';
+    while let Some((i, c)) = chars.next() {
+        let in_object = open == ['{'];
+        match c {
+            '{' | '[' | '(' => {
+                open.push(c);
+                expect_key = open == ['{'];
+            }
+            '}' | ']' | ')' => {
+                open.pop();
+            }
+            ',' if in_object => expect_key = true,
+            '|' if in_object && prev == ' ' && chars.peek().is_some_and(|(_, n)| *n == ' ') => expect_key = true,
+            c if in_object && expect_key && (c.is_ascii_alphabetic() || c == '_') => {
+                let mut end = i + c.len_utf8();
+                while let Some((j, n)) = chars.peek().copied().filter(|(_, n)| n.is_ascii_alphanumeric() || *n == '_') {
+                    end = j + n.len_utf8();
+                    chars.next();
+                }
+                if !keys.contains(&&doc[i..end]) {
+                    keys.push(&doc[i..end]);
+                }
+                let rest = doc[end..].trim_start_matches('?').trim_start();
+                if !rest.starts_with([':', ',', '}', '|', '(']) {
+                    return Err(format!("`{}` is followed by `{}`", &doc[i..end], rest.chars().take(12).collect::<String>()));
+                }
+                expect_key = false;
+            }
+            c if in_object && expect_key && !c.is_whitespace() => return Err(format!("expected a key at `{}`", &doc[i..])),
+            _ => {}
+        }
+        prev = c;
+    }
+    Ok(keys)
+}
+
+pub(crate) fn check_params(spec: &CommandSpec, p: &Value) -> Result<()> {
+    let given = match p {
+        Value::Null => return Ok(()),
+        Value::Object(m) => m,
+        other => {
+            let kind = match other {
+                Value::Array(_) => "an array",
+                Value::String(_) => "a string",
+                Value::Number(_) => "a number",
+                _ => "a boolean",
+            };
+            return Err(bad(spec.id, format!("parameters are a JSON object, not {kind}")));
+        }
+    };
+    let Ok(known) = param_keys(spec.params) else { return Ok(()) };
+    let one_of_ids = known.contains(&"ids");
+    let unknown: Vec<String> = given.keys().filter(|k| !known.contains(&k.as_str()) && !(one_of_ids && k.as_str() == "id")).cloned().collect();
+    if unknown.is_empty() {
+        return Ok(());
+    }
+    Err(EngineError::UnknownParams { cmd: spec.id.into(), unknown })
+}
+
 // ---------- param helpers ----------
 
 pub(crate) fn bad(cmd: &str, msg: impl Into<String>) -> EngineError {
@@ -194,12 +302,20 @@ pub(crate) fn targets(s: &Session, p: &Value) -> Result<Vec<ShapeId>> {
     if let Some(ids) = ids_param(p, "ids")
         && !ids.is_empty()
     {
-        return Ok(ids);
+        return present(s, ids);
     }
     if let Some(id) = id_param(p, "id") {
-        return Ok(vec![id]);
+        return present(s, vec![id]);
     }
     Ok(s.doc()?.selection.shapes.clone())
+}
+
+pub(crate) fn present(s: &Session, ids: Vec<ShapeId>) -> Result<Vec<ShapeId>> {
+    let st = s.doc()?;
+    match ids.iter().find(|id| st.shape(**id).is_none()) {
+        Some(id) => Err(EngineError::Other(crate::describe::no_shape(st, *id))),
+        None => Ok(ids),
+    }
 }
 
 pub(crate) fn ok() -> Result<Value> {
@@ -243,7 +359,8 @@ pub(crate) fn color_value(v: &Value) -> Option<deckcraft_model::ColorRef> {
 
 /// Look a shape up by id in the edited tree.
 pub(crate) fn shape_of(s: &Session, id: ShapeId) -> Result<deckcraft_model::Shape> {
-    s.doc()?.shape(id).cloned().ok_or_else(|| EngineError::Other(format!("no shape {id}")))
+    let st = s.doc()?;
+    st.shape(id).cloned().ok_or_else(|| EngineError::Other(crate::describe::no_shape(st, id)))
 }
 
 /// Effective box of a shape (placeholders inherit theirs). A table's box is at least as tall as its
@@ -283,7 +400,7 @@ fn ctx_xfrm(doc: &deckcraft_model::Presentation, sel: &crate::Selection, shape: 
 pub(crate) fn edit_shapes(s: &mut Session, p: &Value, cmd: &str, f: impl Fn(&mut deckcraft_model::Shape) -> Result<()>) -> Result<Value> {
     let ids = targets(s, p)?;
     if ids.is_empty() {
-        return Err(bad(cmd, "no shapes selected"));
+        return Err(bad(cmd, "no shape is selected and no `ids` were given"));
     }
     s.edit(|doc, sel| {
         let boxes: Vec<(ShapeId, Xfrm)> = {
@@ -292,20 +409,15 @@ pub(crate) fn edit_shapes(s: &mut Session, p: &Value, cmd: &str, f: impl Fn(&mut
             st_shapes.iter().map(|sh| (sh.id, xfrm_of(doc, sel, sh))).collect()
         };
         let shapes = crate::shapes_mut(doc, sel).ok_or_else(|| bad(cmd, "no slide"))?;
-        let mut n = 0;
         for id in &ids {
             if let Some(sh) = deckcraft_model::find_shape_mut(shapes, *id) {
                 if sh.xfrm.is_none() {
                     sh.xfrm = boxes.iter().find(|(i, _)| i == id).map(|(_, x)| *x);
                 }
                 f(sh)?;
-                n += 1;
             }
         }
-        if n == 0 {
-            return Err(bad(cmd, "no such shape"));
-        }
-        Ok(Value::from(n))
+        Ok(Value::Null)
     })
 }
 

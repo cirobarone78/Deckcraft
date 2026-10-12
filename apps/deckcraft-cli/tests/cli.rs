@@ -1,0 +1,109 @@
+use std::process::{Command, Output};
+
+fn cli(args: &[&str]) -> Output {
+    Command::new(env!("CARGO_BIN_EXE_deckcraft-cli")).args(args).output().unwrap()
+}
+
+fn stdout(o: &Output) -> String {
+    assert!(o.status.success(), "exit {:?}\nstderr: {}", o.status, String::from_utf8_lossy(&o.stderr));
+    String::from_utf8_lossy(&o.stdout).into_owned()
+}
+
+fn stderr(o: &Output) -> String {
+    assert!(!o.status.success(), "exit {:?}\nstdout: {}", o.status, String::from_utf8_lossy(&o.stdout));
+    String::from_utf8_lossy(&o.stderr).into_owned()
+}
+
+#[test]
+fn an_unknown_subcommand_is_named_before_the_usage() {
+    assert!(stderr(&cli(&["frobnicate"])).starts_with("deckcraft-cli: unknown subcommand `frobnicate`\nusage:"));
+}
+
+#[test]
+fn describe_names_commands_like_an_unknown_one() {
+    assert_eq!(stderr(&cli(&["describe", "new"])), "deckcraft-cli: unknown command `new`; commands named like it: file.new, slide.new\n");
+}
+
+#[test]
+fn a_label_before_the_command_is_an_unknown_command() {
+    assert_eq!(
+        stderr(&cli(&["run", "--cmd", r#"new=file.new={"blank":true}"#])),
+        "deckcraft-cli: --cmd 1 of 1 was read as command `new` with parameters `file.new={\"blank\":true}`. `new` is not a command: \
+         --cmd takes COMMAND=PARAMS, a command id, then `=`, then a JSON object, e.g. --cmd 'slide.new={\"title\":\"Q3\"}'. Nothing ran.\n"
+    );
+}
+
+#[test]
+fn bad_json_names_the_command_and_the_text() {
+    let err = stderr(&cli(&["run", "--cmd", "slide.new={}", "--cmd", r#"shape.insert={"preset":"rect",}"#]));
+    assert!(
+        err.starts_with(
+            "deckcraft-cli: --cmd 2 of 2 was read as command `shape.insert` with parameters `{\"preset\":\"rect\",}`, which are not JSON: "
+        ),
+        "{err}"
+    );
+    assert!(err.ends_with(". `shape.insert` takes {preset: rect|roundRect|ellipse|triangle|rightArrow|star5|… (see shape.presets), rect: [x,y,w,h] pt, text?: string, adj?: [number] (preset adjustments), flip?: h|v|hv}. Nothing ran.\n"), "{err}");
+}
+
+#[test]
+fn a_failing_command_says_which_and_that_nothing_was_saved() {
+    let out = std::env::temp_dir().join(format!("dc-cli-{}.deckcraft", std::process::id()));
+    let err = stderr(&cli(&[
+        "run",
+        "--cmd",
+        r#"shape.insert={"preset":"rect","rect":[10,10,100,50]}"#,
+        "--cmd",
+        "slide.new",
+        "--cmd",
+        r#"shape.resize={"ids":[260],"w":50}"#,
+        "--save",
+        out.to_str().unwrap(),
+    ]));
+    assert_eq!(
+        err,
+        "deckcraft-cli: --cmd 3 of 3: shape 260 is on slide index 0, but shape ids are looked up on slide index 1, the one being edited; \
+         slide.go {\"index\": 0} switches to slide index 0. Nothing was saved or exported.\n"
+    );
+    assert!(!out.exists());
+}
+
+#[test]
+fn print_shows_what_each_command_did() {
+    let out = stdout(&cli(&[
+        "run",
+        "--print",
+        "--cmd",
+        r#"shape.insert={"preset":"roundRect","rect":[80,80,300,120],"text":"Revenue"}"#,
+        "--cmd",
+        r#"format.size={"size":28}"#,
+        "--cmd",
+        r##"design.background={"color":"#112233"}"##,
+        "--cmd",
+        r#"text.edit={"at":[0,3]}"#,
+    ]));
+    assert_eq!(
+        out,
+        "shape.insert → {\"id\":260}\n\
+         format.size → changed shape 260 on slide index 0\n\
+         design.background → changed the background of slide index 0\n\
+         text.edit → editing the text of shape 260, paragraph 0, character 3\n"
+    );
+}
+
+#[test]
+fn without_print_run_confirms_what_it_did() {
+    let out = std::env::temp_dir().join(format!("dc-cli-ok-{}.deckcraft", std::process::id()));
+    let path = out.to_str().unwrap();
+    assert_eq!(stdout(&cli(&["run", "--cmd", "slide.new", "--cmd", "slide.new", "--save", path])), format!("OK: 2 commands ran, saved {path}\n"));
+    std::fs::remove_file(&out).unwrap();
+}
+
+#[test]
+fn an_unknown_parameter_is_refused() {
+    assert_eq!(
+        stderr(&cli(&["run", "--cmd", r#"shape.insert={"shape":"roundRect"}"#])),
+        "deckcraft-cli: --cmd 1 of 1: `shape.insert` was given `shape`, which it doesn't take. `shape.insert` takes {preset: \
+         rect|roundRect|ellipse|triangle|rightArrow|star5|… (see shape.presets), rect: [x,y,w,h] pt, text?: string, \
+         adj?: [number] (preset adjustments), flip?: h|v|hv}.\n"
+    );
+}
