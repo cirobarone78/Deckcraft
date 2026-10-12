@@ -34,12 +34,12 @@ pub use tools::{Mods, PointerEvent, PointerKind, ToolKind};
 pub enum EngineError {
     #[error("{}", unknown_command(.0))]
     UnknownCommand(String),
-    #[error("command `{0}` is not available right now: {1}")]
+    #[error("command `{0}` is not available right now: {1}.{hint}", hint = cmd::how_to_enable(.1))]
     Disabled(String, String),
-    #[error("invalid parameters for `{cmd}`: {msg}")]
+    #[error("invalid parameters for `{cmd}`: {msg}.{}", takes(cmd))]
     BadParams { cmd: String, msg: String },
-    #[error("{}", unknown_params(cmd, unknown, known))]
-    UnknownParams { cmd: String, unknown: Vec<String>, known: Vec<&'static str> },
+    #[error("{}", unknown_params(cmd, unknown))]
+    UnknownParams { cmd: String, unknown: Vec<String> },
     #[error("no active presentation")]
     NoDocument,
     #[error("{0}")]
@@ -61,10 +61,17 @@ fn unknown_command(id: &str) -> String {
     }
 }
 
-fn unknown_params(cmd: &str, unknown: &[String], known: &[&str]) -> String {
+fn unknown_params(cmd: &str, unknown: &[String]) -> String {
     let names = unknown.iter().map(|k| format!("`{k}`")).collect::<Vec<_>>().join(", ");
-    let has = if unknown.len() == 1 { format!("`{cmd}` has no parameter {names}") } else { format!("`{cmd}` has no parameters {names}") };
-    if known.is_empty() { format!("{has}; it takes none") } else { format!("{has}; its parameters are {}", known.join(", ")) }
+    format!("`{cmd}` was given {names}, which it doesn't take.{}", takes(cmd))
+}
+
+fn takes(cmd: &str) -> String {
+    match find_command(cmd).map(|c| c.params) {
+        Some(doc) if cmd::param_keys(doc).is_ok_and(|k| k.is_empty()) => format!(" `{cmd}` takes no parameters."),
+        Some(doc) => format!(" `{cmd}` takes {doc}."),
+        None => String::new(),
+    }
 }
 
 pub type Result<T> = std::result::Result<T, EngineError>;

@@ -215,7 +215,12 @@ fn run(args: &[String]) -> Result<(), String> {
             "--save" => save = Some(it.next().cloned().ok_or("--save needs a path")?),
             "--export" => export = Some(it.next().cloned().ok_or("--export needs a path")?),
             "--print" => print = true,
-            other => return Err(format!("unknown option `{other}`")),
+            other => {
+                return Err(format!(
+                    "run was given `{other}`, which it doesn't take. run takes --in FILE or --sample, --cmd COMMAND=PARAMS (any number), \
+                     --save OUT, --export OUT and --print"
+                ));
+            }
         }
     }
     let total = cmds.len();
@@ -233,15 +238,22 @@ fn run(args: &[String]) -> Result<(), String> {
                     at(n)
                 ));
             }
-            let params = if json.is_empty() { json!({}) } else { params(id, json).map_err(|e| format!("{}: {e}; nothing ran", at(n)))? };
+            let params = if json.is_empty() {
+                json!({})
+            } else {
+                params(id, json).map_err(|e| format!("{} was read as command `{id}` with {e} Nothing ran.", at(n)))?
+            };
             Ok((id, params))
         })
         .collect::<Result<Vec<_>, String>>()?;
     let mut s = Session::new();
     open(&mut s, input.as_deref(), sample)?;
-    let unsaved = if save.is_some() || export.is_some() { "; nothing was saved or exported" } else { "" };
+    let unsaved = save.is_some() || export.is_some();
     for (n, (id, p)) in steps.iter().enumerate() {
-        let r = s.call(id, p).map_err(|e| format!("{}: {e}{unsaved}", at(n)))?;
+        let r = s.call(id, p).map_err(|e| {
+            let e = e.to_string();
+            if unsaved { format!("{}: {}. Nothing was saved or exported.", at(n), e.trim_end_matches('.')) } else { format!("{}: {e}", at(n)) }
+        })?;
         if print {
             match r {
                 Value::String(said) => outln!("{id} → {said}"),
@@ -265,7 +277,8 @@ fn run(args: &[String]) -> Result<(), String> {
 }
 
 fn params(id: &str, json: &str) -> Result<Value, String> {
-    serde_json::from_str(json).map_err(|e| format!("the parameters of `{id}` are not JSON ({e}): {}", shown(json)))
+    let takes = deckcraft_engine::find_command(id).map(|c| format!(" `{id}` takes {}.", c.params)).unwrap_or_default();
+    serde_json::from_str(json).map_err(|e| format!("parameters `{}`, which are not JSON: {e}.{takes}", shown(json)))
 }
 
 fn shown(json: &str) -> String {
@@ -295,7 +308,9 @@ fn app(args: &[String]) -> Result<(), String> {
     }
     let mut r = Remote::connect(&control_addr(&port))
         .map_err(|e| format!("no DeckCraft app on port {port} ({e}); start it with `deckcraft --control {port}`"))?;
-    let parse = |id: &str, s: Option<&String>| -> Result<Value, String> { s.map(|j| params(id, j)).transpose().map(|v| v.unwrap_or(json!({}))) };
+    let parse = |id: &str, s: Option<&String>| -> Result<Value, String> {
+        s.map(|j| params(id, j).map_err(|e| format!("`{id}` was given {e}"))).transpose().map(|v| v.unwrap_or(json!({})))
+    };
     let v = match method {
         Some(m) => r.call(&m, parse(&m, rest.first())?)?,
         None => {
@@ -316,7 +331,7 @@ fn mcp(args: &[String]) -> Result<(), String> {
         match a.as_str() {
             "--connect" => connect = Some(it.next().cloned().ok_or("--connect needs a port or host:port")?),
             "--sample" => sample = true,
-            other => return Err(format!("unknown mcp option `{other}`")),
+            other => return Err(format!("mcp was given `{other}`, which it doesn't take. mcp takes --connect PORT and --sample")),
         }
     }
     let backend: Box<dyn Backend> = match connect {

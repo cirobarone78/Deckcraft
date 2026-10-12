@@ -12,23 +12,29 @@ pub(crate) fn place(target: Target, slide: usize) -> String {
     }
 }
 
-fn locate(doc: &Presentation, id: ShapeId) -> Option<String> {
+fn locate(doc: &Presentation, id: ShapeId) -> Option<(String, String)> {
     if let Some(i) = doc.slides.iter().position(|s| find_shape(&s.shapes, id).is_some()) {
-        return Some(place(Target::Slides, i));
+        return Some((place(Target::Slides, i), format!("slide.go {{\"index\": {i}}}")));
     }
     doc.masters.iter().enumerate().find_map(|(m, master)| {
         if find_shape(&master.shapes, id).is_some() {
-            return Some(place(Target::Master { master: m }, 0));
+            return Some((place(Target::Master { master: m }, 0), format!("view.slideMaster {{\"master\": {m}}}")));
         }
-        master.layouts.iter().position(|l| find_shape(&l.shapes, id).is_some()).map(|l| place(Target::Layout { master: m, layout: l }, 0))
+        master
+            .layouts
+            .iter()
+            .position(|l| find_shape(&l.shapes, id).is_some())
+            .map(|l| (place(Target::Layout { master: m, layout: l }, 0), format!("view.slideMaster {{\"master\": {m}, \"layout\": {l}}}")))
     })
 }
 
 pub(crate) fn no_shape(st: &DocState, id: ShapeId) -> String {
     let here = place(st.selection.target, st.selection.slide);
     match locate(&st.doc, id) {
-        Some(there) => format!("shape {id} is on {there}, not on {here}, the one being edited"),
-        None => format!("no shape {id} in the presentation"),
+        Some((there, go)) => {
+            format!("shape {id} is on {there}, but shape ids are looked up on {here}, the one being edited; {go} switches to {there}")
+        }
+        None => format!("no shape {id} in the presentation; slide.inspect lists the shapes of {here}, the one being edited"),
     }
 }
 

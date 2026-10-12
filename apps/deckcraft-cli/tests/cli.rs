@@ -45,8 +45,13 @@ fn a_label_before_the_command_is_an_unknown_command() {
 #[test]
 fn bad_json_names_the_command_and_the_text() {
     let err = stderr(&cli(&["run", "--cmd", "slide.new={}", "--cmd", r#"shape.insert={"preset":"rect",}"#]));
-    assert!(err.starts_with("deckcraft-cli: --cmd 2 of 2: the parameters of `shape.insert` are not JSON ("), "{err}");
-    assert!(err.ends_with("): {\"preset\":\"rect\",}; nothing ran\n"), "{err}");
+    assert!(
+        err.starts_with(
+            "deckcraft-cli: --cmd 2 of 2 was read as command `shape.insert` with parameters `{\"preset\":\"rect\",}`, which are not JSON: "
+        ),
+        "{err}"
+    );
+    assert!(err.ends_with(". `shape.insert` takes {preset: rect|roundRect|ellipse|triangle|rightArrow|star5|… (see shape.presets), rect: [x,y,w,h] pt, text?: string, adj?: [number] (preset adjustments), flip?: h|v|hv}. Nothing ran.\n"), "{err}");
 }
 
 #[test]
@@ -65,8 +70,8 @@ fn a_failing_command_says_which_and_that_nothing_was_saved() {
     ]));
     assert_eq!(
         err,
-        "deckcraft-cli: --cmd 3 of 3: shape 260 is on slide index 0, not on slide index 1, the one being edited; \
-         nothing was saved or exported\n"
+        "deckcraft-cli: --cmd 3 of 3: shape 260 is on slide index 0, but shape ids are looked up on slide index 1, the one being edited; \
+         slide.go {\"index\": 0} switches to slide index 0. Nothing was saved or exported.\n"
     );
     assert!(!out.exists());
 }
@@ -106,6 +111,8 @@ fn without_print_run_confirms_what_it_did() {
 fn an_unknown_parameter_is_refused() {
     assert_eq!(
         stderr(&cli(&["run", "--cmd", r#"shape.insert={"shape":"roundRect"}"#])),
-        "deckcraft-cli: --cmd 1 of 1: `shape.insert` has no parameter `shape`; its parameters are preset, rect, text, adj, flip\n"
+        "deckcraft-cli: --cmd 1 of 1: `shape.insert` was given `shape`, which it doesn't take. `shape.insert` takes {preset: \
+         rect|roundRect|ellipse|triangle|rightArrow|star5|… (see shape.presets), rect: [x,y,w,h] pt, text?: string, \
+         adj?: [number] (preset adjustments), flip?: h|v|hv}.\n"
     );
 }

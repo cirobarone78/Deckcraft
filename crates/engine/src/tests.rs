@@ -570,10 +570,22 @@ fn a_call_refuses_parameters_the_command_does_not_take() {
     let mut s = session();
     assert_eq!(
         said(&mut s, "shape.insert", json!({"shape": "roundRect", "rect": [0, 0, 10, 10]})),
-        "`shape.insert` has no parameter `shape`; its parameters are preset, rect, text, adj, flip"
+        "`shape.insert` was given `shape`, which it doesn't take. `shape.insert` takes {preset: \
+         rect|roundRect|ellipse|triangle|rightArrow|star5|… (see shape.presets), rect: [x,y,w,h] pt, text?: string, \
+         adj?: [number] (preset adjustments), flip?: h|v|hv}."
     );
-    assert_eq!(said(&mut s, "slide.next", json!({"index": 1})), "`slide.next` has no parameter `index`; it takes none");
-    assert_eq!(said(&mut s, "slide.new", json!([1])), "invalid parameters for `slide.new`: parameters are a JSON object, not an array");
+    assert_eq!(
+        said(&mut s, "slide.next", json!({"index": 1})),
+        "`slide.next` was given `index`, which it doesn't take. `slide.next` takes no parameters."
+    );
+    assert_eq!(
+        said(&mut s, "slide.move", json!({"from": 0})),
+        "invalid parameters for `slide.move`: missing `to`. `slide.move` takes {from?: index, to: index}."
+    );
+    assert!(
+        said(&mut s, "slide.new", json!([1]))
+            .starts_with("invalid parameters for `slide.new`: parameters are a JSON object, not an array. `slide.new` takes {layout?: ")
+    );
     assert_eq!(s.doc().unwrap().current_slide().unwrap().shapes.len(), 2);
     let id = insert(&mut s, "Hi");
     assert_eq!(said(&mut s, "shape.resize", json!({"id": id, "w": 50})), format!("changed shape {id} on slide index 0"));
@@ -592,7 +604,10 @@ fn a_shape_off_the_current_slide_is_reported_where_it_is() {
     let mut s = session();
     let id = insert(&mut s, "Hi");
     s.call("slide.new", &json!({})).unwrap();
-    let off_slide = format!("shape {id} is on slide index 0, not on slide index 1, the one being edited");
+    let off_slide = format!(
+        "shape {id} is on slide index 0, but shape ids are looked up on slide index 1, the one being edited; \
+         slide.go {{\"index\": 0}} switches to slide index 0"
+    );
     for (cmd, p) in [
         ("shape.resize", json!({"ids": [id], "w": 50})),
         ("edit.select", json!({"ids": [id]})),
@@ -601,15 +616,25 @@ fn a_shape_off_the_current_slide_is_reported_where_it_is() {
     ] {
         assert_eq!(said(&mut s, cmd, p), off_slide, "{cmd}");
     }
-    assert_eq!(said(&mut s, "shape.inspect", json!({"id": 9999})), "invalid parameters for `shape.inspect`: no shape 9999 in the presentation");
+    assert_eq!(
+        said(&mut s, "shape.inspect", json!({"id": 9999})),
+        "invalid parameters for `shape.inspect`: no shape 9999 in the presentation; slide.inspect lists the shapes of slide index 1, \
+         the one being edited. `shape.inspect` takes {id} → full shape JSON plus its effective box."
+    );
     let on_master = s.doc().unwrap().doc.masters[0].shapes[0].id;
     assert_eq!(
         said(&mut s, "shape.move", json!({"id": on_master.0, "dx": 1})),
-        format!("shape {on_master} is on slide master 0, not on slide index 1, the one being edited")
+        format!(
+            "shape {on_master} is on slide master 0, but shape ids are looked up on slide index 1, the one being edited; \
+             view.slideMaster {{\"master\": 0}} switches to slide master 0"
+        )
     );
     s.call("slide.go", &json!({"index": 0})).unwrap();
     let before = s.doc().unwrap().doc.clone();
-    assert!(said(&mut s, "shape.move", json!({"ids": [id, 9999], "dx": 10})).ends_with("no shape 9999 in the presentation"));
+    assert_eq!(
+        said(&mut s, "shape.move", json!({"ids": [id, 9999], "dx": 10})),
+        "no shape 9999 in the presentation; slide.inspect lists the shapes of slide index 0, the one being edited"
+    );
     assert_eq!(s.doc().unwrap().doc, before);
 }
 
@@ -634,14 +659,21 @@ fn a_call_that_returns_nothing_says_what_changed() {
 #[test]
 fn an_index_out_of_range_names_the_range() {
     let mut s = session();
-    assert_eq!(said(&mut s, "slide.go", json!({"index": 7})), "invalid parameters for `slide.go`: no slide at index 7; indices run 0–0");
+    assert_eq!(
+        said(&mut s, "slide.go", json!({"index": 7})),
+        "invalid parameters for `slide.go`: no slide at index 7; indices run 0–0. `slide.go` takes {index} | {id}."
+    );
     assert_eq!(
         said(&mut s, "section.rename", json!({"index": 2, "name": "A"})),
-        "invalid parameters for `section.rename`: no section at index 2; there are none"
+        "invalid parameters for `section.rename`: no section at index 2; there are none. `section.rename` takes {index, name}."
     );
     assert_eq!(
         said(&mut s, "comment.reply", json!({"index": 0, "text": "ok"})),
-        "invalid parameters for `comment.reply`: no comment on slide index 0 at index 0; there are none"
+        "invalid parameters for `comment.reply`: no comment on slide index 0 at index 0; there are none. `comment.reply` takes {index, text}."
+    );
+    assert_eq!(
+        said(&mut s, "text.insert", json!({"text": "x"})),
+        "command `text.insert` is not available right now: no text insertion point. text.edit {\"id\": …} starts editing a shape's text."
     );
     assert!(
         said(&mut s, "slide.new", json!({"layout": "nope"}))

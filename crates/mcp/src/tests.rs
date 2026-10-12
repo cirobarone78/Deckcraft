@@ -95,7 +95,12 @@ fn run_command_answers_in_words() {
     let mut s = Server::new(Box::new(Headless::with_document()));
     let r = call(&mut s, 1, "tools/call", json!({"name": "run_command", "arguments": {"command": "shape.insert", "params": {"shape": "roundRect"}}}));
     assert_eq!(r["result"]["isError"], true);
-    assert_eq!(r["result"]["content"][0]["text"], "`shape.insert` has no parameter `shape`; its parameters are preset, rect, text, adj, flip");
+    assert!(
+        r["result"]["content"][0]["text"]
+            .as_str()
+            .unwrap()
+            .starts_with("`shape.insert` was given `shape`, which it doesn't take. `shape.insert` takes {preset: ")
+    );
     let id = tool(&mut s, "run_command", json!({"command": "shape.insert", "params": {"preset": "roundRect", "text": "Hi"}}))["id"].clone();
     let r = call(&mut s, 2, "tools/call", json!({"name": "run_command", "arguments": {"command": "format.size", "params": {"size": 28}}}));
     assert_eq!(r["result"]["content"][0]["text"], format!("changed shape {id} on slide index 0"));
@@ -124,7 +129,7 @@ fn every_tool_takes_the_arguments_its_schema_declares() {
             .collect();
         let r = call(&mut s, 2, "tools/call", json!({"name": name, "arguments": args}));
         let text = r["result"]["content"][0]["text"].as_str().unwrap_or_default();
-        assert!(!text.contains("has no parameter"), "{name}: {text}");
+        assert!(!text.contains("which it doesn't take"), "{name}: {text}");
     }
 }
 

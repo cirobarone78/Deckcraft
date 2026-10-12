@@ -103,6 +103,20 @@ pub fn has_text_or_shapes(s: &Session) -> std::result::Result<(), String> {
         Err("select text or a shape".into())
     }
 }
+pub(crate) fn how_to_enable(reason: &str) -> &'static str {
+    match reason {
+        "no presentation open" => " file.new or file.open opens one.",
+        "no slides" => " slide.new adds one.",
+        NOTHING_SELECTED => " It acts on `ids` or on the selected shapes; edit.select {\"ids\": […]} selects shapes.",
+        SELECT_TWO => " It acts on `ids` or on the selected shapes; edit.select {\"ids\": […]} selects them.",
+        "no text insertion point" => " text.edit {\"id\": …} starts editing a shape's text.",
+        "select text or a shape" => {
+            " It acts on the selected text or shapes; shape.insert selects the shape it inserts, edit.select {\"ids\": […]} selects others."
+        }
+        _ => "",
+    }
+}
+
 pub fn can_undo(s: &Session) -> std::result::Result<(), String> {
     if s.active().is_some_and(|d| !d.history.undo.is_empty()) { Ok(()) } else { Err("nothing to undo".into()) }
 }
@@ -230,7 +244,7 @@ pub(crate) fn check_params(spec: &CommandSpec, p: &Value) -> Result<()> {
     if unknown.is_empty() {
         return Ok(());
     }
-    Err(EngineError::UnknownParams { cmd: spec.id.into(), unknown, known })
+    Err(EngineError::UnknownParams { cmd: spec.id.into(), unknown })
 }
 
 // ---------- param helpers ----------

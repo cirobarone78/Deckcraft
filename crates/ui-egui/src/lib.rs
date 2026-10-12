@@ -959,7 +959,9 @@ mod tests {
             }
         };
         let refused = execute("shape.insert", json!({"shape": "roundRect"}));
-        assert_eq!(refused["error"], "`shape.insert` has no parameter `shape`; its parameters are preset, rect, text, adj, flip");
+        assert!(
+            refused["error"].as_str().unwrap().starts_with("`shape.insert` was given `shape`, which it doesn't take. `shape.insert` takes {preset: ")
+        );
         let id = execute("shape.insert", json!({"preset": "roundRect", "text": "Hi"}))["result"]["id"].clone();
         assert_eq!(execute("format.size", json!({"size": 28}))["result"], format!("changed shape {id} on slide index 0"));
     }
