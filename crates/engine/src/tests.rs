@@ -592,9 +592,21 @@ fn a_shape_off_the_current_slide_is_reported_where_it_is() {
     let mut s = session();
     let id = insert(&mut s, "Hi");
     s.call("slide.new", &json!({})).unwrap();
-    let off_slide = format!("invalid parameters for `shape.resize`: shape {id} is on slide index 0, not on slide index 1, the one being edited");
-    assert_eq!(said(&mut s, "shape.resize", json!({"ids": [id], "w": 50})), off_slide);
+    let off_slide = format!("shape {id} is on slide index 0, not on slide index 1, the one being edited");
+    for (cmd, p) in [
+        ("shape.resize", json!({"ids": [id], "w": 50})),
+        ("edit.select", json!({"ids": [id]})),
+        ("edit.delete", json!({"ids": [id]})),
+        ("arrange.bringToFront", json!({"id": id})),
+    ] {
+        assert_eq!(said(&mut s, cmd, p), off_slide, "{cmd}");
+    }
     assert_eq!(said(&mut s, "shape.inspect", json!({"id": 9999})), "invalid parameters for `shape.inspect`: no shape 9999 in the presentation");
+    let on_master = s.doc().unwrap().doc.masters[0].shapes[0].id;
+    assert_eq!(
+        said(&mut s, "shape.move", json!({"id": on_master.0, "dx": 1})),
+        format!("shape {on_master} is on slide master 0, not on slide index 1, the one being edited")
+    );
     s.call("slide.go", &json!({"index": 0})).unwrap();
     let before = s.doc().unwrap().doc.clone();
     assert!(said(&mut s, "shape.move", json!({"ids": [id, 9999], "dx": 10})).ends_with("no shape 9999 in the presentation"));
@@ -613,4 +625,26 @@ fn a_call_that_returns_nothing_says_what_changed() {
     assert_eq!(said(&mut s, "edit.deselect", json!({})), "nothing changed");
     s.call("slide.new", &json!({})).unwrap();
     assert_eq!(said(&mut s, "slide.notes", json!({"text": "Say hi", "index": 0})), "changed the notes of slide index 0");
+    s.call("slide.new", &json!({})).unwrap();
+    assert_eq!(said(&mut s, "design.background", json!({"color": "#445566", "all": true})), "changed the background of every slide");
+    assert_eq!(said(&mut s, "design.background", json!({"reset": true, "index": 1})), "changed the background of slide index 1");
+    assert_eq!(said(&mut s, "design.background", json!({"color": "#445566", "all": true})), "changed the background of slide index 1");
+}
+
+#[test]
+fn an_index_out_of_range_names_the_range() {
+    let mut s = session();
+    assert_eq!(said(&mut s, "slide.go", json!({"index": 7})), "invalid parameters for `slide.go`: no slide at index 7; indices run 0–0");
+    assert_eq!(
+        said(&mut s, "section.rename", json!({"index": 2, "name": "A"})),
+        "invalid parameters for `section.rename`: no section at index 2; there are none"
+    );
+    assert_eq!(
+        said(&mut s, "comment.reply", json!({"index": 0, "text": "ok"})),
+        "invalid parameters for `comment.reply`: no comment on slide index 0 at index 0; there are none"
+    );
+    assert!(
+        said(&mut s, "slide.new", json!({"layout": "nope"}))
+            .starts_with("invalid parameters for `slide.new`: no layout \"nope\" in slide master 0; its layouts are Title Slide, ")
+    );
 }

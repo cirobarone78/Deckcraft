@@ -102,6 +102,33 @@ fn run_command_answers_in_words() {
 }
 
 #[test]
+fn every_tool_takes_the_arguments_its_schema_declares() {
+    let mut s = Server::new(Box::new(Headless::with_document()));
+    let tools = call(&mut s, 1, "tools/list", json!({}));
+    for t in tools["result"]["tools"].as_array().unwrap() {
+        let name = t["name"].as_str().unwrap();
+        let args: serde_json::Map<String, Value> = t["inputSchema"]["properties"]
+            .as_object()
+            .unwrap()
+            .iter()
+            .map(|(k, p)| {
+                let v = match p["type"].as_str() {
+                    Some("number" | "integer") => json!(10),
+                    Some("boolean") => json!(false),
+                    Some("array") => json!([]),
+                    Some("object") => json!({}),
+                    _ => json!("x"),
+                };
+                (k.clone(), v)
+            })
+            .collect();
+        let r = call(&mut s, 2, "tools/call", json!({"name": name, "arguments": args}));
+        let text = r["result"]["content"][0]["text"].as_str().unwrap_or_default();
+        assert!(!text.contains("has no parameter"), "{name}: {text}");
+    }
+}
+
+#[test]
 fn export_tool_lists_pdf_and_its_options() {
     let mut s = Server::new(Box::new(Headless::new()));
     let tools = call(&mut s, 1, "tools/list", json!({}));

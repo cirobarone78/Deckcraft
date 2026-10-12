@@ -10,9 +10,9 @@ lines: one request object per line, one reply per line.
 
 Coordinates are slide points (1/72 inch; a 16:9 slide is 960 × 540) unless noted.
 
-`engine.execute` refuses parameters the command doesn't take, naming the ones it does. A command
-with no result of its own answers with what it changed, e.g. `"changed shape 258 on slide index 0"`
-or `"nothing changed"`.
+For engine commands, `engine.execute` refuses parameters the command doesn't take, naming the
+ones it does. A command with no result of its own answers with what it changed, e.g.
+`"changed shape 258 on slide index 0"` or `"nothing changed"`.
 
 | Method | Params | What it does |
 |---|---|---|
@@ -33,4 +33,4 @@ or `"nothing changed"`.
 | `app.open` / `app.save` / `app.export` / `app.quit` | `{path, …}` | Files (export takes the `file.export` params, e.g. `{"path": "deck.pdf", "layout": "handouts", "perPage": 3}`) |
 
 The MCP server (`deckcraft-cli mcp`, see [mcp.md](mcp.md)) wraps the same methods for Claude
-and other agents; `deckcraft-cli app METHOD [JSON]` sends one request from a shell.
+and other agents; `deckcraft-cli app --method METHOD [PARAMS]` sends one request from a shell.

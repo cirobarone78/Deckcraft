@@ -42,7 +42,7 @@ const USAGE: &str = "usage: deckcraft-cli info FILE
        deckcraft-cli mcp [--connect PORT] [--sample]
        deckcraft-cli links | --version | help";
 
-const RUN_HELP: &str = "run applies each --cmd in order to one presentation, then saves and exports it.
+const RUN_HELP: &str = "run applies each --cmd in order to one presentation, then --save and --export write it.
 COMMAND is a command id: `commands` lists them, `describe COMMAND` gives its parameters.
 PARAMS is the command's parameters as a JSON object, for example:
 
@@ -253,12 +253,16 @@ fn run(args: &[String]) -> Result<(), String> {
 }
 
 fn params(id: &str, json: &str) -> Result<Value, String> {
-    serde_json::from_str(json).map_err(|e| format!("the parameters of `{id}` are not JSON ({e}): {json}"))
+    serde_json::from_str(json).map_err(|e| {
+        let shown: String = json.chars().take(200).collect();
+        let cut = if shown.len() < json.len() { "…" } else { "" };
+        format!("the parameters of `{id}` are not JSON ({e}): {shown}{cut}")
+    })
 }
 
 fn describe(id: Option<&str>) -> Result<(), String> {
     let id = id.ok_or("describe needs a command id")?;
-    let c = deckcraft_engine::find_command(id).ok_or_else(|| format!("unknown command `{id}`"))?;
+    let c = deckcraft_engine::find_command(id).ok_or_else(|| deckcraft_engine::EngineError::UnknownCommand(id.into()).to_string())?;
     outln!("{}  —  {}\n  where:    {}\n  shortcut: {}\n  params:   {}", c.id, c.label, c.menu.join(" ▸ "), c.shortcut.unwrap_or("—"), c.params);
     Ok(())
 }

@@ -582,7 +582,8 @@ fn hyperlink(s: &mut Session, p: &Value) -> Result<Value> {
     let (action, display) = if let Some(u) = str_param(p, "url") {
         (Action::Url { url: u.to_string() }, u.strip_prefix("mailto:").unwrap_or(u).to_string())
     } else if let Some(i) = usize_param(p, "slide") {
-        let slide = s.doc()?.doc.slides.get(i).ok_or_else(|| bad("insert.hyperlink", "no such slide"))?;
+        let slides = &s.doc()?.doc.slides;
+        let slide = slides.get(i).ok_or_else(|| bad("insert.hyperlink", none_at("slide", i, slides.len())))?;
         let title = slide.title();
         (Action::Slide { slide: slide.id }, if title.is_empty() { format!("Slide {}", i + 1) } else { title })
     } else {

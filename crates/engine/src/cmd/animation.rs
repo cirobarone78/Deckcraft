@@ -188,7 +188,7 @@ fn remove(s: &mut Session, p: &Value) -> Result<Value> {
             Some(i) if i < sl.animations.len() => {
                 sl.animations.remove(i);
             }
-            Some(_) => return Err(bad("animation.remove", "no such animation")),
+            Some(i) => return Err(bad("animation.remove", none_at(&format!("animation on slide index {}", sel.slide), i, sl.animations.len()))),
             None => sl.animations.retain(|a| !ids.contains(&a.shape)),
         }
         Ok(())
@@ -202,7 +202,7 @@ fn move_anim(s: &mut Session, p: &Value) -> Result<Value> {
     s.edit(|doc, sel| {
         let sl = Arc::make_mut(doc.slides.get_mut(sel.slide).ok_or_else(|| bad("animation.move", "no slide"))?);
         if i >= sl.animations.len() {
-            return Err(bad("animation.move", "no such animation"));
+            return Err(bad("animation.move", none_at(&format!("animation on slide index {}", sel.slide), i, sl.animations.len())));
         }
         let a = sl.animations.remove(i);
         let to = to.min(sl.animations.len());
@@ -299,7 +299,7 @@ fn list(_s: &mut Session, _p: &Value) -> Result<Value> {
 fn get(s: &mut Session, p: &Value) -> Result<Value> {
     let st = s.doc()?;
     let i = usize_param(p, "slide").unwrap_or(st.selection.slide);
-    let sl = st.doc.slides.get(i).ok_or_else(|| bad("animation.get", "no such slide"))?;
+    let sl = st.doc.slides.get(i).ok_or_else(|| bad("animation.get", none_at("slide", i, st.doc.slides.len())))?;
     Ok(serde_json::to_value(&sl.animations).unwrap_or_default())
 }
 

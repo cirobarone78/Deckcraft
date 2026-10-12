@@ -165,7 +165,10 @@ fn edit(s: &mut Session, p: &Value) -> Result<Value> {
     let sh = shape_of(s, id)?;
     let cell = p.get("cell").and_then(Value::as_array).and_then(|a| Some((a.first()?.as_u64()? as usize, a.get(1)?.as_u64()? as usize)));
     let body = match (&sh.kind, cell) {
-        (ShapeKind::Table(t), Some((r, c))) => t.cell(r, c).map(|x| x.text.clone()).ok_or_else(|| bad("text.edit", "no such cell"))?,
+        (ShapeKind::Table(t), Some((r, c))) => t.cell(r, c).map(|x| x.text.clone()).ok_or_else(|| {
+            let cols = t.rows.first().map_or(0, |row| row.cells.len());
+            bad("text.edit", format!("no cell [{r}, {c}] in table {id}; it has {} rows and {cols} columns", t.rows.len()))
+        })?,
         (ShapeKind::Table(_), None) => return Err(bad("text.edit", "say which `cell` of the table")),
         (ShapeKind::Shape | ShapeKind::Connector { .. }, _) => sh.text.clone().unwrap_or_default(),
         _ => return Err(bad("text.edit", "this object doesn't hold text")),

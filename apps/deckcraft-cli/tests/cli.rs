@@ -21,7 +21,16 @@ fn help_explains_run() {
         assert!(out.contains("--cmd COMMAND[=PARAMS]") && out.contains("COMMAND is a command id"), "{out}");
     }
     assert!(stdout(&cli(&["run", "--help"])).starts_with("run applies each --cmd in order"));
+}
+
+#[test]
+fn an_unknown_subcommand_is_named_before_the_usage() {
     assert!(stderr(&cli(&["frobnicate"])).starts_with("deckcraft-cli: unknown subcommand `frobnicate`\nusage:"));
+}
+
+#[test]
+fn describe_names_commands_like_an_unknown_one() {
+    assert_eq!(stderr(&cli(&["describe", "new"])), "deckcraft-cli: unknown command `new`; commands named like it: file.new, slide.new\n");
 }
 
 #[test]
@@ -34,14 +43,13 @@ fn a_label_before_the_command_is_an_unknown_command() {
 
 #[test]
 fn bad_json_names_the_command_and_the_text() {
-    assert_eq!(
-        stderr(&cli(&["run", "--cmd", "slide.new={}", "--cmd", r#"shape.insert={"preset":"rect",}"#])),
-        "deckcraft-cli: --cmd 2 of 2: the parameters of `shape.insert` are not JSON (trailing comma at line 1 column 18): {\"preset\":\"rect\",}; nothing ran\n"
-    );
+    let err = stderr(&cli(&["run", "--cmd", "slide.new={}", "--cmd", r#"shape.insert={"preset":"rect",}"#]));
+    assert!(err.starts_with("deckcraft-cli: --cmd 2 of 2: the parameters of `shape.insert` are not JSON ("), "{err}");
+    assert!(err.ends_with("): {\"preset\":\"rect\",}; nothing ran\n"), "{err}");
 }
 
 #[test]
-fn a_failing_command_says_which_and_what_was_kept() {
+fn a_failing_command_says_which_and_that_nothing_was_saved() {
     let out = std::env::temp_dir().join(format!("dc-cli-{}.deckcraft", std::process::id()));
     let err = stderr(&cli(&[
         "run",
@@ -56,8 +64,8 @@ fn a_failing_command_says_which_and_what_was_kept() {
     ]));
     assert_eq!(
         err,
-        "deckcraft-cli: --cmd 3 of 3: invalid parameters for `shape.resize`: shape 260 is on slide index 0, not on slide index 1, \
-         the one being edited; nothing was saved or exported\n"
+        "deckcraft-cli: --cmd 3 of 3: shape 260 is on slide index 0, not on slide index 1, the one being edited; \
+         nothing was saved or exported\n"
     );
     assert!(!out.exists());
 }

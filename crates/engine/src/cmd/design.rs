@@ -500,12 +500,19 @@ fn layout_target(s: &Session, p: &Value) -> Result<(usize, usize)> {
     Ok((usize_param(p, "master").unwrap_or(m), usize_param(p, "layout").unwrap_or(l)))
 }
 
+fn no_layout_at(doc: &deckcraft_model::Presentation, mi: usize, li: usize) -> String {
+    match doc.masters.get(mi) {
+        Some(m) => none_at(&format!("layout of slide master {mi}"), li, m.layouts.len()),
+        None => none_at("slide master", mi, doc.masters.len()),
+    }
+}
+
 fn rename_layout(s: &mut Session, p: &Value) -> Result<Value> {
     let (mi, li) = layout_target(s, p)?;
     let name = str_param(p, "name").ok_or_else(|| bad("master.renameLayout", "missing `name`"))?.to_string();
     s.edit(|doc, _| {
-        let l =
-            doc.masters.get_mut(mi).and_then(|m| Arc::make_mut(m).layouts.get_mut(li)).ok_or_else(|| bad("master.renameLayout", "no such layout"))?;
+        let missing = no_layout_at(doc, mi, li);
+        let l = doc.masters.get_mut(mi).and_then(|m| Arc::make_mut(m).layouts.get_mut(li)).ok_or_else(|| bad("master.renameLayout", missing))?;
         l.name = name;
         Ok(())
     })?;
@@ -515,9 +522,11 @@ fn rename_layout(s: &mut Session, p: &Value) -> Result<Value> {
 fn delete_layout(s: &mut Session, p: &Value) -> Result<Value> {
     let (mi, li) = layout_target(s, p)?;
     s.edit(|doc, sel| {
-        let id = doc.masters.get(mi).and_then(|m| m.layouts.get(li)).map(|l| l.id).ok_or_else(|| bad("master.deleteLayout", "no such layout"))?;
-        if doc.slides.iter().any(|x| x.layout == id) {
-            return Err(bad("master.deleteLayout", "slides use this layout"));
+        let id =
+            doc.masters.get(mi).and_then(|m| m.layouts.get(li)).map(|l| l.id).ok_or_else(|| bad("master.deleteLayout", no_layout_at(doc, mi, li)))?;
+        let users: Vec<String> = doc.slides.iter().enumerate().filter(|(_, x)| x.layout == id).map(|(i, _)| i.to_string()).collect();
+        if !users.is_empty() {
+            return Err(bad("master.deleteLayout", format!("slides at index {} use this layout", users.join(", "))));
         }
         let m = Arc::make_mut(doc.masters.get_mut(mi).ok_or_else(|| bad("master.deleteLayout", "no master"))?);
         if m.layouts.len() <= 1 {

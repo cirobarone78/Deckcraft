@@ -295,6 +295,20 @@ fn wrap(r: Result<Value, String>) -> ToolResult {
     }
 }
 
+fn with_rect(a: &Value) -> Value {
+    let mut p = a.clone();
+    if let Some(m) = p.as_object_mut() {
+        let rect = (f(a, "x"), f(a, "y"), f(a, "w"), f(a, "h"));
+        for k in ["x", "y", "w", "h"] {
+            m.remove(k);
+        }
+        if let (Some(x), Some(y), Some(w), Some(h)) = rect {
+            m.insert("rect".into(), json!([x, y, w, h]));
+        }
+    }
+    p
+}
+
 pub fn call_tool(b: &mut dyn Backend, name: &str, a: &Value) -> ToolResult {
     let a = if a.is_object() { a.clone() } else { json!({}) };
     match name {
@@ -391,20 +405,8 @@ pub fn call_tool(b: &mut dyn Backend, name: &str, a: &Value) -> ToolResult {
             ToolResult::json(&v)
         }
         "set_text" => wrap(exec(b, "text.set", a)),
-        "insert_picture" => {
-            let mut p = a.clone();
-            if let (Some(x), Some(y), Some(w), Some(h)) = (f(&a, "x"), f(&a, "y"), f(&a, "w"), f(&a, "h")) {
-                p["rect"] = json!([x, y, w, h]);
-            }
-            wrap(exec(b, "insert.picture", p))
-        }
-        "insert_table" => {
-            let mut p = a.clone();
-            if let (Some(x), Some(y), Some(w), Some(h)) = (f(&a, "x"), f(&a, "y"), f(&a, "w"), f(&a, "h")) {
-                p["rect"] = json!([x, y, w, h]);
-            }
-            wrap(exec(b, "insert.table", p))
-        }
+        "insert_picture" => wrap(exec(b, "insert.picture", with_rect(&a))),
+        "insert_table" => wrap(exec(b, "insert.table", with_rect(&a))),
         "insert_chart" => wrap(exec(b, "insert.chart", a)),
         "select" => wrap(exec(b, "edit.select", a)),
         "pointer" => wrap(b.call("ui.pointer", a)),

@@ -22,6 +22,7 @@ use deckcraft_model::ShapeId;
 use serde::Serialize;
 use serde_json::Value;
 
+pub(crate) use crate::describe::none_at;
 use crate::{EngineError, Result, Session};
 
 pub type Run = fn(&mut Session, &Value) -> Result<Value>;
@@ -33,6 +34,8 @@ pub struct CommandSpec {
     /// Where it lives: `["Home", "Font"]` (ribbon tab and group) or `["Arrange"]` (menu).
     pub menu: &'static [&'static str],
     pub shortcut: Option<&'static str>,
+    /// Also the keys [`Session::call`] accepts, read by [`param_keys`]: a spaced ` | ` separates
+    /// alternative keys, so alternative values are written unspaced (`ms|null`).
     pub params: &'static str,
     pub enabled: Enabled,
     pub run: Run,
@@ -148,8 +151,11 @@ pub fn find_command(id: &str) -> Option<&'static CommandSpec> {
     command_specs().iter().find(|c| c.id == id)
 }
 
-pub fn similar_commands(id: &str) -> Vec<&'static str> {
+pub(crate) fn similar_commands(id: &str) -> Vec<&'static str> {
     let q = id.to_lowercase();
+    if q.is_empty() {
+        return vec![];
+    }
     let last = q.rsplit('.').next().unwrap_or_default();
     command_specs()
         .iter()
@@ -161,7 +167,7 @@ pub fn similar_commands(id: &str) -> Vec<&'static str> {
 
 /// Top-level keys a params doc names: `{preset, rect?: [x,y,w,h] pt} | {id}` gives preset, rect,
 /// id. Text after `→` is the result and is skipped. Errs where the doc strays from that grammar.
-pub fn param_keys(doc: &str) -> std::result::Result<Vec<&str>, String> {
+pub(crate) fn param_keys(doc: &str) -> std::result::Result<Vec<&str>, String> {
     let doc = doc.split('→').next().unwrap_or_default();
     let mut keys = vec![];
     let mut open: Vec<char> = vec![];
@@ -217,19 +223,14 @@ pub(crate) fn check_params(spec: &CommandSpec, p: &Value) -> Result<()> {
             return Err(bad(spec.id, format!("parameters are a JSON object, not {kind}")));
         }
     };
-    let Ok(mut keys) = param_keys(spec.params) else { return Ok(()) };
-    if keys.iter().any(|k| matches!(*k, "id" | "ids")) {
-        keys.extend(["id", "ids"]);
-    }
-    let unknown: Vec<&str> = given.keys().map(String::as_str).filter(|k| !keys.contains(k)).collect();
+    let Ok(known) = param_keys(spec.params) else { return Ok(()) };
+    let targets = known.iter().any(|k| matches!(*k, "id" | "ids"));
+    let unknown: Vec<String> =
+        given.keys().filter(|k| !known.contains(&k.as_str()) && !(targets && matches!(k.as_str(), "id" | "ids"))).cloned().collect();
     if unknown.is_empty() {
         return Ok(());
     }
-    Err(EngineError::UnknownParams {
-        cmd: spec.id.into(),
-        unknown: unknown.iter().map(|k| k.to_string()).collect(),
-        known: param_keys(spec.params).unwrap_or_default(),
-    })
+    Err(EngineError::UnknownParams { cmd: spec.id.into(), unknown, known })
 }
 
 // ---------- param helpers ----------
@@ -278,12 +279,20 @@ pub(crate) fn targets(s: &Session, p: &Value) -> Result<Vec<ShapeId>> {
     if let Some(ids) = ids_param(p, "ids")
         && !ids.is_empty()
     {
-        return Ok(ids);
+        return present(s, ids);
     }
     if let Some(id) = id_param(p, "id") {
-        return Ok(vec![id]);
+        return present(s, vec![id]);
     }
     Ok(s.doc()?.selection.shapes.clone())
+}
+
+pub(crate) fn present(s: &Session, ids: Vec<ShapeId>) -> Result<Vec<ShapeId>> {
+    let st = s.doc()?;
+    match ids.iter().find(|id| st.shape(**id).is_none()) {
+        Some(id) => Err(EngineError::Other(crate::describe::no_shape(st, *id))),
+        None => Ok(ids),
+    }
 }
 
 pub(crate) fn ok() -> Result<Value> {
@@ -369,10 +378,6 @@ pub(crate) fn edit_shapes(s: &mut Session, p: &Value, cmd: &str, f: impl Fn(&mut
     let ids = targets(s, p)?;
     if ids.is_empty() {
         return Err(bad(cmd, "no shape is selected and no `ids` were given"));
-    }
-    let st = s.doc()?;
-    if let Some(id) = ids.iter().find(|id| st.shape(**id).is_none()) {
-        return Err(bad(cmd, crate::describe::no_shape(st, *id)));
     }
     s.edit(|doc, sel| {
         let boxes: Vec<(ShapeId, Xfrm)> = {

@@ -84,11 +84,16 @@ fn current_master(doc: &Presentation, sel: &crate::Selection) -> usize {
     doc.slides.get(sel.slide).and_then(|s| doc.masters.iter().position(|m| m.layout(s.layout).is_some())).unwrap_or(0)
 }
 
+fn no_layout(doc: &Presentation, key: &Value, master: usize) -> String {
+    let names: Vec<&str> = doc.masters.get(master).map(|m| m.layouts.iter().map(|l| l.name.as_str()).collect()).unwrap_or_default();
+    format!("no layout {key} in slide master {master}; its layouts are {}", names.join(", "))
+}
+
 fn new(s: &mut Session, p: &Value) -> Result<Value> {
     s.edit(|doc, sel| {
         let master = current_master(doc, sel);
         let layout = match p.get("layout") {
-            Some(k) => find_layout(doc, k, master).ok_or_else(|| bad("slide.new", format!("no layout {k}")))?,
+            Some(k) => find_layout(doc, k, master).ok_or_else(|| bad("slide.new", no_layout(doc, k, master)))?,
             None => {
                 // PowerPoint picks Title and Content after a title slide, else the current layout.
                 let cur = doc.slides.get(sel.slide).map(|x| x.layout);
@@ -141,7 +146,7 @@ fn index_of(s: &Session, p: &Value) -> Result<usize> {
     let st = s.doc()?;
     let i = usize_param(p, "index").unwrap_or(st.selection.slide);
     if i >= st.doc.slides.len() {
-        return Err(bad("slide", format!("no slide {i}")));
+        return Err(EngineError::Other(none_at("slide", i, st.doc.slides.len())));
     }
     Ok(i)
 }
@@ -242,7 +247,7 @@ fn move_slide(s: &mut Session, p: &Value) -> Result<Value> {
     let to = usize_param(p, "to").ok_or_else(|| bad("slide.move", "missing `to`"))?;
     s.edit(|doc, sel| {
         if from >= doc.slides.len() {
-            return Err(bad("slide.move", format!("no slide {from}")));
+            return Err(bad("slide.move", none_at("slide", from, doc.slides.len())));
         }
         let sl = doc.slides.remove(from);
         let to = to.min(doc.slides.len());
@@ -281,9 +286,13 @@ fn go_to(s: &mut Session, i: usize) -> Result<Value> {
 }
 
 fn go(s: &mut Session, p: &Value) -> Result<Value> {
+    let n = s.doc()?.doc.slides.len();
     let i = match (usize_param(p, "index"), p.get("id").and_then(Value::as_u64)) {
-        (Some(i), _) => i,
-        (None, Some(id)) => s.doc()?.doc.slide_index(SlideId(u32::try_from(id).unwrap_or(0))).ok_or_else(|| bad("slide.go", "no such slide"))?,
+        (Some(i), _) if i < n => i,
+        (Some(i), _) => return Err(bad("slide.go", none_at("slide", i, n))),
+        (None, Some(id)) => {
+            s.doc()?.doc.slide_index(SlideId(u32::try_from(id).unwrap_or(0))).ok_or_else(|| bad("slide.go", format!("no slide has id {id}")))?
+        }
         _ => return Err(bad("slide.go", "missing `index`")),
     };
     go_to(s, i)
@@ -417,7 +426,7 @@ fn set_layout(s: &mut Session, p: &Value) -> Result<Value> {
     };
     s.edit(|doc, sel| {
         let master = current_master(doc, sel);
-        let layout = find_layout(doc, &key, master).ok_or_else(|| bad("slide.layout", format!("no layout {key}")))?;
+        let layout = find_layout(doc, &key, master).ok_or_else(|| bad("slide.layout", no_layout(doc, &key, master)))?;
         for i in &targets {
             apply_layout(doc, *i, layout)?;
         }
@@ -514,7 +523,8 @@ fn section_rename(s: &mut Session, p: &Value) -> Result<Value> {
     let i = usize_param(p, "index").ok_or_else(|| bad("section.rename", "missing `index`"))?;
     let name = str_param(p, "name").unwrap_or("").to_string();
     s.edit(|doc, _| {
-        let sec = doc.sections.get_mut(i).ok_or_else(|| bad("section.rename", "no such section"))?;
+        let n = doc.sections.len();
+        let sec = doc.sections.get_mut(i).ok_or_else(|| bad("section.rename", none_at("section", i, n)))?;
         sec.name = name;
         Ok(())
     })?;
@@ -526,7 +536,7 @@ fn section_remove(s: &mut Session, p: &Value) -> Result<Value> {
     let with_slides = bool_or(p, "slides", false);
     s.edit(|doc, sel| {
         if i >= doc.sections.len() {
-            return Err(bad("section.remove", "no such section"));
+            return Err(bad("section.remove", none_at("section", i, doc.sections.len())));
         }
         let sec = doc.sections.remove(i);
         if with_slides {
@@ -557,7 +567,7 @@ fn section_move(s: &mut Session, p: &Value) -> Result<Value> {
     let to = usize_param(p, "to").ok_or_else(|| bad("section.move", "missing `to`"))?;
     s.edit(|doc, _| {
         if i >= doc.sections.len() {
-            return Err(bad("section.move", "no such section"));
+            return Err(bad("section.move", none_at("section", i, doc.sections.len())));
         }
         let sec = doc.sections.remove(i);
         let to = to.min(doc.sections.len());

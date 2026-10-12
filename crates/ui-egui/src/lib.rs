@@ -262,6 +262,7 @@ impl SlideApp {
         self.dispatch(id, params, Session::execute)
     }
 
+    /// [`Self::run`] for a caller outside the app: engine commands go through [`Session::call`].
     pub fn call(&mut self, id: &str, params: Value) -> Result<Value, String> {
         self.dispatch(id, params, Session::call)
     }
@@ -943,6 +944,24 @@ mod tests {
         harness.run_steps(2);
         assert!(!harness.state().home_open(), "a new presentation leaves Home");
         assert_eq!(harness.state().session.documents().len(), 2);
+    }
+
+    #[test]
+    fn the_control_channel_answers_engine_commands_in_words() {
+        let mut app = SlideApp::new(Session::with_new(), Services::default());
+        let ctx = egui::Context::default();
+        let mut execute = |command: &str, params: Value| {
+            let (reply, _) = std::sync::mpsc::channel();
+            let req = control::ControlRequest { method: "engine.execute".into(), params: json!({"command": command, "params": params}), reply };
+            match control::handle(&mut app, &ctx, &req) {
+                control::Outcome::Done(v) => v,
+                control::Outcome::Screenshot { .. } => Value::Null,
+            }
+        };
+        let refused = execute("shape.insert", json!({"shape": "roundRect"}));
+        assert_eq!(refused["error"], "`shape.insert` has no parameter `shape`; its parameters are preset, rect, text, adj, flip");
+        let id = execute("shape.insert", json!({"preset": "roundRect", "text": "Hi"}))["result"]["id"].clone();
+        assert_eq!(execute("format.size", json!({"size": 28}))["result"], format!("changed shape {id} on slide index 0"));
     }
 
     #[test]

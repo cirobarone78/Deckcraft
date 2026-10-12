@@ -32,6 +32,13 @@ pub(crate) fn no_shape(st: &DocState, id: ShapeId) -> String {
     }
 }
 
+pub(crate) fn none_at(what: &str, i: usize, n: usize) -> String {
+    match n {
+        0 => format!("no {what} at index {i}; there are none"),
+        n => format!("no {what} at index {i}; indices run 0–{}", n - 1),
+    }
+}
+
 fn shapes(ids: &[ShapeId]) -> String {
     let list = ids.iter().map(ToString::to_string).collect::<Vec<_>>().join(", ");
     if ids.len() == 1 { format!("shape {list}") } else { format!("shapes {list}") }
@@ -39,7 +46,7 @@ fn shapes(ids: &[ShapeId]) -> String {
 
 fn slides(indices: &[usize]) -> String {
     let list = indices.iter().map(ToString::to_string).collect::<Vec<_>>().join(", ");
-    if indices.len() == 1 { format!("slide index {list}") } else { format!("slides index {list}") }
+    if indices.len() == 1 { format!("slide index {list}") } else { format!("slides at index {list}") }
 }
 
 pub(crate) fn changes(before: Option<(u64, Arc<Presentation>, Selection)>, after: Option<&DocState>, requests: &[UiRequest]) -> String {
@@ -73,13 +80,24 @@ fn document(old: &Presentation, new: &Presentation) -> Vec<String> {
     if kept_old != kept_new {
         said.push("reordered the slides".into());
     }
+    let mut parts: Vec<(String, Vec<usize>)> = vec![];
     for (i, s) in new.slides.iter().enumerate() {
         if let Some(o) = old.slides.iter().find(|o| o.id == s.id)
             && !Arc::ptr_eq(o, s)
             && o != s
         {
-            said.extend(slide(i, o, s));
+            let (shape_edits, slide_parts) = slide(i, o, s);
+            said.extend(shape_edits);
+            match parts.iter_mut().find(|(p, _)| *p == slide_parts) {
+                Some((_, at)) => at.push(i),
+                None if !slide_parts.is_empty() => parts.push((slide_parts, vec![i])),
+                None => {}
+            }
         }
+    }
+    for (p, at) in parts {
+        let which = if at.len() == new.slides.len() && at.len() > 1 { "every slide".into() } else { slides(&at) };
+        said.push(format!("changed the {p} of {which}"));
     }
     if old.masters.len() != new.masters.len() || old.masters.iter().zip(&new.masters).any(|(a, b)| !Arc::ptr_eq(a, b) && a != b) {
         said.push("changed the slide masters, their layouts or the theme".into());
@@ -107,7 +125,7 @@ fn document(old: &Presentation, new: &Presentation) -> Vec<String> {
     said
 }
 
-fn slide(i: usize, old: &Slide, new: &Slide) -> Vec<String> {
+fn slide(i: usize, old: &Slide, new: &Slide) -> (Vec<String>, String) {
     let on = slides(&[i]);
     let ids = |v: &[Shape]| v.iter().map(|s| s.id).collect::<Vec<_>>();
     let (old_ids, new_ids) = (ids(&old.shapes), ids(&new.shapes));
@@ -125,7 +143,7 @@ fn slide(i: usize, old: &Slide, new: &Slide) -> Vec<String> {
     if kept_old != kept_new {
         said.push(format!("reordered the shapes on {on}"));
     }
-    let parts: Vec<&str> = [
+    let parts = [
         (old.background != new.background, "background"),
         (old.transition != new.transition, "transition"),
         (old.animations != new.animations, "animations"),
@@ -138,11 +156,9 @@ fn slide(i: usize, old: &Slide, new: &Slide) -> Vec<String> {
     ]
     .into_iter()
     .filter_map(|(changed, name)| changed.then_some(name))
-    .collect();
-    if !parts.is_empty() {
-        said.push(format!("changed the {} of {on}", parts.join(", ")));
-    }
-    said
+    .collect::<Vec<_>>()
+    .join(", ");
+    (said, parts)
 }
 
 fn selection(old: &Selection, new: &Selection, doc: &Presentation) -> Vec<String> {

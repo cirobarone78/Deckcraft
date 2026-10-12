@@ -217,7 +217,7 @@ fn render(s: &mut Session, p: &Value) -> Result<Value> {
     let st = s.doc()?;
     let i = usize_param(p, "slide").unwrap_or(st.selection.slide);
     if i >= st.doc.slides.len() {
-        return Err(bad("file.render", format!("no slide {i}")));
+        return Err(bad("file.render", none_at("slide", i, st.doc.slides.len())));
     }
     let (png, w, h) = render_png(&st.doc, i, f64_or(p, "scale", 1.0), bool_or(p, "edit", false));
     Ok(json!({"png": base64_encode(&png), "width": w, "height": h}))
@@ -238,7 +238,7 @@ fn export(s: &mut Session, p: &Value) -> Result<Value> {
             let mut written = vec![];
             for (k, i) in slides.iter().enumerate() {
                 if *i >= st.doc.slides.len() {
-                    return Err(bad("file.export", format!("no slide {i}")));
+                    return Err(bad("file.export", none_at("slide", *i, st.doc.slides.len())));
                 }
                 let img = deckcraft_render::render_slide(
                     &st.doc,

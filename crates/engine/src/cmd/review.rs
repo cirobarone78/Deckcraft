@@ -76,7 +76,8 @@ fn reply(s: &mut Session, p: &Value) -> Result<Value> {
     let author = s.prefs.author.clone();
     s.edit(|doc, sel| {
         let sl = Arc::make_mut(doc.slides.get_mut(sel.slide).ok_or_else(|| bad("comment.reply", "no slide"))?);
-        let c = sl.comments.get_mut(i).ok_or_else(|| bad("comment.reply", "no such comment"))?;
+        let n = sl.comments.len();
+        let c = sl.comments.get_mut(i).ok_or_else(|| bad("comment.reply", none_at(&format!("comment on slide index {}", sel.slide), i, n)))?;
         c.replies.push(Comment { author, text, date: now(), ..Default::default() });
         Ok(())
     })?;
@@ -99,7 +100,7 @@ fn delete(s: &mut Session, p: &Value) -> Result<Value> {
                 sl.comments.remove(i);
             }
             None => sl.comments.clear(),
-            _ => return Err(bad("comment.delete", "no such comment")),
+            Some(i) => return Err(bad("comment.delete", none_at(&format!("comment on slide index {}", sel.slide), i, sl.comments.len()))),
         }
         Ok(())
     })?;
@@ -111,7 +112,8 @@ fn resolve(s: &mut Session, p: &Value) -> Result<Value> {
     let v = bool_or(p, "resolved", true);
     s.edit(|doc, sel| {
         let sl = Arc::make_mut(doc.slides.get_mut(sel.slide).ok_or_else(|| bad("comment.resolve", "no slide"))?);
-        sl.comments.get_mut(i).ok_or_else(|| bad("comment.resolve", "no such comment"))?.resolved = v;
+        let n = sl.comments.len();
+        sl.comments.get_mut(i).ok_or_else(|| bad("comment.resolve", none_at(&format!("comment on slide index {}", sel.slide), i, n)))?.resolved = v;
         Ok(())
     })?;
     ok()
