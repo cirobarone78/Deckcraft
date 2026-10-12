@@ -27,7 +27,15 @@ pub fn specs() -> Vec<CommandSpec> {
             s, p, "delCol"
         )),
         cmd!("table.merge", "Merge Cells", ["Table Layout", "Merge"], None, "{from: [r, c], to: [r, c], id?}", has_selection, merge),
-        cmd!("table.split", "Split Cells", ["Table Layout", "Merge"], None, "{cell: [r, c], id?}", has_selection, split),
+        cmd!(
+            "table.split",
+            "Split Cells",
+            ["Table Layout", "Merge"],
+            None,
+            "{cell?: [r, c] | row?, col? (else the edited cell), id?}",
+            has_selection,
+            split
+        ),
         cmd!(
             "table.style",
             "Table Styles",
@@ -160,7 +168,9 @@ fn merge(s: &mut Session, p: &Value) -> Result<Value> {
 
 fn split(s: &mut Session, p: &Value) -> Result<Value> {
     let cell = cell_param(p, "cell").unwrap_or_else(|| at(s, p));
-    with_table(s, p, "table.split", move |t| if t.split(cell.0, cell.1) { Ok(()) } else { Err(bad("table.split", "that cell isn't merged")) })
+    with_table(s, p, "table.split", move |t| {
+        if t.split(cell.0, cell.1) { Ok(()) } else { Err(bad("table.split", format!("cell [{}, {}] isn't merged", cell.0, cell.1))) }
+    })
 }
 
 fn style(s: &mut Session, p: &Value) -> Result<Value> {

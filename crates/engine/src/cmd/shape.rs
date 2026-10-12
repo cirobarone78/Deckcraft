@@ -710,7 +710,7 @@ fn shape_id(p: &Value, key: &str) -> Option<deckcraft_model::ShapeId> {
 fn sites(s: &mut Session, p: &Value) -> Result<Value> {
     let id = shape_id(p, "id").ok_or_else(|| bad("shape.sites", "missing `id`"))?;
     let st = s.doc()?;
-    let sh = st.shape(id).ok_or_else(|| bad("shape.sites", "no such shape"))?;
+    let sh = st.shape(id).ok_or_else(|| bad("shape.sites", crate::describe::no_shape(st, id)))?;
     Ok(json!(crate::connect::sites(&st.doc, &st.selection, sh).iter().map(|q| [q.x, q.y]).collect::<Vec<_>>()))
 }
 

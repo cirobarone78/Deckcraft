@@ -9,6 +9,7 @@
 
 pub mod cmd;
 pub mod connect;
+mod describe;
 pub mod guard;
 pub mod keys;
 pub mod links;
@@ -31,12 +32,14 @@ pub use tools::{Mods, PointerEvent, PointerKind, ToolKind};
 
 #[derive(Debug, thiserror::Error)]
 pub enum EngineError {
-    #[error("unknown command `{0}`")]
+    #[error("{}", unknown_command(.0))]
     UnknownCommand(String),
-    #[error("command `{0}` is not available right now: {1}")]
+    #[error("command `{0}` is not available right now: {1}.{hint}", hint = cmd::how_to_enable(.1))]
     Disabled(String, String),
-    #[error("invalid parameters for `{cmd}`: {msg}")]
+    #[error("invalid parameters for `{cmd}`: {msg}.{}", takes(cmd))]
     BadParams { cmd: String, msg: String },
+    #[error("{}", unknown_params(cmd, unknown))]
+    UnknownParams { cmd: String, unknown: Vec<String> },
     #[error("no active presentation")]
     NoDocument,
     #[error("{0}")]
@@ -48,6 +51,26 @@ pub enum EngineError {
 impl From<deckcraft_model::ModelError> for EngineError {
     fn from(e: deckcraft_model::ModelError) -> Self {
         EngineError::Other(e.to_string())
+    }
+}
+
+fn unknown_command(id: &str) -> String {
+    match cmd::similar_commands(id).as_slice() {
+        [] => format!("unknown command `{id}`"),
+        like => format!("unknown command `{id}`; commands named like it: {}", like.join(", ")),
+    }
+}
+
+fn unknown_params(cmd: &str, unknown: &[String]) -> String {
+    let names = unknown.iter().map(|k| format!("`{k}`")).collect::<Vec<_>>().join(", ");
+    format!("`{cmd}` was given {names}, which it doesn't take.{}", takes(cmd))
+}
+
+fn takes(cmd: &str) -> String {
+    match find_command(cmd).map(|c| c.params) {
+        Some(doc) if cmd::param_keys(doc).is_ok_and(|k| k.is_empty()) => format!(" `{cmd}` takes no parameters."),
+        Some(doc) => format!(" `{cmd}` takes {doc}."),
+        None => String::new(),
     }
 }
 
@@ -394,6 +417,21 @@ impl Session {
     /// presentation as it was.
     pub fn execute(&mut self, id: &str, params: &Value) -> Result<Value> {
         self.guarded(id, |s| s.execute_unguarded(id, params))
+    }
+
+    /// Run command `id` for a caller outside the app (CLI, MCP, control channel): parameters it
+    /// doesn't take are refused, and a command with no result of its own answers with what it
+    /// changed.
+    pub fn call(&mut self, id: &str, params: &Value) -> Result<Value> {
+        let spec = find_command(id).ok_or_else(|| EngineError::UnknownCommand(id.into()))?;
+        cmd::check_params(spec, params)?;
+        let before = self.active().map(|d| (d.uid, d.doc.clone(), d.selection.clone()));
+        let asked = self.ui_requests.len();
+        let r = self.execute(id, params)?;
+        if !r.is_null() {
+            return Ok(r);
+        }
+        Ok(describe::changes(before, self.active(), self.ui_requests.get(asked..).unwrap_or_default()).into())
     }
 
     fn execute_unguarded(&mut self, id: &str, params: &Value) -> Result<Value> {

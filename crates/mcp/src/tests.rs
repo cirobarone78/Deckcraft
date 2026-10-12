@@ -91,6 +91,54 @@ fn errors_are_reported_not_panics() {
 }
 
 #[test]
+fn run_command_answers_in_words() {
+    let mut s = Server::new(Box::new(Headless::with_document()));
+    let r = call(&mut s, 1, "tools/call", json!({"name": "run_command", "arguments": {"command": "shape.insert", "params": {"shape": "roundRect"}}}));
+    assert_eq!(r["result"]["isError"], true);
+    assert!(
+        r["result"]["content"][0]["text"]
+            .as_str()
+            .unwrap()
+            .starts_with("`shape.insert` was given `shape`, which it doesn't take. `shape.insert` takes {preset: ")
+    );
+    let id = tool(&mut s, "run_command", json!({"command": "shape.insert", "params": {"preset": "roundRect", "text": "Hi"}}))["id"].clone();
+    let r = call(&mut s, 2, "tools/call", json!({"name": "run_command", "arguments": {"command": "format.size", "params": {"size": 28}}}));
+    assert_eq!(r["result"]["content"][0]["text"], format!("changed shape {id} on slide index 0"));
+}
+
+#[test]
+fn every_tool_takes_the_arguments_its_schema_declares() {
+    let mut s = Server::new(Box::new(Headless::with_document()));
+    let dir = std::env::temp_dir().join(format!("dc-mcp-schema-{}", std::process::id()));
+    std::fs::create_dir_all(&dir).unwrap();
+    let path = dir.join("x").to_string_lossy().into_owned();
+    let tools = call(&mut s, 1, "tools/list", json!({}));
+    for t in tools["result"]["tools"].as_array().unwrap() {
+        let name = t["name"].as_str().unwrap();
+        let args: serde_json::Map<String, Value> = t["inputSchema"]["properties"]
+            .as_object()
+            .unwrap()
+            .iter()
+            .map(|(k, p)| {
+                let v = match p["type"].as_str() {
+                    Some("number" | "integer") => json!(10),
+                    Some("boolean") => json!(false),
+                    Some("array") => json!([]),
+                    Some("object") => json!({}),
+                    _ if k == "path" => json!(path),
+                    _ => json!("x"),
+                };
+                (k.clone(), v)
+            })
+            .collect();
+        let r = call(&mut s, 2, "tools/call", json!({"name": name, "arguments": args}));
+        let text = r["result"]["content"][0]["text"].as_str().unwrap_or_default();
+        assert!(!text.contains("which it doesn't take"), "{name}: {text}");
+    }
+    std::fs::remove_dir_all(&dir).unwrap();
+}
+
+#[test]
 fn export_tool_lists_pdf_and_its_options() {
     let mut s = Server::new(Box::new(Headless::new()));
     let tools = call(&mut s, 1, "tools/list", json!({}));
