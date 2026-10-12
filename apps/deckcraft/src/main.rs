@@ -17,6 +17,7 @@ mod control_server;
 #[cfg(any(target_os = "windows", test))]
 mod graphics;
 mod logging;
+mod x11_scale;
 
 use deckcraft_engine::Session;
 use deckcraft_ui_egui::{Services, SlideApp};
@@ -168,6 +169,9 @@ fn main() -> eframe::Result {
             }
         }
     }
+    // X11: prefer the desktop's DPI (Xft.dpi, then the server screen) over the
+    // panel's physical density before winit reads it; explicit user override wins.
+    x11_scale::apply();
     let mut options = eframe::NativeOptions {
         viewport: egui::ViewportBuilder::default()
             .with_title("DeckCraft")
