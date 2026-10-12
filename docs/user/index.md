@@ -11,7 +11,7 @@ You can build decks with slide masters, layouts, themes, shapes, pictures, table
 ## Start here
 
 - [Install DeckCraft](getting-started/install.md)
-- [Your first deck](getting-started/index.md)
+- [Getting started](getting-started/index.md)
 - [Guides](guides/index.md): build a deck, open and save PowerPoint files, add transitions, present, export to PDF
 - [Troubleshooting](troubleshooting/index.md)
 - [FAQ](faq/index.md)

@@ -1,5 +1,5 @@
 ---
-title: Your first deck
+title: Getting started
 description: Start DeckCraft, pick a theme, add a slide and play it, in a few steps.
 order: 20
 verified: 0.5.0
