@@ -16,9 +16,21 @@ fn stderr(o: &Output) -> String {
 
 const SUBCOMMANDS: [&str; 9] = ["info", "render", "convert", "run", "commands", "describe", "app", "mcp", "links"];
 
+fn words(s: &str) -> String {
+    s.split_whitespace().collect::<Vec<_>>().join(" ")
+}
+
 #[test]
 fn an_unknown_subcommand_is_named_before_the_overview() {
-    assert!(stderr(&cli(&["frobnicate"])).starts_with("deckcraft-cli: unknown subcommand `frobnicate`\n\ndeckcraft-cli works on"));
+    for args in [vec!["frobnicate"], vec!["help", "frobnicate"], vec!["--info", "--help"]] {
+        let err = stderr(&cli(&args));
+        assert!(err.contains("unknown subcommand `") && err.contains("\n\ndeckcraft-cli works on"), "{args:?}: {err}");
+    }
+}
+
+#[test]
+fn no_subcommand_shows_the_overview_and_fails() {
+    assert!(stderr(&cli(&[])).starts_with("deckcraft-cli works on"));
 }
 
 #[test]
@@ -44,16 +56,24 @@ fn every_subcommand_answers_help_and_does_nothing_else() {
     }
     assert_eq!(std::fs::read_dir(&dir).unwrap().count(), 0, "help wrote nothing");
     std::fs::remove_dir_all(&dir).unwrap();
+    for args in [["help", "version"], ["--version", "--help"]] {
+        assert!(stdout(&cli(&args)).starts_with("usage: deckcraft-cli --version"), "{args:?}");
+    }
+    for args in [["help", "help"], ["help", "--help"]] {
+        assert!(stdout(&cli(&args)).starts_with("deckcraft-cli works on"), "{args:?}");
+    }
 }
 
 #[test]
 fn run_help_says_what_the_ids_do_not() {
-    let out = stdout(&cli(&["run", "--help"]));
+    let out = words(&stdout(&cli(&["run", "--help"])));
     for fact in [
-        "COMMAND is a command id, then `=`, then the command's parameters as one\nJSON object.",
+        "COMMAND is a command id, then `=`, then the command's parameters as one JSON object.",
         "points on a 960×540 slide",
+        "Slide indices start at 0.",
         "Shape ids are looked up on the current slide only.",
-        "format.* acts\n  on the selected text or shapes",
+        "A command that adds a shape (shape.insert, insert.textBox, insert.table…) selects it.",
+        "format.* acts on the selected text or shapes",
     ] {
         assert!(out.contains(fact), "{fact}: {out}");
     }
@@ -86,14 +106,35 @@ Acts on the selected text or shapes.
 Run it with: deckcraft-cli run --cmd 'format.size={…}'
 "
     );
-    assert!(stdout(&cli(&["describe", "edit.copy"])).contains("Answers with {text}.\n"));
-    assert!(stdout(&cli(&["describe", "slide.go"])).contains("  index\n  or id\n"));
+    assert!(stdout(&cli(&["describe", "edit.copy"])).contains("Answers with {text}.\n\nRun it with: deckcraft-cli run --cmd edit.copy\n"));
+    assert!(stdout(&cli(&["describe", "text.set"])).contains("Note: replaces the whole text, keeping the first run's formatting\n"));
+    assert_eq!(
+        stdout(&cli(&["describe", "shape.setDefault"])),
+        "shape.setDefault: Set as Default Shape.\n\nTakes no parameters.\nActs on the selected shapes.\n\nRun it with: deckcraft-cli run --cmd shape.setDefault\n"
+    );
+}
+
+#[test]
+fn describe_shows_alternative_sets_of_parameters() {
+    assert!(stdout(&cli(&["describe", "slide.go"])).contains("Parameters:\n  either:\n    index\n  or:\n    id\n"));
+    assert!(stdout(&cli(&["describe", "shape.move"])).contains(
+        "  either:
+    dx, optional   pt (relative)
+    dy, optional   pt (relative)
+    ids, optional
+  or:
+    x, optional    pt (absolute)
+    y, optional    pt (absolute)
+    ids, optional
+"
+    ));
 }
 
 #[test]
 fn commands_lists_one_line_per_command() {
     assert_eq!(stdout(&cli(&["commands", "format.size"])), "format.size — Font Size: {size: pt}\n");
     assert_eq!(stdout(&cli(&["commands", "slide.next"])), "slide.next — Next Slide\n");
+    assert_eq!(stdout(&cli(&["commands", "shape.presets"])), "shape.presets — Shape Gallery → [{name, label, category}]\n");
 }
 
 #[test]

@@ -56,6 +56,27 @@ pub struct CommandInfo {
 }
 
 impl CommandSpec {
+    pub fn acts_on(&self) -> Option<String> {
+        let keys = param_keys(self.params).unwrap_or_default();
+        let named = if keys.contains(&"ids") {
+            Some("the shapes in `ids`")
+        } else if keys.contains(&"id") {
+            Some("the shape in `id`")
+        } else {
+            None
+        };
+        let reason = (self.enabled)(&Session::with_new()).err()?;
+        Some(match (reason.as_str(), named) {
+            (SELECT_TEXT_OR_SHAPE, _) => "Acts on the selected text or shapes.".into(),
+            (NOTHING_SELECTED, Some(n)) => format!("Acts on {n}, else on the selected shapes."),
+            (NOTHING_SELECTED, None) => "Acts on the selected shapes.".into(),
+            (SELECT_TWO, Some(n)) => format!("Acts on two or more shapes: {n}, else the selected ones."),
+            (SELECT_TWO, None) => "Acts on two or more selected shapes.".into(),
+            (NO_TEXT_POINT, _) => "Acts on the text being edited; text.edit starts editing a shape's text.".into(),
+            _ => return None,
+        })
+    }
+
     pub fn info(&self, s: &Session) -> CommandInfo {
         let e = (self.enabled)(s);
         CommandInfo {
@@ -82,6 +103,8 @@ pub fn has_slide(s: &Session) -> std::result::Result<(), String> {
 }
 pub const NOTHING_SELECTED: &str = "nothing selected";
 pub const SELECT_TWO: &str = "select two or more objects";
+pub const NO_TEXT_POINT: &str = "no text insertion point";
+pub const SELECT_TEXT_OR_SHAPE: &str = "select text or a shape";
 pub fn has_selection(s: &Session) -> std::result::Result<(), String> {
     has_doc(s)?;
     if s.active().is_some_and(|d| !d.selection.shapes.is_empty()) { Ok(()) } else { Err(NOTHING_SELECTED.into()) }
@@ -92,16 +115,12 @@ pub fn has_two(s: &Session) -> std::result::Result<(), String> {
 }
 pub fn has_text(s: &Session) -> std::result::Result<(), String> {
     has_doc(s)?;
-    if s.active().is_some_and(|d| d.selection.text.is_some()) { Ok(()) } else { Err("no text insertion point".into()) }
+    if s.active().is_some_and(|d| d.selection.text.is_some()) { Ok(()) } else { Err(NO_TEXT_POINT.into()) }
 }
 /// Text editing or shapes with text selected (formatting commands apply to either).
 pub fn has_text_or_shapes(s: &Session) -> std::result::Result<(), String> {
     has_doc(s)?;
-    if s.active().is_some_and(|d| d.selection.text.is_some() || !d.selection.shapes.is_empty()) {
-        Ok(())
-    } else {
-        Err("select text or a shape".into())
-    }
+    if s.active().is_some_and(|d| d.selection.text.is_some() || !d.selection.shapes.is_empty()) { Ok(()) } else { Err(SELECT_TEXT_OR_SHAPE.into()) }
 }
 pub(crate) fn how_to_enable(reason: &str) -> &'static str {
     match reason {
@@ -109,8 +128,8 @@ pub(crate) fn how_to_enable(reason: &str) -> &'static str {
         "no slides" => " slide.new adds one.",
         NOTHING_SELECTED => " It acts on `ids` or on the selected shapes; edit.select {\"ids\": […]} selects shapes.",
         SELECT_TWO => " It acts on `ids` or on the selected shapes; edit.select {\"ids\": […]} selects them.",
-        "no text insertion point" => " text.edit {\"id\": …} starts editing a shape's text.",
-        "select text or a shape" => {
+        NO_TEXT_POINT => " text.edit {\"id\": …} starts editing a shape's text.",
+        SELECT_TEXT_OR_SHAPE => {
             " It acts on the selected text or shapes; shape.insert selects the shape it inserts, edit.select {\"ids\": […]} selects others."
         }
         _ => "",
@@ -195,20 +214,22 @@ pub struct Param<'a> {
     pub optional: bool,
     /// What the doc says of it: its values, unit or remark (`rect|roundRect|…`, `[x,y,w,h] pt`).
     pub about: &'a str,
-    /// An alternative to the parameter before it (`{index} | {id}`, `color? | none?`).
+    /// An alternative to the parameter before it in the same object (`color? | none?`).
     pub or: bool,
+    /// Which of the doc's alternative objects it belongs to: `{index} | {id}` puts id in object 1.
+    pub object: usize,
 }
 
 /// The top-level parameters of a params doc: `{preset, rect?: [x,y,w,h] pt} | {id}` gives preset,
-/// rect (optional, `[x,y,w,h] pt`) and id (an alternative). Text after `→` is the result and is
-/// skipped. Errs where the doc strays from that grammar.
+/// rect (optional, `[x,y,w,h] pt`) and id (in the second object). Text after `→` is the result
+/// and is skipped. Errs where the doc strays from that grammar.
 pub fn parse_params(doc: &str) -> std::result::Result<Vec<Param<'_>>, String> {
     let doc = doc.split('→').next().unwrap_or_default();
     let mut params: Vec<Param> = vec![];
     let mut open: Vec<char> = vec![];
     let mut expect_key = false;
     let mut or = false;
-    let mut objects = 0;
+    let mut objects: usize = 0;
     let mut about_from: Option<usize> = None;
     let mut chars = doc.char_indices().peekable();
     let mut prev = ' ';
@@ -225,7 +246,7 @@ pub fn parse_params(doc: &str) -> std::result::Result<Vec<Param<'_>>, String> {
                 if open == ['{'] {
                     expect_key = true;
                     objects += 1;
-                    or = objects > 1;
+                    or = false;
                 }
             }
             '}' | ']' | ')' => {
@@ -258,7 +279,7 @@ pub fn parse_params(doc: &str) -> std::result::Result<Vec<Param<'_>>, String> {
                     Some(',' | '}' | '|') => None,
                     _ => return Err(format!("`{}` is followed by `{}`", &doc[i..end], rest.chars().take(12).collect::<String>())),
                 };
-                params.push(Param { name: &doc[i..end], optional: after.starts_with('?'), about: "", or });
+                params.push(Param { name: &doc[i..end], optional: after.starts_with('?'), about: "", or, object: objects.saturating_sub(1) });
                 or = false;
                 expect_key = false;
             }
