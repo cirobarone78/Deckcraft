@@ -17,7 +17,7 @@
 35mm Slides	Слайды 35 мм
 @ribbon:Home	Главная
 @ribbon:Insert	Вставка
-@{}: {} PRs, {} commits, +{} / −{} lines (Δ {}), +{} / −{} binary assets, {} – {}	@{}: запросов на вытягивание: {}, коммитов: {}, строк: +{} / −{} (Δ {}), двоичных файлов: +{} / −{}, {} – {}
+@{}: {} PRs, {} commits, +{} / −{} lines (Δ {}), +{} / −{} binary assets, {} – {}	@{}: запросы на слияние: {}, коммитов: {}, строк: +{} / −{} (Δ {}), двоичных файлов: +{} / −{}, {} – {}
 A3 Paper (297x420 mm)	Бумага A3 (297x420 мм)
 A4 Paper (210x297 mm)	Бумага A4 (210x297 мм)
 Aa	Aa
@@ -30,7 +30,7 @@ Accent 3	Акцент 3
 Accent 4	Акцент 4
 Accent 5	Акцент 5
 Accent 6	Акцент 6
-Accessibility Checker	Проверка доступности
+Accessibility Checker	Проверка читаемости
 Across	Поперек
 Action	Действие
 Action Button: Custom	Кнопка действия: Настраиваемая
@@ -184,7 +184,7 @@ Chart Data	Данные диаграммы
 Chart Design	Конструктор диаграмм
 Chart Elements	Элементы диаграммы
 Chart…	Диаграмма…
-Check Accessibility	Проверить доступность
+Check Accessibility	Проверить читаемость
 Check\nAccessibility	Проверить доступность
 Checkerboard	Шахматная доска
 Chevron	Шеврон
@@ -539,7 +539,7 @@ Hierarchy	Иерархия
 High	Высокий
 Highlighter	Маркер
 Histogram	Гистограмма
-Home	Главный экран
+Home	Главная
 Honeycomb	Соты
 Horizontal	Горизонтально
 Horz In	Горизонтально внутрь
@@ -579,9 +579,9 @@ Insert\nLayout	Вставить макет
 Insert\nLeft	Вставить слева
 Insert\nPlaceholder	Вставить заполнитель
 Insert\nRight	Вставить справа
-Inspect Presentation	Данные презентации
-Inspect Shape	Данные фигуры
-Inspect Slide	Данные слайда
+Inspect Presentation	Сведения о презентации
+Inspect Shape	Сведения о фигуре
+Inspect Slide	Сведения о слайде
 Interface Language	Язык интерфейса
 Interface language:	Язык интерфейса:
 Interface size	Размер интерфейса
@@ -693,7 +693,7 @@ No Outline	Нет контура
 No Reflection	Нет отражения
 No Shadow	Нет тени
 No Soft Edges	Нет размытия краев
-No accessibility issues found. People with disabilities should not have difficulty reading this document.	Проблем с доступностью не найдено. Людям с инвалидностью не должно быть трудно читать этот документ.
+No accessibility issues found. People with disabilities should not have difficulty reading this document.	Проблем с читаемостью не найдено. У людей с ограниченными возможностями не должно возникнуть трудностей при чтении этой презентации.
 No comments on this slide.	На этом слайде нет комментариев.
 No contributor data was built into this copy.	В эту копию не встроены данные об участниках.
 No fill	Нет заливки
@@ -998,7 +998,7 @@ Show/Hide	Показать/скрыть
 Show\nComments	Показать комментарии
 Shred	Измельчение
 Shrink & Turn	Уменьшение и поворот
-Shrink text on overflow	Свернуть текст при переполнении
+Shrink text on overflow	Сжимать текст при переполнении
 Simple Frame, White	Простая рамка, белая
 Size	Размер
 Size & Properties	Размер и свойства
@@ -1095,7 +1095,7 @@ Switch	Переключение
 Swivel	Поворот
 Symbol	Символ
 System language	Системный язык
-Tab	Табуляция
+Tab	Tab
 Table	Таблица
 Table Design	Конструктор таблиц
 Table Style Options	Параметры стиля таблицы
