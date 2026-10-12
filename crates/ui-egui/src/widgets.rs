@@ -33,9 +33,23 @@ pub fn big_button(ui: &mut Ui, icon: Icon, label: &str, enabled: bool) -> Respon
 
 /// Large button; with `split`, the label row is a separate dropdown target (returns its response).
 pub fn big_button_ex(ui: &mut Ui, icon: Icon, label: &str, enabled: bool, split: bool, selected: bool) -> (Response, Option<Response>) {
+    let normalized = if label.contains('\n') { Some(label.replace('\n', " ")) } else { None };
+    let tr_label = if label.is_empty() {
+        ""
+    } else {
+        let direct = crate::i18n::t(label);
+        if direct != label {
+            direct
+        } else if let Some(ref norm) = normalized {
+            let clean = crate::i18n::t(norm);
+            if clean != norm.as_str() { clean } else { direct }
+        } else {
+            direct
+        }
+    };
     let t = Tokens::get(ui.ctx());
     let font = theme::font(11.0);
-    let lines: Vec<&str> = wrap_label(label);
+    let lines: Vec<&str> = wrap_label(tr_label);
     let text_w = lines.iter().map(|l| ui.fonts_mut(|f| f.layout_no_wrap(l.to_string(), font.clone(), t.text).size().x)).fold(0.0f32, f32::max);
     let w = (text_w + 10.0 + if split && lines.len() == 1 { 10.0 } else { 0.0 }).max(40.0);
     let (rect, resp) = ui.allocate_exact_size(vec2(w, RIBBON_H - 2.0), if enabled { Sense::click() } else { Sense::hover() });
@@ -111,9 +125,10 @@ pub fn small_button(ui: &mut Ui, icon: Icon, label: &str, enabled: bool, selecte
 }
 
 pub fn small_button_ex(ui: &mut Ui, icon: Icon, label: &str, enabled: bool, selected: bool, split: bool) -> (Response, Option<Response>) {
+    let tr_label = if label.is_empty() { "" } else { crate::i18n::t(label) };
     let t = Tokens::get(ui.ctx());
     let font = theme::font(12.0);
-    let tw = if label.is_empty() { 0.0 } else { ui.fonts_mut(|f| f.layout_no_wrap(label.to_string(), font.clone(), t.text).size().x) + 5.0 };
+    let tw = if tr_label.is_empty() { 0.0 } else { ui.fonts_mut(|f| f.layout_no_wrap(tr_label.to_string(), font.clone(), t.text).size().x) + 5.0 };
     let arrow_w = if split { 12.0 } else { 0.0 };
     let w = 24.0 + tw + arrow_w;
     let (rect, resp) = ui.allocate_exact_size(vec2(w, 22.0), if enabled { Sense::click() } else { Sense::hover() });
@@ -137,8 +152,8 @@ pub fn small_button_ex(ui: &mut Ui, icon: Icon, label: &str, enabled: bool, sele
         painter.rect_filled(Rect::from_min_max(pos2(rect.max.x - arrow_w, rect.min.y), rect.max), CornerRadius::same(4), c);
     }
     icons::paint(&painter, Rect::from_center_size(pos2(rect.min.x + 12.0, rect.center().y), vec2(17.0, 17.0)), icon, t.text, !enabled);
-    if !label.is_empty() {
-        painter.text(pos2(rect.min.x + 24.0, rect.center().y), Align2::LEFT_CENTER, label, font, if enabled { t.text } else { t.text_faint });
+    if !tr_label.is_empty() {
+        painter.text(pos2(rect.min.x + 24.0, rect.center().y), Align2::LEFT_CENTER, tr_label, font, if enabled { t.text } else { t.text_faint });
     }
     if split {
         chevron(&painter, pos2(rect.max.x - 6.0, rect.center().y), 2.8, t.text_dim);

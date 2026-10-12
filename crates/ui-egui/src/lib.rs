@@ -11,6 +11,7 @@ pub mod control;
 pub mod credits;
 pub mod dialogs;
 pub mod fillui;
+pub mod i18n;
 pub mod icons;
 pub mod media;
 pub mod menus;
@@ -75,6 +76,7 @@ pub enum ViewMode {
 #[derive(Clone, Debug, Serialize, Deserialize)]
 #[serde(default, rename_all = "camelCase")]
 pub struct UiState {
+    pub language: String,
     pub brightness: theme::Brightness,
     pub tab: String,
     pub ribbon_collapsed: bool,
@@ -103,6 +105,7 @@ pub struct UiState {
 impl Default for UiState {
     fn default() -> Self {
         UiState {
+            language: i18n::AUTO.into(),
             brightness: theme::Brightness::Light,
             tab: "Home".into(),
             ribbon_collapsed: false,
@@ -530,6 +533,8 @@ impl SlideApp {
 
     /// Per-frame logic before layout: styles, control requests, screenshots, shortcuts.
     pub fn logic(&mut self, ctx: &egui::Context) {
+        let lang = i18n::Lang::from_pref(&self.ui.language);
+        i18n::set_current(lang);
         let scale = self.ui.ui_scale.clamp(0.5, 3.0);
         if (ctx.zoom_factor() - scale).abs() > 1e-3 {
             ctx.set_zoom_factor(scale);
@@ -607,8 +612,14 @@ impl SlideApp {
 
     /// Keyboard and clipboard for the slide (when no text field has focus).
     fn keyboard(&mut self, ctx: &egui::Context) {
-        if ctx.memory(|m| m.focused().is_some()) || self.dialog.as_ref().is_some_and(|d| d.modal()) || self.palette.is_some() {
+        if ctx.text_edit_focused() || self.dialog.as_ref().is_some_and(|d| d.modal()) || self.palette.is_some() {
             return;
+        }
+        if self.session.active().is_some() && self.dialog.is_none() && self.palette.is_none() {
+            ctx.memory_mut(|m| {
+                m.move_focus(egui::FocusDirection::None);
+                m.stop_text_input();
+            });
         }
         let events = ctx.input(|i| i.events.clone());
         if self.home_open() {
@@ -937,5 +948,36 @@ mod tests {
         let mut app = SlideApp::new(Session::new(), Services::default());
         app.run("app.home", json!({})).unwrap();
         assert!(!app.home_open() && app.home.is_none(), "with nothing open the start screen shows anyway");
+    }
+
+    #[test]
+    fn tab_during_text_edit_does_not_break_typing() {
+        let mut harness = egui_kittest::Harness::builder().with_size(egui::vec2(1200.0, 800.0)).build_ui_state(
+            |ui, app: &mut SlideApp| {
+                app.logic(ui.ctx());
+                app.ui(ui);
+            },
+            SlideApp::new(Session::with_new(), Services::default()),
+        );
+        harness.run_steps(2);
+        let title = harness.state().session.active().unwrap().doc.slides[0].shapes[0].id.0;
+        harness.state_mut().session.execute("text.edit", &json!({"id": title})).unwrap();
+        harness.run_steps(1);
+
+        harness.event(egui::Event::Text("hello".into()));
+        harness.run_steps(1);
+        assert_eq!(title_text(harness.state()), "hello");
+
+        harness.key_press(egui::Key::Tab);
+        harness.run_steps(1);
+        assert!(harness.ctx.memory(|m| m.focused().is_none()), "Tab during slide editing does not steal focus to egui widgets");
+
+        harness.key_press(egui::Key::Space);
+        harness.event(egui::Event::Text(" ".into()));
+        harness.run_steps(1);
+
+        harness.event(egui::Event::Text("world".into()));
+        harness.run_steps(1);
+        assert_eq!(title_text(harness.state()), "hello\t world");
     }
 }

@@ -1,0 +1,566 @@
+# DeckCraft Italian Interface Translation Catalog
+# Format: context<TAB>source<TAB>translation
+# (Empty context for general strings)
+
+	Home	Home
+	Insert	Inserisci
+	Draw	Disegno
+	Design	Progettazione
+	Transitions	Transizioni
+	Animations	Animazioni
+	Slide Show	Presentazione
+	Record	Registra
+	Review	Revisione
+	View	Visualizza
+	Slide Master	Schema diapositiva
+	Shape Format	Formato forma
+	Picture Format	Formato immagine
+	Table Design	Struttura tabella
+	Layout	Layout
+	Chart Design	Struttura grafico
+	Playback	Riproduzione
+
+	File	File
+	Save	Salva
+	Save As…	Salva con nome…
+	Open…	Apri…
+	Close	Chiudi
+	Export…	Esporta…
+	Preferences	Preferenze
+	Preferences…	Preferenze…
+	About DeckCraft	Informazioni su DeckCraft
+	Quit	Esci
+	Done	Fine
+	Cancel	Annulla
+	OK	OK
+	Apply	Applica
+	Delete	Elimina
+	Rename	Rinomina
+
+	Undo	Annulla
+	Redo	Ripeti
+	Cut	Taglia
+	Copy	Copia
+	Paste	Incolla
+	Select All	Seleziona tutto
+	Duplicate	Duplica
+
+	New Slide	Nuova diapositiva
+	Delete Slide	Elimina diapositiva
+	Duplicate Slide	Duplica diapositiva
+	Hide Slide	Nascondi diapositiva
+	Slide Size	Dimensioni diapositiva
+	Format Background…	Formato sfondo…
+
+	Normal	Normale
+	Outline View	Visualizzazione struttura
+	Slide Sorter	Sequenza diapositive
+	Notes Page	Pagina note
+	Reading View	Visualizzazione lettura
+	Notes	Note
+	Ruler	Righello
+	Gridlines	Griglia
+	Guides	Guide
+	Fit to Window	Adatta alla finestra
+	Zoom	Zoom
+	Zoom In	Zoom avanti
+	Zoom Out	Zoom indietro
+	Dark Mode	Modalità scura
+	Grayscale	Gradazioni di grigio
+	Presenter View	Visualizzazione relatore
+	End Show	Fine presentazione
+
+	Text Box	Casella di testo
+	Shapes	Forme
+	Pictures	Immagini
+	Picture from File…	Immagine da file…
+	Table	Tabella
+	Audio	Audio
+	Audio from File…	Audio da file…
+	Video	Video
+	Video from File…	Video da file…
+	Chart	Grafico
+	SmartArt	SmartArt
+	Hyperlink	Collegamento
+	Insert Hyperlink	Inserisci collegamento
+	Symbol	Simbolo
+	Equation	Equazione
+	Comment	Commento
+	New Comment	Nuovo commento
+
+	Task Pane	Riquadro attività
+	Comments	Commenti
+	Selection Pane	Riquadro di selezione
+	Animation Pane	Riquadro animazione
+
+	General	Generale
+	Editing	Modifica
+	Dark appearance	Aspetto scuro
+	Interface size	Dimensioni interfaccia
+	Show smart guides	Mostra guide intelligenti
+	Snap objects to grid	Blocca oggetti sulla griglia
+	Replace straight quotes with smart quotes	Sostituisci virgolette dritte con virgolette curve
+	AutoCorrect as you type	Correzione automatica durante la digitazione
+	Your name (comments):	Nome utente (commenti):
+	Present	Presenta
+	Reset	Reimposta
+	Section	Sezione
+	Format	Formato
+	Arrange	Disponi
+	Quick Styles	Stili veloci
+	Shape Fill	Riempimento forma
+	Shape Outline	Contorno forma
+	Shape Effects	Effetti forma
+	Design Ideas	Idee per progetti
+	Picture	Immagine
+
+	New presentation	Nuova presentazione
+	Back to	Torna a
+	Blank Presentation	Presentazione vuota
+	Recent	Recenti
+	Open the sample deck	Apri presentazione di esempio
+	Join the ArtCraft community on Discord	Unisciti alla community di ArtCraft su Discord
+
+	Click to add title	Fare clic per inserire il titolo
+	Click to add subtitle	Fare clic per inserire il sottotitolo
+	Click to add text	Fare clic per inserire il testo
+	Click icon to add chart	Fare clic sull'icona per inserire un grafico
+	Click icon to add table	Fare clic sull'icona per inserire una tabella
+	Click icon to add SmartArt graphic	Fare clic sull'icona per inserire elementi grafici SmartArt
+	Click icon to add media	Fare clic sull'icona per inserire un elemento multimediale
+	Click icon to add picture	Fare clic sull'icona per inserire un'immagine
+
+	Slide {n} of {total}	Diapositiva {n} di {total}
+	Fit slide to current window	Adatta diapositiva alla finestra corrente
+	Click to add notes	Fare clic per inserire le note
+	Presentation{n}	Presentazione {n}
+	Edited	Modificato
+	Light/Dark appearance	Aspetto chiaro/scuro
+	Search commands (⇧⌘P)	Cerca comandi (⇧⌘P)
+
+	Black Pen	Penna nera
+	Red Pen	Penna rossa
+	Blue Pen	Penna blu
+	Pencil	Matita
+	Highlighter	Evidenziatore
+	Eraser	Gomma
+	Select	Seleziona
+	Ink to Shape	Da input penna a forma
+	Ink to Text	Da input penna a testo
+	Ink to Math	Da input penna a formula matematica
+
+	Preview	Anteprima
+	Subtle	Leggera
+	Exciting	Accattivante
+	Dynamic Content	Contenuto dinamico
+	Effect Options	Opzioni effetto
+	Duration:	Durata:
+	On Mouse Click	Con un clic del mouse
+	After:	Dopo:
+	Apply To All	Applica a tutte
+	From Left	Da sinistra
+	From Right	Da destra
+	From Top	Dall'alto
+	From Bottom	Dal basso
+	Horizontal	Orizzontale
+	Vertical	Verticale
+	In	Verso l'interno
+	Out	Verso l'esterno
+
+	Entrance	Entrata
+	Emphasis	Enfasi
+	Exit	Uscita
+	Motion Paths	Percorsi di animazione
+	Motion	Movimento
+	Start:	Inizio:
+	Delay:	Ritardo:
+	On Click	Al clic
+	With Previous	Con precedente
+	After Previous	Dopo precedente
+	Add Animation	Aggiungi animazione
+	Trigger	Trigger
+	Animation Painter	Copia animazione
+	As One Object	Come unico oggetto
+	By Paragraph	Per paragrafo
+	On Click of… (none)	Al clic di… (nessuno)
+	On Click of {name}	Al clic di {name}
+
+	Play from Start	Dall'inizio
+	Play from Current Slide	Dalla diapositiva corrente
+	Custom Show	Presentazione personalizzata
+	Set Up Slide Show	Imposta presentazione
+	Rehearse Timings	Prova intervalli
+	Use Timings	Usa intervalli
+	Play Narrations	Riproduci narrazioni
+	Show Media Controls	Mostra controlli multimediali
+
+	Cameo	Cameo
+	From Beginning	Dall'inizio
+	From Current Slide	Dalla diapositiva corrente
+	Learn More	Altre informazioni
+
+	Spelling	Controllo ortografico
+	Thesaurus	Sinonimi
+	Check Accessibility	Verifica accessibilità
+	Translate	Traduci
+	Show Comments	Mostra commenti
+
+	Handout Master	Schema stampati
+	Notes Master	Schema note
+
+	Screenshot	Schermata
+	Icons	Icone
+	Action	Azione
+	Header & Footer	Intestazione e piè di pagina
+	WordArt	WordArt
+	Date & Time	Data e ora
+	Slide Number	Numero diapositiva
+	Insert Table	Inserisci tabella
+	Insert Table…	Inserisci tabella…
+	{cols}x{rows} Table	Tabella {cols}x{rows}
+
+	Colors	Colori
+	Fonts	Caratteri
+	Background Styles	Stili sfondo
+	Standard (4:3)	Standard (4:3)
+	Widescreen (16:9)	Widescreen (16:9)
+	Page Setup…	Imposta pagina…
+	Reset Slide Background	Reimposta sfondo diapositiva
+	Style {n}	Stile {n}
+
+	Paste and Match Formatting	Incolla e mantieni solo il testo
+	Paste Formatting	Incolla formattazione
+	Duplicate Selected Slides	Duplica diapositive selezionate
+	Slides from Outline…	Diapositive dalla struttura…
+	Add Section	Aggiungi sezione
+	Remove All Sections	Rimuovi tutte le sezioni
+
+	None	Nessuno
+	Bullet	Punto elenco
+	Numbering	Numerazione
+	Decrease List Level	Riduci livello elenco
+	Increase List Level	Aumenta livello elenco
+	Line Spacing	Interlinea
+	Line Spacing Options…	Opzioni interlinea…
+	Columns	Colonne
+	1 Column	1 colonna
+	{n} Columns	{n} colonne
+	Text Direction	Orientamento testo
+	Rotate all text 90°	Ruota tutto il testo di 90°
+	Rotate all text 270°	Ruota tutto il testo di 270°
+	Stacked	In pila
+	Align Text	Allinea testo
+	Top	In alto
+	Middle	Al centro
+	Bottom	In basso
+	Justify	Giustifica
+	Center	Al centro
+	Align Left	Allinea a sinistra
+	Align Right	Allinea a destra
+
+	Increase Font Size	Aumenta dimensioni carattere
+	Decrease Font Size	Riduci dimensioni carattere
+	Clear All Formatting	Cancella tutta la formattazione
+	Bold	Grassetto
+	Italic	Corsivo
+	Underline	Sottolineato
+	Strikethrough	Barrato
+	Superscript	Apice
+	Subscript	Pedice
+	Character Spacing	Spaziatura tra caratteri
+	Very Tight	Molto stretta
+	Tight	Stretta
+	Loose	Larga
+	Very Loose	Molto larga
+	Change Case	Maiuscole/minuscole
+	Sentence case.	Normale
+	lowercase	tutto minuscole
+	UPPERCASE	TUTTO MAIUSCOLE
+	Capitalize Each Word	Iniziali Maiuscole
+	tOGGLE cASE	iNVERTI mAIUSCOLE/mINUSCOLE
+	Text Highlight Color	Colore evidenziatore testo
+	Font Color	Colore carattere
+
+	Lines	Linee
+	Rectangles	Rettangoli
+	Basic Shapes	Forme di base
+	Block Arrows	Frecce ad arco
+	Equation Shapes	Forme per equazioni
+	Flowchart	Diagramma di flusso
+	Stars and Banners	Stelle e decorazioni
+	Callouts	Callout
+	Action Buttons	Pulsanti di azione
+
+	Clustered Column	Istogramma a colonne raggruppate
+	Stacked Column	Istogramma a colonne in pila
+	100% Stacked Column	Istogramma a colonne 100% in pila
+	Clustered Bar	Barre raggruppate
+	Stacked Bar	Barre in pila
+	Percent Bar	Barre 100% in pila
+	Line	Linee
+	Line Markers	Linee con indicatori
+	Stacked Line	Linee in pila
+	Area	Area
+	Stacked Area	Area in pila
+	Pie	Torta
+	Doughnut	Anello
+	Scatter	Dispersione
+	Bubble	Bolle
+	Radar	Radar
+	FilledRadar	Radar a schermo intero
+	Stock	Azionario
+	Surface	Superficie
+	Histogram	Istogramma
+	Pareto	Pareto
+	BoxWhisker	Riquadro e baffi
+	Waterfall	Cascata
+	Funnel	Imbuto
+	Treemap	Mappa ad albero
+	Sunburst	Mappa circolare
+	Combo	Combinato
+
+	Order Objects	Disponi oggetti
+	Bring to Front	Porta in primo piano
+	Send to Back	Porta in secondo piano
+	Bring Forward	Porta avanti
+	Send Backward	Porta indietro
+	Group Objects	Raggruppa oggetti
+	Group	Raggruppa
+	Ungroup	Separa
+	Regroup	Riraggruppa
+	Position Objects	Posiziona oggetti
+	Align	Allinea
+	Rotate	Ruota
+	Align Center	Allinea al centro
+	Align Top	Allinea in alto
+	Align Middle	Allinea al centro verticalmente
+	Align Bottom	Allinea in basso
+	Distribute Horizontally	Distribuisci orizzontalmente
+	Distribute Vertically	Distribuisci verticalmente
+	Rotate Right 90°	Ruota a destra di 90°
+	Rotate Left 90°	Ruota a sinistra di 90°
+	Flip Vertical	Capovolgi verticalmente
+	Flip Horizontal	Capovolgi orizzontalmente
+	Selection Pane…	Riquadro di selezione…
+
+	Weight	Spessore
+	Dashes	Tratteggio
+	Arrows	Frecce
+	Solid	Continua
+	Round Dot	Punti tondi
+	Square Dot	Punti quadrati
+	Dash	Trattino
+	Dash Dot	Trattino punto
+	Long Dash	Trattino lungo
+	Long Dash Dot	Trattino lungo punto
+	Arrow at end	Freccia alla fine
+	Arrow at start	Freccia all'inizio
+	Arrows at both ends	Frecce a entrambe le estremità
+	Stealth end	Estremità a freccia
+	Oval ends	Estremità ovali
+
+	Shadow	Ombreggiatura
+	No Shadow	Nessuna ombreggiatura
+	Outer	Esterna
+	Centered	Al centro
+	Inner	Interna
+	Perspective	Prospettiva
+	Reflection	Riflesso
+	No Reflection	Nessun riflesso
+	Tight Reflection	Riflesso ravvicinato
+	Half	Metà
+	Full	Completo
+	Glow	Alone
+	No Glow	Nessun alone
+	{r} pt glow	Alone {r} pt
+	Soft Edges	Bordi sfumati
+	No Soft Edges	Nessun bordo sfumato
+	Bevel	Rilievo
+	Format Shape…	Formato forma…
+
+	Edit Shape	Modifica forma
+	Change Shape	Cambia forma
+	Merge Shapes	Unisci forme
+	Shape Styles	Stili forma
+	Text Fill	Riempimento testo
+	Text Outline	Contorno testo
+	Text Effects	Effetti testo
+	Alt Text	Testo alternativo
+	Format Pane	Riquadro formato
+	Height:	Altezza:
+	Width:	Larghezza:
+	Remove Background	Rimuovi sfondo
+	Corrections	Correzioni
+	Color	Colore
+	Transparency	Trasparenza
+	Change Picture	Cambia immagine
+	Reset Picture	Reimposta immagine
+	Picture Styles	Stili immagine
+	Crop	Ritaglia
+	Crop to Shape	Ritaglia su forma
+	Crop 10% each side	Ritaglia 10% per lato
+	Crop 20% each side	Ritaglia 20% per lato
+	Reset Crop	Reimposta ritaglio
+	Simple Frame, White	Cornice semplice, bianca
+	Drop Shadow Rectangle	Rettangolo con ombreggiatura
+	Rounded Diagonal Corner	Angolo diagonale arrotondato
+	Soft Edge Rectangle	Rettangolo a bordi sfumati
+	Reflected Rounded Rectangle	Rettangolo arrotondato riflesso
+	Oval	Ovale
+
+	Header Row	Riga di intestazione
+	Total Row	Riga totale
+	Banded Rows	Righe alternate
+	First Column	Prima colonna
+	Last Column	Ultima colonna
+	Banded Columns	Colonne alternate
+	Shading	Sfondo
+
+	Insert Above	Inserisci sopra
+	Insert Below	Inserisci sotto
+	Insert Left	Inserisci a sinistra
+	Insert Right	Inserisci a destra
+	Delete Columns	Elimina colonne
+	Delete Rows	Elimina righe
+	Delete Table	Elimina tabella
+	Merge Cells	Unisci celle
+	Split Cells	Dividi celle
+	Distribute Rows	Distribuisci righe
+	Distribute Columns	Distribuisci colonne
+
+	Change Chart Type	Cambia tipo di grafico
+	Edit Data	Modifica dati
+
+	Trim	Taglia
+	Start Automatically	Avvia automaticamente
+	Play Across Slides	Riproduci tra diapositive
+	Loop until Stopped	Ripeti fino all'interruzione
+	Hide During Show	Nascondi durante la presentazione
+	Rewind after Playing	Riavvolgi dopo la riproduzione
+	Play Full Screen	Riproduci a schermo intero
+	Volume	Volume
+	Low	Basso
+	Medium	Medio
+	High	Alto
+	Mute	Disattiva audio
+
+	Insert Layout	Inserisci layout
+	Close Master View	Chiudi visualizzazione schema
+	Insert Placeholder	Inserisci segnaposto
+	Content	Contenuto
+	Text	Testo
+
+	Number of columns:	Numero di colonne:
+	Number of rows:	Numero di righe:
+	Slides sized for:	Diapositive ridimensionate per:
+	Custom	Personalizzato
+	Width (in):	Larghezza (pollici):
+	Height (in):	Altezza (pollici):
+	Maximize content (else ensure fit)	Massimizza contenuto (altrimenti adatta)
+	Header and Footer	Intestazione e piè di pagina
+	Slides	Diapositive
+	Notes and Handouts	Note e stampati
+	Include on slide	Includi nella diapositiva
+	Date and time	Data e ora
+	Slide number	Numero di diapositiva
+	Footer	Piè di pagina
+	Don't show on title slide	Non mostrare sulla diapositiva titolo
+	Apply to All	Applica a tutte
+	Link to:	Collega a:
+	Existing File or Web Page	File o pagina Web esistente
+	Place in This Document	Inserisci nel documento
+	Address:	Indirizzo:
+	Text to display:	Testo da visualizzare:
+	First Slide	Prima diapositiva
+	Last Slide	Ultima diapositiva
+	Next Slide	Diapositiva successiva
+	Previous Slide	Diapositiva precedente
+	Show type:	Tipo di presentazione:
+	Presented by a speaker (full screen)	Presentata da un relatore (schermo intero)
+	Browsed by an individual (window)	Esaminata da un singolo individuo (finestra)
+	Browsed at a kiosk (full screen)	Presentazione continua (schermo intero)
+	Show slides:	Mostra diapositive:
+	All	Tutte
+	From:	Da:
+	To:	A:
+	Loop continuously until 'Esc'	Ripeti ciclo continuo fino a 'ESC'
+	Show without narration	Mostra senza narrazione
+	Show without animation	Mostra senza animazione
+	Zoom to:	Zoom a:
+	Percent:	Percentuale:
+	Reply	Rispondi
+	Add a reply…	Aggiungi una risposta…
+	Title	Titolo
+	Description	Descrizione
+	Mark as decorative	Contrassegna come elemento decorativo
+	Choose a text or outline file:	Scegli un file di testo o struttura:
+	Section name:	Nome sezione:
+	Shape name:	Nome forma:
+	Layout name:	Nome layout:
+	Alignment:	Allineamento:
+	Indentation:	Rientro:
+	Before text:	Prima del testo:
+	Special:	Speciale:
+	Spacing:	Spaziatura:
+	Before:	Prima:
+	Line spacing:	Interlinea:
+	At:	A:
+	pt	pt
+	lines	righe
+	Appearance	Aspetto
+	System default	Predefinito di sistema
+	Choose export format:	Scegli formato di esportazione:
+	Export	Esporta
+	Include hidden slides	Includi diapositive nascoste
+	Search symbols:	Cerca simboli:
+	Font:	Carattere:
+	Insert equation:	Inserisci equazione:
+	Fraction	Frazione
+	Script	Indice
+	Radical	Radicale
+	Integral	Integrale
+	Large Operator	Operatore grande
+	Bracket	Parentesi
+	Function	Funzione
+	Accent	Accento
+	Limit and Log	Limite e logaritmo
+	Operator	Operatore
+	Matrix	Matrice
+	Complete	Completato
+	No errors found	Nessun errore trovato
+	Accessibility Checker	Controllo accessibilità
+	Custom Shows	Presentazioni personalizzate
+	New…	Nuova…
+	Edit…	Modifica…
+	Chart Data	Dati grafico
+	Trim Media	Taglia elemento multimediale
+	Start time (seconds):	Ora di inizio (secondi):
+	End time (seconds):	Ora di fine (secondi):
+	Choose a SmartArt Graphic	Scegli elemento grafico SmartArt
+	List	Elenco
+	Process	Processo
+	Cycle	Ciclo
+	Hierarchy	Gerarchia
+	Relationship	Relazione
+	Pyramid	Piramide
+	Save changes to presentation before quitting?	Salvare le modifiche alla presentazione prima di uscire?
+	Save and Quit	Salva ed esci
+	Discard	Non salvare
+
+	Title Slide	Diapositiva titolo
+	Title and Content	Titolo e contenuto
+	Section Header	Intestazione sezione
+	Two Content	Due contenuti
+	Comparison	Confronto
+	Title Only	Solo titolo
+	Blank	Vuota
+	Content with Caption	Contenuto con didascalia
+	Picture with Caption	Immagine con didascalia
+
+	Do you want to save the changes you made to {what}?	Salvare le modifiche apportate a {what}?
+	Your changes will be lost if you don't save them.	Se non salvi, le modifiche andranno perse.
+	{n} presentations	{n} presentazioni
+	Don't Save	Non salvare
+	Language:	Lingua:
+	Language	Lingua
+	Follow system	Usa impostazioni di sistema

@@ -88,7 +88,16 @@ impl Textures {
         }
         let t0 = crate::now_ms();
         let scale = size.0 as f64 / p.slide_size.width.max(1.0);
-        let opts = RenderOpts { scale, edit, gif_times, threads: threads(), size: Some(size), ..Default::default() };
+        let prompt_translator = |kind: deckcraft_model::PhType| crate::i18n::t(kind.prompt()).to_string();
+        let opts = RenderOpts {
+            scale,
+            edit,
+            gif_times,
+            threads: threads(),
+            size: Some(size),
+            prompt_fn: Some(&prompt_translator),
+            ..Default::default()
+        };
         let img = deckcraft_render::render_slide(p, index, &opts);
         self.last_render_ms = crate::now_ms() - t0;
         let ci = to_color_image(&img, grayscale);
