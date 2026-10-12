@@ -104,7 +104,7 @@ fn open_bytes(s: &mut Session, p: &Value) -> Result<Value> {
     Ok(json!({"document": i}))
 }
 
-/// Encode the presentation in `format` (`deckcraft`, `pptx`, `outline`).
+/// Encode the presentation in `format` (`deckcraft`, `pptx`, `potx`, `ppsx`, `pdf`, `outline`).
 pub fn save_bytes(doc: &Presentation, format: &str) -> Result<Vec<u8>> {
     if let Some(kind) = deckcraft_pptx::Package::for_extension(format) {
         return deckcraft_pptx::export_as(doc, kind).map_err(|e| EngineError::Other(e.to_string()));

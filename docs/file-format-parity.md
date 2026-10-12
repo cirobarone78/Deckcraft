@@ -18,7 +18,7 @@ PowerPoint opens and saves; Viewer = opens only).
 |---|---|---|---|---|---|
 | `.pptx` presentation | Editor | yes | yes | Broad (see below); never measured on real decks | `crates/pptx/tests/roundtrip.rs`, `sample.rs`, `malformed.rs`, `sniff.rs` (30 tests); opened in PowerPoint by hand 2026-10-06 |
 | `.potx` template | Editor | yes (as a presentation) | yes, with the template content type | `file.saveTemplate` writes it; masters, layouts, text styles, colour-map overrides and header/footer settings round-trip | `crates/pptx/tests/template.rs` |
-| `.ppsx` slide show | Editor | yes (as a presentation) | yes, with the slide-show content type | Doesn't start in show mode | `crates/pptx/tests/template.rs` |
+| `.ppsx` slide show | Editor | yes (as a presentation) | yes, with the slide-show content type | DeckCraft opens one in the editor, not in the slide show | `crates/pptx/tests/template.rs` |
 | `.pptm` / `.potm` / `.ppsm` macro-enabled | Editor | no | no | Should open and keep `vbaProject.bin` without running it | none |
 | `.ppt` / `.pot` / `.pps` 97–2003 binary | Editor | no | no | Owner decision; import only would be enough | none |
 | `.odp` OpenDocument | Editor | no | no | | none |

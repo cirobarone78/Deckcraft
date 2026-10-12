@@ -30,7 +30,7 @@ pub struct Imp<'a> {
     pub next: u32,
     pub slide_by_part: HashMap<String, SlideId>,
     pub custom_show_names: HashMap<String, String>,
-    pub footers: Option<Footers>,
+    pub master_footers: Option<Footers>,
     pub title_footers: Option<Footers>,
 }
 
@@ -243,7 +243,7 @@ pub fn import(bytes: &[u8]) -> Result<Presentation, PptxError> {
         next: max_id.max(1),
         slide_by_part: HashMap::new(),
         custom_show_names: HashMap::new(),
-        footers: None,
+        master_footers: None,
         title_footers: None,
     };
     // Slide ids first so hyperlinks anywhere can point at slides.
@@ -402,7 +402,7 @@ pub fn import(bytes: &[u8]) -> Result<Presentation, PptxError> {
         p.props.company = d.root.child("Company").map(|c| c.text()).unwrap_or_default();
     }
 
-    p.header_footer = header_footer(&p, imp.footers, imp.title_footers);
+    p.header_footer = header_footer(&p, imp.master_footers, imp.title_footers);
     p.media = std::mem::take(&mut imp.media);
     p.next_id = imp.next;
     p.fix_next_id();
@@ -472,8 +472,8 @@ fn read_master(imp: &mut Imp, path: &str, doc: &Doc, docs: &HashMap<String, Doc>
     if m.name.is_empty() {
         m.name = m.theme.name.clone();
     }
-    if imp.footers.is_none() {
-        imp.footers = root.child("hf").map(header_footer_flags);
+    if imp.master_footers.is_none() {
+        imp.master_footers = root.child("hf").map(header_footer_flags);
     }
     if let Some(ts) = root.child("txStyles") {
         if let Some(s) = ts.child("titleStyle") {
@@ -691,8 +691,9 @@ fn read_core(root: &El, p: &mut Properties) {
     }
 }
 
-/// The header and footer settings: the master's `p:hf`, the footer placeholders the slides show,
-/// and the footer text of the slides, else of the master.
+/// The header and footer settings: the master's `p:hf` and the footer placeholders the slides
+/// show, "not on the title slide" from the title layout's `p:hf`, and the footer and fixed date
+/// text of the slides, else of the master.
 fn header_footer(p: &Presentation, master: Option<Footers>, title: Option<Footers>) -> HeaderFooter {
     let mut hf = HeaderFooter::default();
     if let Some(f) = master {

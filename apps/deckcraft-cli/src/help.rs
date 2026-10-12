@@ -35,7 +35,7 @@ slide. Prints each image's path and size.
         name: "convert",
         usage: "convert IN OUT",
         summary: "save a presentation in the format OUT's extension names",
-        details: "Opens IN (.deckcraft, .pptx or .potx) and writes it to OUT, in the format OUT's extension names:
+        details: "Opens IN (.deckcraft, .pptx, .potx or .ppsx) and writes it to OUT, in the format OUT's extension names:
 .deckcraft, .pptx, .potx for a PowerPoint template, .ppsx, .pdf, .txt or .md for the outline, .png or
 .jpg for the first slide. Any other extension is written as .deckcraft. Prints OUT.
 
@@ -47,7 +47,7 @@ slide. Prints each image's path and size.
         summary: "run commands on a presentation, then save or export it",
         details: "Runs commands, in order, on one presentation: FILE with --in, the sample presentation with --sample,
 else a new one with an empty title slide. Then --save writes the presentation: .deckcraft keeps
-everything; .pptx, .potx, .pdf and .md (the outline) are written as convert writes them. --export writes the
+everything; .pptx, .potx, .ppsx, .pdf and .md (the outline) are written as convert writes them. --export writes the
 current slide as .png or .jpg, or the presentation as .pdf or .pptx.
 
 Each --cmd is one command: COMMAND is a command id, then `=`, then the command's parameters as one

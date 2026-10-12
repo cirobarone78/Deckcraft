@@ -106,13 +106,13 @@ pub fn fit_text_box(s: &mut Session, id: ShapeId) -> Result<()> {
         return Ok(());
     }
     let x = xfrm_of(&doc, &sel, &sh);
-    let geo = deckcraft_render::shape_geometry(&sh, x.w, x.h);
+    let geo = deckcraft_render::inherited_geometry(&ctx, &sh, x.w, x.h);
     let fields = deckcraft_text::NoFields;
     let mut nx = x;
     if bp.wrap == Some(false) {
         nx.w = deckcraft_text::fit_width(&ctx, &sh, &body, geo.text_rect, &fields).max(20.0);
     }
-    let geo = deckcraft_render::shape_geometry(&sh, nx.w, nx.h);
+    let geo = deckcraft_render::inherited_geometry(&ctx, &sh, nx.w, nx.h);
     let need = deckcraft_text::fit_height(&ctx, &sh, &body, geo.text_rect, &fields);
     let extra = (nx.h - geo.text_rect.height()).max(0.0);
     nx.h = (need + extra).max(8.0);
@@ -140,6 +140,14 @@ pub(crate) fn ctx_for<'a>(doc: &'a Presentation, sel: &Selection) -> Option<Ctx<
     }
 }
 
+/// Where a shape of the edited tree draws its text, at size `w` × `h`.
+pub fn text_rect(st: &DocState, sh: &deckcraft_model::Shape, w: f64, h: f64) -> deckcraft_geom::Rect {
+    match ctx_for(&st.doc, &st.selection) {
+        Some(ctx) => deckcraft_render::inherited_geometry(&ctx, sh, w, h).text_rect,
+        None => deckcraft_render::shape_geometry(sh, w, h).text_rect,
+    }
+}
+
 /// Lay out the text being edited (for vertical caret movement and hit testing).
 pub fn layout_for(st: &DocState, t: &TextSel) -> Option<deckcraft_text::TextLayout> {
     if t.notes || t.cell.is_some() {
@@ -149,7 +157,7 @@ pub fn layout_for(st: &DocState, t: &TextSel) -> Option<deckcraft_text::TextLayo
     let body = sh.text.as_ref()?;
     let ctx = ctx_for(&st.doc, &st.selection)?;
     let x = xfrm_of(&st.doc, &st.selection, sh);
-    let geo = deckcraft_render::shape_geometry(sh, x.w, x.h);
+    let geo = deckcraft_render::inherited_geometry(&ctx, sh, x.w, x.h);
     Some(deckcraft_text::layout(
         &ctx,
         sh,
@@ -564,13 +572,19 @@ fn get(s: &mut Session, p: &Value) -> Result<Value> {
     Ok(json!({"text": t.text(), "paragraphs": t.paragraphs.iter().map(|p| json!({"level": p.level, "text": p.text()})).collect::<Vec<_>>()}))
 }
 
-/// Apply run formatting to the text selection (or, when not editing, to all text of the
-/// selected shapes). A caret without a range formats the word it's in (PowerPoint behaviour),
-/// or sets the formatting for what is typed next at a word boundary.
+/// Character formatting: a placeholder's text style in Slide Master view ([`format_style`]),
+/// else the text ([`format_runs`]).
 pub(crate) fn format_run(s: &mut Session, f: &(dyn Fn(&mut RunProps) + Send + Sync)) -> Result<Value> {
     if format_style(s, &|_, ls| f(&mut ls.run))? {
         return ok();
     }
+    format_runs(s, f)
+}
+
+/// Apply run formatting to the text selection (or, when not editing, to all text of the
+/// selected shapes). A caret without a range formats the word it's in (PowerPoint behaviour),
+/// or sets the formatting for what is typed next at a word boundary.
+pub(crate) fn format_runs(s: &mut Session, f: &(dyn Fn(&mut RunProps) + Send + Sync)) -> Result<Value> {
     let st = s.doc()?;
     if let Some(t) = st.selection.text.clone() {
         let (a, b) = format_range(st, &t);
@@ -615,9 +629,10 @@ pub(crate) fn format_run(s: &mut Session, f: &(dyn Fn(&mut RunProps) + Send + Sy
     ok()
 }
 
-/// In Slide Master view, formatting placeholders sets the text style slides inherit: the master's
-/// title or body style, else the placeholder's own. False when the selection isn't placeholders
-/// there.
+/// In Slide Master view, formatting placeholders sets the text style slides inherit. On the
+/// master, its title and body placeholders set the master's title and body styles and the others
+/// their own; on a layout, a placeholder sets its own. False when the selection isn't
+/// placeholders there.
 pub(crate) fn format_style(s: &mut Session, f: &(dyn Fn(u8, &mut LevelStyle) + Send + Sync)) -> Result<bool> {
     let st = s.doc()?;
     if st.selection.target == Target::Slides {
@@ -638,7 +653,7 @@ pub(crate) fn format_style(s: &mut Session, f: &(dyn Fn(u8, &mut LevelStyle) + S
         }
         None => st.selected_shapes().iter().map(|sh| (sh.id, style_levels(sh))).collect(),
     };
-    if picks.is_empty() || !picks.iter().all(|(id, _)| st.shape(*id).is_some_and(|sh| sh.ph.is_some())) {
+    if picks.is_empty() || !picks.iter().all(|(id, _)| st.shapes().iter().any(|sh| sh.id == *id && sh.ph.is_some())) {
         return Ok(false);
     }
     s.edit(|doc, sel| {
@@ -709,7 +724,7 @@ fn format_range(st: &DocState, t: &TextSel) -> (Pos, Pos) {
     (a, b)
 }
 
-/// Link the text being edited: the selection or the word at the caret, as `format_run` would.
+/// Link the text being edited: the selection or the word at the caret, as `format_runs` would.
 /// With nothing to link (caret at a word boundary, empty paragraph) `display` is inserted at the
 /// caret as linked text in the surrounding formatting, as PowerPoint's Insert Hyperlink does.
 pub(crate) fn link_text(s: &mut Session, link: Hyperlink, display: &str) -> Result<Value> {
@@ -717,7 +732,7 @@ pub(crate) fn link_text(s: &mut Session, link: Hyperlink, display: &str) -> Resu
     let Some(t) = st.selection.text.clone() else { return Err(bad("insert.hyperlink", "not editing text")) };
     let (a, b) = format_range(st, &t);
     if a != b {
-        return format_run(s, &move |rp| rp.link = Some(link.clone()));
+        return format_runs(s, &move |rp| rp.link = Some(link.clone()));
     }
     if display.is_empty() {
         return Err(bad("insert.hyperlink", "nothing to link: select text or give `text`"));
@@ -733,8 +748,8 @@ pub(crate) fn link_text(s: &mut Session, link: Hyperlink, display: &str) -> Resu
     ok()
 }
 
-/// Apply paragraph changes to the paragraphs touched by the selection (or all paragraphs of the
-/// selected shapes).
+/// Paragraph formatting: a placeholder's text style in Slide Master view ([`format_style`]),
+/// else the paragraphs ([`format_paragraphs`]).
 pub(crate) fn format_para(s: &mut Session, f: &(dyn Fn(&mut deckcraft_model::text::Paragraph) + Send + Sync)) -> Result<Value> {
     let restyled = format_style(s, &|level, ls| {
         let mut p = deckcraft_model::text::Paragraph { level, props: ls.para.clone(), ..Default::default() };
@@ -747,6 +762,8 @@ pub(crate) fn format_para(s: &mut Session, f: &(dyn Fn(&mut deckcraft_model::tex
     format_paragraphs(s, f)
 }
 
+/// Apply paragraph changes to the paragraphs touched by the selection (or all paragraphs of the
+/// selected shapes).
 pub(crate) fn format_paragraphs(s: &mut Session, f: &(dyn Fn(&mut deckcraft_model::text::Paragraph) + Send + Sync)) -> Result<Value> {
     let st = s.doc()?;
     if let Some(t) = st.selection.text.clone() {

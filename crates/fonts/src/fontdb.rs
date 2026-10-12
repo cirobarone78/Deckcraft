@@ -305,7 +305,8 @@ fn name(font: &skrifa::FontRef<'_>, ids: &[StringId]) -> Option<String> {
     ids.iter().find_map(|id| font.localized_strings(*id).english_or_first().map(|s| s.to_string()).filter(|s| !s.is_empty()))
 }
 
-/// A face's family and style names (the default instance's style for a variable font).
+/// A face's family, per-weight family and style names (the default instance's style for a
+/// variable font).
 fn face_names(f: &skrifa::FontRef<'_>) -> Option<Names> {
     let family = name(f, &[StringId::TYPOGRAPHIC_FAMILY_NAME, StringId::FAMILY_NAME])?;
     let legacy_family = name(f, &[StringId::FAMILY_NAME]).unwrap_or_else(|| family.clone());
@@ -320,7 +321,7 @@ struct Names {
     style: String,
 }
 
-/// (family, style) of every face in the font file at `path`, reading only its table directories
+/// The names of every face in the font file at `path`, reading only its table directories
 /// and `name` tables: a scan opens hundreds of font files, many of them megabytes long. A
 /// variable font is cataloged under its default style; its named instances appear once it loads.
 #[cfg(not(target_arch = "wasm32"))]
@@ -628,7 +629,11 @@ impl FontDb {
         let data = Arc::new(bytes);
         let mut added = 0;
         for (i, names, coords) in enumerate_faces(&data) {
-            if self.read_faces().iter().any(|f| f.family.eq_ignore_ascii_case(&names.family) && f.style.eq_ignore_ascii_case(&names.style)) {
+            if self.read_faces().iter().any(|f| {
+                f.family.eq_ignore_ascii_case(&names.family)
+                    && f.style.eq_ignore_ascii_case(&names.style)
+                    && f.legacy_family.eq_ignore_ascii_case(&names.legacy_family)
+            }) {
                 continue;
             }
             if let Some(f) = make_face(FontBytes::Owned(data.clone()), i, names, coords) {

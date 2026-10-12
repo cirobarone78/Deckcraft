@@ -230,8 +230,11 @@ mod tests {
             let names = [(1, legacy.as_str()), (2, "Regular"), (16, "Test Gothic"), (17, weight)];
             std::fs::write(dir.join(file), renamed(epaint_default_fonts::UBUNTU_LIGHT, &names)).unwrap();
         }
+        let style_linked = [(1, "Test Gothic"), (2, "Bold"), (16, "Test Gothic"), (17, "Bold")];
+        std::fs::write(dir.join("TestGothic-A.ttf"), renamed(epaint_default_fonts::UBUNTU_LIGHT, &style_linked)).unwrap();
         let db = FontDb::with_font_dirs(vec![dir.clone()]);
         db.set_system_fallback(false);
+        assert_eq!(db.face("Test Gothic", "Bold").family, "Test Gothic");
         let by_weight_name = db.face("Test Gothic Bold", "Regular");
         let by_family = db.face("Test Gothic", "Light");
         std::fs::remove_dir_all(&dir).unwrap();

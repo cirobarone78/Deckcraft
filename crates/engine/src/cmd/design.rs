@@ -23,7 +23,7 @@ pub fn specs() -> Vec<CommandSpec> {
             "Format Background",
             ["Design", "Customize"],
             None,
-            "{color? | gradient? | picture?: base64 | pattern?: {preset, fg, bg} | style?: 1..12 | reset?, all?: bool (apply to all), index?} (on a slide master or layout, the dark styles 3, 4, 7, 8, 11 and 12 also turn its text to the theme's light colours)",
+            "{color? | gradient? | picture?: base64 | pattern?: {preset, fg, bg} | style?: 1..12 | reset?, all?: bool (apply to all), index?} (on a slide master or layout, the dark styles 3, 4, 7, 8, 11 and 12 also turn its text to the theme's light colours, and a fill set afterwards keeps that)",
             has_slide,
             background
         ),
@@ -56,7 +56,7 @@ pub fn specs() -> Vec<CommandSpec> {
             "Insert Placeholder",
             ["Slide Master", "Master Layout"],
             None,
-            "{kind?: content|text|picture|chart|table|media|title|subtitle|date|footer|slideNumber, rect?: [x,y,w,h], prompt?: text} (without `rect`, a title, date, footer or slide number sits where the slide master has it)",
+            "{kind?: content|text|picture|chart|table|media|title|subtitle|date|footer|slideNumber, rect?: [x,y,w,h], prompt?: text} (without `rect`, a kind the slide master has (title, text, date, footer, slide number) sits where it has it; on a date, footer or slide number, `prompt` is its text; a layout has one title, date, footer and slide number)",
             has_doc,
             insert_placeholder
         ),
@@ -152,8 +152,8 @@ fn background(s: &mut Session, p: &Value) -> Result<Value> {
     use deckcraft_color::SchemeSlot::{Bg1, Bg2, Tx1, Tx2};
     let template = s.doc()?.selection.target != Target::Slides;
     let mut dark = None;
-    let bg: Option<Background> = if bool_or(p, "reset", false) {
-        dark = Some(false);
+    let reset = bool_or(p, "reset", false);
+    let bg: Option<Background> = if reset {
         None
     } else if let Some(c) = color_param(p, "color") {
         Some(Background::Fill { fill: Fill::solid(c) })
@@ -198,11 +198,16 @@ fn background(s: &mut Session, p: &Value) -> Result<Value> {
                 }
             }
             Target::Layout { master, layout } => {
+                let master_light = doc.masters.get(master).is_none_or(|m| m.color_map.is_empty());
                 if let Some(l) = layout_mut(doc, master, layout) {
                     l.background = bg.clone();
-                    if let Some(dark) = dark {
-                        l.color_map = dark.then(dark_map);
-                    }
+                    l.color_map = match dark {
+                        _ if reset => None,
+                        Some(true) => Some(dark_map()),
+                        Some(false) if master_light => None,
+                        Some(false) => Some(vec![]),
+                        None => l.color_map.take(),
+                    };
                 }
             }
             Target::Slides => {
@@ -339,7 +344,7 @@ fn header_footer(s: &mut Session, p: &Value) -> Result<Value> {
         for i in list {
             place_footers(doc, i, date_text.is_some());
         }
-        if all {
+        if all && (footer_text.is_some() || date_text.is_some()) {
             for m in &mut doc.masters {
                 let m = Arc::make_mut(m);
                 let template = m.shapes.iter_mut().chain(m.layouts.iter_mut().flat_map(|l| l.shapes.iter_mut()));
@@ -360,10 +365,16 @@ fn header_footer(s: &mut Session, p: &Value) -> Result<Value> {
 /// Give slide `i` the date, footer and slide number placeholders the header and footer settings
 /// turn on, and only those.
 pub(crate) fn place_footers(doc: &mut Presentation, i: usize, date_given: bool) {
+    const KINDS: [PhType; 3] = [PhType::Date, PhType::Footer, PhType::SlideNum];
     let hf = doc.header_footer.clone();
     let Some(layout) = doc.slides.get(i).map(|x| x.layout) else { return };
-    let lay = doc.layout(layout).map(|(_, l)| l.clone());
-    let is_title = lay.as_ref().is_some_and(|l| l.kind == deckcraft_model::LayoutType::Title);
+    let (is_title, footers): (bool, Vec<Shape>) = doc
+        .layout(layout)
+        .map(|(_, l)| {
+            let footers = l.shapes.iter().filter(|x| x.ph_type().is_some_and(|k| KINDS.contains(&k))).cloned().collect();
+            (l.kind == deckcraft_model::LayoutType::Title, footers)
+        })
+        .unwrap_or_default();
     let want = |k: PhType| {
         !(hf.hide_on_title && is_title)
             && match k {
@@ -373,38 +384,27 @@ pub(crate) fn place_footers(doc: &mut Presentation, i: usize, date_given: bool) 
                 _ => false,
             }
     };
-    let new_ids: Vec<ShapeId> = (0..3).map(|_| ShapeId(doc.alloc_id())).collect();
+    let Some(present) = doc.slides.get(i).map(|sl| KINDS.map(|k| sl.shapes.iter().any(|x| x.ph_type() == Some(k)))) else { return };
+    let added: Vec<(&Shape, ShapeId)> = KINDS
+        .into_iter()
+        .zip(present)
+        .filter(|(k, has)| !has && want(*k))
+        .filter_map(|(k, _)| footers.iter().find(|lp| lp.ph_type() == Some(k)))
+        .map(|lp| (lp, ShapeId(doc.alloc_id())))
+        .collect();
     let Some(sl) = doc.slides.get_mut(i) else { return };
     let sl = Arc::make_mut(sl);
-    for (n, k) in [PhType::Date, PhType::Footer, PhType::SlideNum].into_iter().enumerate() {
-        let has = sl.shapes.iter().position(|x| x.ph_type() == Some(k));
-        match (has, want(k)) {
-            (Some(pos), false) => {
-                sl.shapes.remove(pos);
-            }
-            (None, true) => {
-                let lp = lay.as_ref().and_then(|l| l.shapes.iter().find(|x| x.ph_type() == Some(k)).cloned());
-                let Some(lp) = lp else { continue };
-                sl.shapes.push(Shape {
-                    id: new_ids.get(n).copied().unwrap_or_default(),
-                    name: lp.name.clone(),
-                    ph: lp.ph.clone(),
-                    text: Some(footer_body(k, &hf)),
-                    ..Default::default()
-                });
-            }
-            (Some(pos), true) if k == PhType::Footer => {
-                if let Some(sh) = sl.shapes.get_mut(pos) {
-                    sh.text = Some(TextBody::from_text(&hf.footer_text));
-                }
-            }
-            (Some(pos), true) if k == PhType::Date && date_given => {
-                if let Some(sh) = sl.shapes.get_mut(pos) {
-                    set_date(sh, &hf.date_text);
-                }
-            }
+    sl.shapes.retain(|x| x.ph_type().is_none_or(|k| !KINDS.contains(&k) || want(k)));
+    for sh in &mut sl.shapes {
+        match sh.ph_type() {
+            Some(PhType::Footer) => sh.text = Some(TextBody::from_text(&hf.footer_text)),
+            Some(PhType::Date) if date_given => set_date(sh, &hf.date_text),
             _ => {}
         }
+    }
+    for (lp, id) in added {
+        let kind = lp.ph_type().unwrap_or_default();
+        sl.shapes.push(Shape { id, name: lp.name.clone(), ph: lp.ph.clone(), text: Some(footer_body(kind, &hf)), ..Default::default() });
     }
 }
 
@@ -601,14 +601,18 @@ fn insert_placeholder(s: &mut Session, p: &Value) -> Result<Value> {
         return Err(bad("master.insertPlaceholder", format!("no placeholder kind `{asked}`; the kinds are {}", kinds.join(", "))));
     };
     let st = s.doc()?;
-    let Target::Layout { master, .. } = st.selection.target else {
+    let Target::Layout { master, layout } = st.selection.target else {
         return Err(bad("master.insertPlaceholder", "placeholders go on a layout; view.slideMaster {\"layout\": index} selects one"));
     };
+    let single = kind.is_title() || kind.is_footer_kind();
+    if let Some(had) = st.shapes().iter().find(|sh| single && sh.ph_type().is_some_and(|k| k == *kind || (k.is_title() && kind.is_title()))) {
+        return Err(bad("master.insertPlaceholder", format!("layout {layout} already has its {asked} placeholder, shape {}", had.id)));
+    }
     let size = st.doc.slide_size;
     let on_master = st.doc.masters.get(master).is_some_and(|m| m.shapes.iter().any(|sh| sh.ph_type() == Some(*kind)));
     let xfrm = rect_param(p, "rect")
         .or_else(|| (!on_master).then(|| deckcraft_geom::Xfrm::new(size.width * 0.25, size.height * 0.3, size.width * 0.5, size.height * 0.4)));
-    let idx = st.shapes().iter().filter_map(|x| x.ph.as_ref().map(|p| p.idx)).max().unwrap_or(0) + 1;
+    let idx = if kind.is_title() { 0 } else { st.shapes().iter().filter_map(|x| x.ph.as_ref().map(|p| p.idx)).max().unwrap_or(0) + 1 };
     let n = st.shapes().len() + 1;
     let prompt = str_param(p, "prompt").unwrap_or("");
     let text = match kind {

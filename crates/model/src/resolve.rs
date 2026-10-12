@@ -1,7 +1,7 @@
 //! Inheritance: effective position, fill, line, body and text properties of a shape, following
 //! slide → layout placeholder → master placeholder → master text styles → theme.
 
-use deckcraft_color::{ColorScheme, Rgba, SchemeSlot};
+use deckcraft_color::{Rgba, SchemeSlot};
 use deckcraft_geom::Xfrm;
 
 use crate::style::{ColorRef, Effects, Fill, Line};
@@ -21,20 +21,19 @@ pub struct Ctx<'a> {
     pub master: &'a Master,
     pub layout: Option<&'a Layout>,
     pub owner: Owner,
-    pub scheme: ColorScheme,
     pub color_map: &'a [(String, String)],
 }
 
 impl<'a> Ctx<'a> {
     pub fn for_slide(pres: &'a Presentation, slide: &Slide) -> Option<Ctx<'a>> {
         let (master, layout) = pres.master_for(slide)?;
-        Some(Ctx { pres, master, layout, owner: Owner::Slide, scheme: master.scheme(), color_map: color_map(master, layout) })
+        Some(Ctx { pres, master, layout, owner: Owner::Slide, color_map: color_map(master, layout) })
     }
     pub fn for_layout(pres: &'a Presentation, master: &'a Master, layout: &'a Layout) -> Ctx<'a> {
-        Ctx { pres, master, layout: Some(layout), owner: Owner::Layout, scheme: master.scheme(), color_map: color_map(master, Some(layout)) }
+        Ctx { pres, master, layout: Some(layout), owner: Owner::Layout, color_map: color_map(master, Some(layout)) }
     }
     pub fn for_master(pres: &'a Presentation, master: &'a Master) -> Ctx<'a> {
-        Ctx { pres, master, layout: None, owner: Owner::Master, scheme: master.scheme(), color_map: &master.color_map }
+        Ctx { pres, master, layout: None, owner: Owner::Master, color_map: &master.color_map }
     }
     /// For the master's graphics behind this slide or layout: they follow its colour map.
     pub fn master_graphics(&self) -> Ctx<'a> {
@@ -118,10 +117,9 @@ pub fn master_list_style<'a>(ctx: &Ctx<'a>, shape: &Shape) -> &'a ListStyle {
     }
 }
 
-/// The geometry a placeholder takes from its layout or master. A plain rectangle counts as unset,
-/// as it does in the file: the writer leaves a placeholder's rectangle out.
+/// The geometry a placeholder without its own takes from its layout or master.
 pub fn inherited_geom<'a>(ctx: &Ctx<'a>, shape: &Shape) -> Option<&'a Geom> {
-    if !shape.geom.is_plain_rect() {
+    if shape.geom_set || !shape.geom.is_plain_rect() {
         return None;
     }
     let (lp, mp) = parents(ctx, shape);

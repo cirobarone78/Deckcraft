@@ -44,6 +44,49 @@ fn main_content_type(bytes: &[u8]) -> String {
     ct[..ct.find('"').expect("quote")].to_string()
 }
 
+fn edited(bytes: &[u8], edits: &[(&str, &str, &str)]) -> Vec<u8> {
+    use std::io::Write;
+    let mut src = zip::ZipArchive::new(Cursor::new(bytes)).expect("zip");
+    let mut out = zip::ZipWriter::new(Cursor::new(Vec::new()));
+    for i in 0..src.len() {
+        let mut entry = src.by_index(i).expect("entry");
+        let name = entry.name().to_string();
+        let mut data = String::new();
+        if entry.read_to_string(&mut data).is_err() {
+            continue;
+        }
+        for (part, from, to) in edits.iter().filter(|(part, _, _)| *part == name) {
+            assert!(data.contains(from), "{part} has no {from}");
+            data = data.replacen(from, to, 1);
+        }
+        out.start_file(name, zip::write::SimpleFileOptions::default()).expect("start");
+        out.write_all(data.as_bytes()).expect("write");
+    }
+    out.finish().expect("finish").into_inner()
+}
+
+#[test]
+fn footer_settings_and_layout_colour_maps_written_by_another_app_are_read() {
+    let bytes = deckcraft_pptx::export(&Presentation::default()).expect("export");
+    let bytes = edited(
+        &bytes,
+        &[
+            ("ppt/slideMasters/slideMaster1.xml", "<p:txStyles>", "<p:hf sldNum=\"0\" hdr=\"0\" dt=\"0\"/><p:txStyles>"),
+            (
+                "ppt/slideLayouts/slideLayout3.xml",
+                "<a:masterClrMapping/>",
+                "<a:overrideClrMapping bg1=\"dk1\" tx1=\"lt1\" bg2=\"dk2\" tx2=\"lt2\" accent1=\"accent1\" accent2=\"accent2\" \
+                 accent3=\"accent3\" accent4=\"accent4\" accent5=\"accent5\" accent6=\"accent6\" hlink=\"hlink\" folHlink=\"folHlink\"/>",
+            ),
+        ],
+    );
+    let p = deckcraft_pptx::import(&bytes).expect("import");
+    assert_eq!((p.header_footer.footer, p.header_footer.slide_number, p.header_footer.date), (true, false, false));
+    let map = p.masters[0].layouts[2].color_map.as_ref().expect("override");
+    assert!(map.contains(&("tx1".into(), "lt1".into())), "{map:?}");
+    assert_eq!(p.masters[0].layouts[1].color_map, None);
+}
+
 #[test]
 fn a_template_saves_with_the_template_content_type() {
     let p = brand_template();

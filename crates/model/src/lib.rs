@@ -323,6 +323,10 @@ pub struct Shape {
     pub xfrm: Option<Xfrm>,
     pub kind: ShapeKind,
     pub geom: Geom,
+    /// A placeholder's geometry is its own, even a plain rectangle; otherwise it takes its
+    /// layout's or master's.
+    #[serde(skip_serializing_if = "std::ops::Not::not")]
+    pub geom_set: bool,
     pub ph: Option<Placeholder>,
     /// `None`: inherited (placeholder chain or style); `Some(Fill::None)`: no fill.
     pub fill: Option<Fill>,
@@ -353,6 +357,7 @@ impl Default for Shape {
             xfrm: None,
             kind: ShapeKind::Shape,
             geom: Geom::default(),
+            geom_set: false,
             ph: None,
             fill: None,
             line: None,

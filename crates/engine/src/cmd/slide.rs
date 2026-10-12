@@ -452,6 +452,7 @@ fn reset(s: &mut Session, p: &Value) -> Result<Value> {
                     sh.line = None;
                     sh.effects = None;
                     sh.geom = Default::default();
+                    sh.geom_set = false;
                     if let Some(t) = sh.text.as_mut() {
                         t.body = Default::default();
                         t.list_style = Default::default();
