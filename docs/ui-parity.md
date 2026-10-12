@@ -1,6 +1,6 @@
 # UI parity with PowerPoint
 
-> **Last reviewed:** 2026-10-10 · **Last updated:** 2026-10-10 · **Change:** major (created; ribbon, menus, panes, dialogs and interaction compared with PowerPoint 16.113 observations in `plan/powerpoint/`) · **Target:** Microsoft PowerPoint for Mac 16.113 (Microsoft 365)
+> **Last reviewed:** 2026-10-10 · **Last updated:** 2026-10-10 · **Change:** minor (System interface appearance added for #41; native inheritance retained) · **Target:** Microsoft PowerPoint for Mac 16.113 (Microsoft 365)
 
 How DeckCraft looks and feels next to PowerPoint: the shell, the ribbon, menus, panes, dialogs,
 direct manipulation, keyboard and precision. Observations of PowerPoint are kept locally in
@@ -19,7 +19,7 @@ AGENTS.md §2). Dimension score: **~60% ready** (estimated), **30–50 h** to pa
 | Start screen: new, themes, templates, recent, open | yes | yes, thin (#17 broken layout, #76 missing overlay) | 3–5 h |
 | Status bar: slide counter, language, notes, comments, views, zoom slider | yes | yes | |
 | Command search (Tell Me) | yes | command palette | #79 default entry fails |
-| Light / dark appearance | follows the system | light or dark; doesn't follow the system (#41) | 1–2 h |
+| Light / dark appearance | follows the system | System, Light and Dark in Preferences, View and title bar; Light fallback and unchanged default ([details](appearance.md)) | |
 | One window per presentation, New Window, Arrange All | yes | tabs in one window; no New Window | 3–5 h |
 | Quick Access Toolbar customization | yes | no | P1 partial |
 
@@ -77,7 +77,7 @@ imitate Microsoft's. No pixel comparison against PowerPoint screenshots has been
 | Native macOS menu bar from `menu_tree()`, filled out to PowerPoint's menu items | 3–5 |
 | Format Shape pane depth | 6–10 |
 | Missing dialogs (Font, Bullets and Numbering, Find/Replace, Replace Fonts, Action Settings, Print, Insert Object) | 8–14 |
-| Start screen, window chrome, system appearance, palette fixes (#17, #41, #71, #76, #79) | 4–7 |
+| Start screen, window chrome and palette fixes (#17, #71, #76, #79) | 4–7 |
 | Grid Options, edit points UI, crop depth | 4–7 |
 | Multiple windows | 3–5 |
 | A screenshot comparison pass on the most-used tabs | 2–4 |
@@ -87,4 +87,5 @@ imitate Microsoft's. No pixel comparison against PowerPoint screenshots has been
 
 | Date | Change | Summary |
 |---|---|---|
+| 2026-10-10 | minor | Added System appearance (#41), shared selectors, saved mode and resolved palettes; documented platform feeds and fallback |
 | 2026-10-10 | major | Created: shell, panes and dialogs, direct manipulation, shortcuts and visual fidelity against PowerPoint 16.113 |

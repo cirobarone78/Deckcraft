@@ -222,6 +222,7 @@ fn quad_mesh(tex: Option<egui::TextureId>, rect: Rect, l: &Layer, color: Color32
 
 pub fn ui(app: &mut SlideApp, ui: &mut Ui) {
     let ctx = ui.ctx().clone();
+    let tokens = theme::Tokens::get(&ctx);
     let Some(doc) = app.session.active().map(|d| d.doc.clone()) else {
         app.show = None;
         return;
@@ -551,13 +552,13 @@ pub fn ui(app: &mut SlideApp, ui: &mut Ui) {
     // Reading view bar / on-screen controls.
     if show.reading {
         let bar = Rect::from_min_max(pos2(full.min.x, full.max.y - 34.0), full.max);
-        painter.rect_filled(bar, CornerRadius::ZERO, Color32::from_gray(32));
+        painter.rect_filled(bar, CornerRadius::ZERO, tokens.chrome);
         painter.text(
             pos2(bar.min.x + 14.0, bar.center().y),
             Align2::LEFT_CENTER,
             format!("Slide {} of {}", show.state.slide + 1, doc.slides.len()),
             theme::font(12.0),
-            Color32::from_gray(200),
+            tokens.text_dim,
         );
         let mut child = ui.new_child(
             egui::UiBuilder::new()
@@ -579,10 +580,10 @@ pub fn ui(app: &mut SlideApp, ui: &mut Ui) {
         }
     } else if now - show.last_move < 2.5 {
         let bar = Rect::from_min_size(pos2(full.min.x + 20.0, full.max.y - 50.0), vec2(250.0, 34.0));
-        painter.rect_filled(bar, CornerRadius::same(17), Color32::from_black_alpha(140));
+        painter.rect_filled(bar, CornerRadius::same(17), tokens.card);
         let mut child =
             ui.new_child(egui::UiBuilder::new().max_rect(bar.shrink2(vec2(10.0, 4.0))).layout(egui::Layout::left_to_right(egui::Align::Center)));
-        let b = |ui: &mut Ui, s: &str| ui.add(egui::Button::new(egui::RichText::new(s).color(Color32::WHITE).size(15.0)).frame(false));
+        let b = |ui: &mut Ui, s: &str| ui.add(egui::Button::new(egui::RichText::new(s).color(tokens.text).size(15.0)).frame(false));
         if b(&mut child, "◀").clicked() {
             let a = show.state.prev(&doc);
             show.apply(a, &doc, now);
@@ -608,13 +609,13 @@ pub fn ui(app: &mut SlideApp, ui: &mut Ui) {
         let t = now - show.slide_start;
         let total = now - show.show_start;
         let r = Rect::from_min_size(pos2(full.min.x + 12.0, full.min.y + 12.0), vec2(220.0, 30.0));
-        painter.rect_filled(r, CornerRadius::same(6), Color32::from_black_alpha(160));
+        painter.rect_filled(r, CornerRadius::same(6), tokens.card);
         painter.text(
             r.center(),
             Align2::CENTER_CENTER,
             format!("Slide {:02}:{:04.1}   Total {:02}:{:02}", (t / 60.0) as u32, t % 60.0, (total / 60.0) as u32, (total % 60.0) as u32),
             theme::font(13.0),
-            Color32::WHITE,
+            tokens.text,
         );
         ctx.request_repaint_after(std::time::Duration::from_millis(100));
     }
@@ -727,6 +728,7 @@ impl Show {
 }
 
 fn presenter_window(ctx: &egui::Context, show: &mut Show, doc: &Presentation, now: f64, keep: &mut bool) {
+    let tokens = theme::Tokens::get(ctx);
     let cur = show.state.slide;
     let next = deckcraft_anim::show_order(doc).into_iter().find(|i| *i > cur);
     let cur_tex = show.tex.as_ref().map(|(_, t)| t.clone());
@@ -752,7 +754,7 @@ fn presenter_window(ctx: &egui::Context, show: &mut Show, doc: &Presentation, no
         egui::ViewportId::from_hash_of("deckcraft_presenter"),
         egui::ViewportBuilder::default().with_title("Presenter View — DeckCraft").with_inner_size([1100.0, 700.0]),
         |ui, _| {
-            egui::CentralPanel::default().frame(egui::Frame::NONE.fill(Color32::from_gray(24)).inner_margin(egui::Margin::same(16))).show(ui, |ui| {
+            egui::CentralPanel::default().frame(egui::Frame::NONE.fill(tokens.chrome).inner_margin(egui::Margin::same(16))).show(ui, |ui| {
                 ui.horizontal(|ui| {
                     ui.label(
                         egui::RichText::new(format!(
@@ -762,10 +764,10 @@ fn presenter_window(ctx: &egui::Context, show: &mut Show, doc: &Presentation, no
                             elapsed as u32 % 60
                         ))
                         .size(22.0)
-                        .color(Color32::WHITE),
+                        .color(tokens.text),
                     );
                     ui.add_space(20.0);
-                    ui.label(egui::RichText::new(format!("Slide {} of {}", cur + 1, doc.slides.len())).size(16.0).color(Color32::from_gray(200)));
+                    ui.label(egui::RichText::new(format!("Slide {} of {}", cur + 1, doc.slides.len())).size(16.0).color(tokens.text_dim));
                     ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                         if ui.button("End Show").clicked() {
                             *keep = false;
@@ -791,20 +793,20 @@ fn presenter_window(ctx: &egui::Context, show: &mut Show, doc: &Presentation, no
                     right.min + vec2(0.0, 22.0),
                     vec2(right.width(), right.width() * (doc.slide_size.height / doc.slide_size.width.max(1.0)) as f32),
                 );
-                ui.painter().text(right.min, Align2::LEFT_TOP, "Next", theme::font(13.0), Color32::from_gray(170));
+                ui.painter().text(right.min, Align2::LEFT_TOP, "Next", theme::font(13.0), tokens.text_dim);
                 match &next_tex {
                     Some(t) => {
                         ui.painter().image(t.id(), nr, Rect::from_min_max(pos2(0.0, 0.0), pos2(1.0, 1.0)), Color32::WHITE);
                     }
                     None => {
-                        ui.painter().rect_filled(nr, CornerRadius::ZERO, Color32::from_gray(40));
-                        ui.painter().text(nr.center(), Align2::CENTER_CENTER, "End of slide show", theme::font(13.0), Color32::from_gray(170));
+                        ui.painter().rect_filled(nr, CornerRadius::ZERO, tokens.card);
+                        ui.painter().text(nr.center(), Align2::CENTER_CENTER, "End of slide show", theme::font(13.0), tokens.text_dim);
                     }
                 }
                 let notes_rect = Rect::from_min_max(pos2(right.min.x, nr.max.y + 16.0), right.max);
                 let mut child = ui.new_child(egui::UiBuilder::new().max_rect(notes_rect));
                 egui::ScrollArea::vertical().show(&mut child, |ui| {
-                    ui.label(egui::RichText::new(if notes.is_empty() { "No notes." } else { &notes }).size(18.0).color(Color32::from_gray(230)));
+                    ui.label(egui::RichText::new(if notes.is_empty() { "No notes." } else { &notes }).size(18.0).color(tokens.text));
                 });
             });
             if ui.input(|i| i.viewport().close_requested()) {

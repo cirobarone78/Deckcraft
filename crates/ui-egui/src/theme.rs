@@ -9,6 +9,47 @@ pub enum Brightness {
     #[default]
     Light,
     Dark,
+    /// Follow the host appearance. Unknown appearance falls back to Light.
+    System,
+}
+
+impl Brightness {
+    pub const ALL: [Self; 3] = [Self::System, Self::Light, Self::Dark];
+
+    pub fn label(self) -> &'static str {
+        match self {
+            Self::System => "System",
+            Self::Light => "Light",
+            Self::Dark => "Dark",
+        }
+    }
+
+    /// Resolve the palette without replacing the saved preference.
+    pub fn resolve(self, system: Option<egui::Theme>) -> Self {
+        match (self, system) {
+            (Self::System, Some(egui::Theme::Dark)) => Self::Dark,
+            (Self::System, _) => Self::Light,
+            (manual, _) => manual,
+        }
+    }
+}
+
+/// The same direct choice in Preferences, the View ribbon and the title bar.
+pub(crate) fn appearance_selector(app: &mut crate::SlideApp, ui: &mut egui::Ui, id: &'static str) {
+    let mut selected = app.ui.brightness;
+    egui::ComboBox::from_id_salt(id)
+        .selected_text(format!("Appearance: {}", selected.label()))
+        .width(120.0)
+        .show_ui(ui, |ui| {
+            for mode in Brightness::ALL {
+                ui.selectable_value(&mut selected, mode, mode.label());
+            }
+        })
+        .response
+        .on_hover_text("System follows the desktop appearance; unknown appearance uses Light.");
+    if selected != app.ui.brightness {
+        let _ = app.run("view.appearance", serde_json::json!({"brightness": selected}));
+    }
 }
 
 /// Every colour the chrome uses.
@@ -103,7 +144,7 @@ impl Tokens {
     }
     pub fn for_brightness(b: Brightness) -> Self {
         match b {
-            Brightness::Light => Self::light(),
+            Brightness::Light | Brightness::System => Self::light(),
             Brightness::Dark => Self::dark(),
         }
     }
@@ -141,8 +182,11 @@ pub fn apply(ctx: &egui::Context, t: &Tokens) {
     v.widgets.open.weak_bg_fill = t.pressed;
     v.window_shadow = egui::epaint::Shadow { offset: [0, 4], blur: 18, spread: 0, color: t.shadow };
     v.popup_shadow = egui::epaint::Shadow { offset: [0, 3], blur: 12, spread: 0, color: t.shadow };
-    ctx.set_visuals(v);
-    ctx.global_style_mut(|s| {
+    // Concrete egui themes pin NSWindow appearance and suppress macOS ThemeChanged events.
+    // Keep the native window inherited; both style branches carry our resolved palette.
+    ctx.set_theme(egui::ThemePreference::System);
+    ctx.all_styles_mut(|s| {
+        s.visuals = v.clone();
         s.spacing.item_spacing = egui::vec2(6.0, 4.0);
         s.spacing.button_padding = egui::vec2(6.0, 3.0);
         s.spacing.interact_size.y = 22.0;
