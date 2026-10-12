@@ -141,7 +141,7 @@ pub fn specs() -> Vec<CommandSpec> {
             "Text Box Margins",
             ["Format Shape", "Text Box"],
             None,
-            "{left?, top?, right?, bottom?: pt}",
+            "{left?: pt, top?: pt, right?: pt, bottom?: pt}",
             has_text_or_shapes,
             margins
         ),

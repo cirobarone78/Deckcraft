@@ -32,7 +32,7 @@ pub fn specs() -> Vec<CommandSpec> {
             "Split Cells",
             ["Table Layout", "Merge"],
             None,
-            "{cell?: [r, c] | row?, col? (else the edited cell), id?}",
+            "{cell?: [r, c] (else the edited cell), id?} | {row: index, col: index, id?}",
             has_selection,
             split
         ),
@@ -50,7 +50,7 @@ pub fn specs() -> Vec<CommandSpec> {
             "Table Style Options",
             ["Table Design", "Table Style Options"],
             None,
-            "{headerRow?, totalRow?, bandedRows?, firstColumn?, lastColumn?, bandedColumns?: bool, id?}",
+            "{headerRow?: bool, totalRow?: bool, bandedRows?: bool, firstColumn?: bool, lastColumn?: bool, bandedColumns?: bool, id?}",
             has_selection,
             options
         ),
