@@ -7,7 +7,7 @@ use deckcraft_model::text::{Align, Anchor, AutoFit, Bullet, Caps, ParaProps, Run
 use deckcraft_model::{Effects, Fill, Line, Shape};
 use serde_json::{Value, json};
 
-use super::text::{format_body, format_para, format_run};
+use super::text::{format_body, format_para, format_paragraphs, format_run};
 use super::*;
 use crate::{Result, Session};
 
@@ -447,7 +447,7 @@ fn numbering(s: &mut Session, p: &Value) -> Result<Value> {
 }
 
 fn level(s: &mut Session, d: i32) -> Result<Value> {
-    format_para(s, &move |p| {
+    format_paragraphs(s, &move |p| {
         let l = (p.level as i32 + d).clamp(0, 8) as u8;
         // Explicit indents shift with the level.
         if l != p.level {

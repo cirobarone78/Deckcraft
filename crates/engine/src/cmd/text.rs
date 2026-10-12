@@ -4,8 +4,8 @@ use std::sync::Arc;
 
 use deckcraft_model::edit::{self as ed, Pos};
 use deckcraft_model::resolve::{self, Ctx};
-use deckcraft_model::text::{AutoFit, Hyperlink, Run, RunKind, RunProps, TextBody};
-use deckcraft_model::{Presentation, ShapeId, ShapeKind};
+use deckcraft_model::text::{AutoFit, Hyperlink, LevelStyle, ListStyle, Run, RunKind, RunProps, TextBody};
+use deckcraft_model::{PhType, Presentation, ShapeId, ShapeKind, TextStyle};
 use serde_json::{Value, json};
 
 use super::*;
@@ -70,6 +70,13 @@ pub(crate) fn edit_text<T>(s: &mut Session, f: impl FnOnce(&mut TextBody, &mut T
         let mut t = t0.clone();
         let body = body_mut(doc, sel, &t).ok_or_else(|| bad("text", "the text being edited is gone"))?;
         let r = f(body, &mut t);
+        if matches!(sel.target, Target::Layout { .. })
+            && !t.notes
+            && t.cell.is_none()
+            && let Some(sh) = crate::shapes_mut(doc, sel).and_then(|v| deckcraft_model::find_shape_mut(v, t.shape))
+        {
+            mark_prompt(sh);
+        }
         sel.text = Some(t);
         Ok(r)
     })?;
@@ -77,6 +84,13 @@ pub(crate) fn edit_text<T>(s: &mut Session, f: impl FnOnce(&mut TextBody, &mut T
         fit_text_box(s, t0.shape)?;
     }
     Ok(r)
+}
+
+fn mark_prompt(sh: &mut deckcraft_model::Shape) {
+    let typed = sh.text.as_ref().is_some_and(|t| !t.is_empty());
+    if let Some(ph) = sh.ph.as_mut().filter(|ph| !ph.kind.is_footer_kind()) {
+        ph.has_custom_prompt = typed;
+    }
 }
 
 /// Grow/shrink an auto-sizing text box (Resize shape to fit text) to its text.
@@ -499,6 +513,7 @@ fn set(s: &mut Session, p: &Value) -> Result<Value> {
         None => s.doc()?.selection.shapes.first().copied().ok_or_else(|| bad("text.set", "missing `id` (or select a shape)"))?,
     };
     let cell = p.get("cell").and_then(Value::as_array).and_then(|a| Some((a.first()?.as_u64()? as usize, a.get(1)?.as_u64()? as usize)));
+    let on_layout = matches!(s.doc()?.selection.target, Target::Layout { .. });
     edit_shapes(s, &json!({"id": id}), "text.set", |sh| {
         let target = match (&mut sh.kind, cell) {
             (ShapeKind::Table(t), Some((r, c))) => t.cell_mut(r, c).map(|x| &mut x.text),
@@ -526,6 +541,9 @@ fn set(s: &mut Session, p: &Value) -> Result<Value> {
             }
         }
         body.paragraphs = nb.paragraphs;
+        if on_layout && cell.is_none() {
+            mark_prompt(sh);
+        }
         Ok(())
     })?;
     fit_text_box(s, id)?;
@@ -550,6 +568,9 @@ fn get(s: &mut Session, p: &Value) -> Result<Value> {
 /// selected shapes). A caret without a range formats the word it's in (PowerPoint behaviour),
 /// or sets the formatting for what is typed next at a word boundary.
 pub(crate) fn format_run(s: &mut Session, f: &(dyn Fn(&mut RunProps) + Send + Sync)) -> Result<Value> {
+    if format_style(s, &|_, ls| f(&mut ls.run))? {
+        return ok();
+    }
     let st = s.doc()?;
     if let Some(t) = st.selection.text.clone() {
         let (a, b) = format_range(st, &t);
@@ -592,6 +613,79 @@ pub(crate) fn format_run(s: &mut Session, f: &(dyn Fn(&mut RunProps) + Send + Sy
         fit_text_box(s, id)?;
     }
     ok()
+}
+
+/// In Slide Master view, formatting placeholders sets the text style slides inherit: the master's
+/// title or body style, else the placeholder's own. False when the selection isn't placeholders
+/// there.
+pub(crate) fn format_style(s: &mut Session, f: &(dyn Fn(u8, &mut LevelStyle) + Send + Sync)) -> Result<bool> {
+    let st = s.doc()?;
+    if st.selection.target == Target::Slides {
+        return Ok(false);
+    }
+    let picks: Vec<(ShapeId, Vec<u8>)> = match &st.selection.text {
+        Some(t) if t.notes || t.cell.is_some() => return Ok(false),
+        Some(t) => {
+            let (a, b) = t.ordered();
+            let paragraphs = body_of(st, t).map(|body| body.paragraphs.as_slice()).unwrap_or_default();
+            let mut levels: Vec<u8> = paragraphs.iter().skip(a.0).take(b.0.saturating_sub(a.0) + 1).map(|p| p.level).collect();
+            levels.sort_unstable();
+            levels.dedup();
+            if levels.is_empty() {
+                levels.push(0);
+            }
+            vec![(t.shape, levels)]
+        }
+        None => st.selected_shapes().iter().map(|sh| (sh.id, style_levels(sh))).collect(),
+    };
+    if picks.is_empty() || !picks.iter().all(|(id, _)| st.shape(*id).is_some_and(|sh| sh.ph.is_some())) {
+        return Ok(false);
+    }
+    s.edit(|doc, sel| {
+        for (id, levels) in &picks {
+            restyle(doc, sel.target, *id, levels, f);
+        }
+        Ok(())
+    })?;
+    Ok(true)
+}
+
+fn style_levels(sh: &deckcraft_model::Shape) -> Vec<u8> {
+    match sh.ph_type() {
+        Some(k) if k.is_title() || k.is_footer_kind() => vec![0],
+        _ => (0..9).collect(),
+    }
+}
+
+fn restyle(doc: &mut Presentation, target: Target, id: ShapeId, levels: &[u8], f: &(dyn Fn(u8, &mut LevelStyle) + Send + Sync)) {
+    let (master, layout) = match target {
+        Target::Master { master } => (master, None),
+        Target::Layout { master, layout } => (master, Some(layout)),
+        Target::Slides => return,
+    };
+    let Some(m) = doc.masters.get_mut(master) else { return };
+    let m = Arc::make_mut(m);
+    let style: Option<&mut ListStyle> = match layout {
+        Some(li) => m
+            .layouts
+            .get_mut(li)
+            .and_then(|l| l.shapes.iter_mut().find(|sh| sh.id == id))
+            .map(|sh| &mut sh.text.get_or_insert_with(TextBody::default).list_style),
+        None => {
+            let deckcraft_model::Master { shapes, title_style, body_style, .. } = m;
+            shapes.iter_mut().find(|sh| sh.id == id).map(|sh| match sh.ph_type().map(PhType::text_style) {
+                Some(TextStyle::Title) => title_style,
+                Some(TextStyle::Body) => body_style,
+                _ => &mut sh.text.get_or_insert_with(TextBody::default).list_style,
+            })
+        }
+    };
+    let Some(style) = style else { return };
+    for &level in levels {
+        let mut ls = style.level(level).cloned().unwrap_or_default();
+        f(level, &mut ls);
+        style.set(level, ls);
+    }
 }
 
 /// What `format_run` formats while editing: the selection, or for a bare caret the word it's in
@@ -642,6 +736,18 @@ pub(crate) fn link_text(s: &mut Session, link: Hyperlink, display: &str) -> Resu
 /// Apply paragraph changes to the paragraphs touched by the selection (or all paragraphs of the
 /// selected shapes).
 pub(crate) fn format_para(s: &mut Session, f: &(dyn Fn(&mut deckcraft_model::text::Paragraph) + Send + Sync)) -> Result<Value> {
+    let restyled = format_style(s, &|level, ls| {
+        let mut p = deckcraft_model::text::Paragraph { level, props: ls.para.clone(), ..Default::default() };
+        f(&mut p);
+        ls.para = p.props;
+    })?;
+    if restyled {
+        return ok();
+    }
+    format_paragraphs(s, f)
+}
+
+pub(crate) fn format_paragraphs(s: &mut Session, f: &(dyn Fn(&mut deckcraft_model::text::Paragraph) + Send + Sync)) -> Result<Value> {
     let st = s.doc()?;
     if let Some(t) = st.selection.text.clone() {
         let (a, b) = t.ordered();

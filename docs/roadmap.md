@@ -40,7 +40,7 @@ Beta means ~75% ready for real work and opening and saving PowerPoint's `.pptx` 
 |---|---|---|---|
 | 1 | Stability: #60, #40/#59, soak and fuzz the editor | 10–20 | Stability 60 → 85% |
 | 2 | PPTX real-deck corpus and fixes | 20–35 | File formats 58 → 75% |
-| 3 | PPTX round-trip losses (#70, #74, #77), `.potx`/`.ppsx`/`.pptm` content types, embedded fonts | 8–15 | File formats → 80% |
+| 3 | PPTX round-trip losses (#70, #74, #77), `.pptm` content types, embedded fonts | 7–14 | File formats → 80% |
 | 4 | EMF/WMF and SVG pictures | 8–14 | File formats, Pictures |
 | 5 | Vector PDF, printing | 10–16 | File formats, Files |
 | 6 | Localization infrastructure + zh-Hans, es, fr, de, ja (with IME) | 27–46 | Localization 8 → ~40% |

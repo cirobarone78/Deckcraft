@@ -6,7 +6,7 @@ use deckcraft_geom::Xfrm;
 
 use crate::style::{ColorRef, Effects, Fill, Line};
 use crate::text::{Anchor, AutoFit, BodyProps, LevelStyle, ListStyle, ParaProps, RunProps};
-use crate::{Background, Layout, Master, PhType, Presentation, Shape, Slide};
+use crate::{Background, Geom, Layout, Master, PhType, Presentation, Shape, Slide, TextStyle};
 
 /// Where a shape lives, for resolving inherited values.
 #[derive(Clone, Copy)]
@@ -22,28 +22,40 @@ pub struct Ctx<'a> {
     pub layout: Option<&'a Layout>,
     pub owner: Owner,
     pub scheme: ColorScheme,
+    pub color_map: &'a [(String, String)],
 }
 
 impl<'a> Ctx<'a> {
     pub fn for_slide(pres: &'a Presentation, slide: &Slide) -> Option<Ctx<'a>> {
         let (master, layout) = pres.master_for(slide)?;
-        Some(Ctx { pres, master, layout, owner: Owner::Slide, scheme: master.scheme() })
+        Some(Ctx { pres, master, layout, owner: Owner::Slide, scheme: master.scheme(), color_map: color_map(master, layout) })
     }
     pub fn for_layout(pres: &'a Presentation, master: &'a Master, layout: &'a Layout) -> Ctx<'a> {
-        Ctx { pres, master, layout: Some(layout), owner: Owner::Layout, scheme: master.scheme() }
+        Ctx { pres, master, layout: Some(layout), owner: Owner::Layout, scheme: master.scheme(), color_map: color_map(master, Some(layout)) }
     }
     pub fn for_master(pres: &'a Presentation, master: &'a Master) -> Ctx<'a> {
-        Ctx { pres, master, layout: None, owner: Owner::Master, scheme: master.scheme() }
+        Ctx { pres, master, layout: None, owner: Owner::Master, scheme: master.scheme(), color_map: &master.color_map }
+    }
+    /// For the master's graphics behind this slide or layout: they follow its colour map.
+    pub fn master_graphics(&self) -> Ctx<'a> {
+        Ctx { color_map: self.color_map, ..Ctx::for_master(self.pres, self.master) }
+    }
+    pub fn map_slot(&self, slot: SchemeSlot) -> SchemeSlot {
+        crate::map_slot(self.color_map, slot)
     }
     pub fn color(&self, c: &ColorRef, ph: Option<Rgba>) -> Rgba {
         let c = match &c.base {
             crate::ColorBase::Scheme { slot } if matches!(slot, SchemeSlot::Bg1 | SchemeSlot::Tx1 | SchemeSlot::Bg2 | SchemeSlot::Tx2) => {
-                ColorRef { base: crate::ColorBase::Scheme { slot: self.master.map_slot(*slot) }, mods: c.mods.clone() }
+                ColorRef { base: crate::ColorBase::Scheme { slot: self.map_slot(*slot) }, mods: c.mods.clone() }
             }
             _ => c.clone(),
         };
         c.resolve(&self.master.theme.colors, ph)
     }
+}
+
+fn color_map<'a>(master: &'a Master, layout: Option<&'a Layout>) -> &'a [(String, String)] {
+    layout.and_then(|l| l.color_map.as_deref()).unwrap_or(&master.color_map)
 }
 
 fn compatible(slide: PhType, other: PhType) -> bool {
@@ -98,22 +110,22 @@ pub fn parents<'a>(ctx: &Ctx<'a>, shape: &Shape) -> (Option<&'a Shape>, Option<&
 
 /// The text style group (title / body / other) a shape draws from.
 pub fn master_list_style<'a>(ctx: &Ctx<'a>, shape: &Shape) -> &'a ListStyle {
-    match shape.ph_type() {
-        Some(PhType::Title | PhType::CtrTitle) => &ctx.master.title_style,
-        Some(
-            PhType::Body
-            | PhType::Obj
-            | PhType::SubTitle
-            | PhType::Table
-            | PhType::Chart
-            | PhType::Diagram
-            | PhType::Media
-            | PhType::Picture
-            | PhType::ClipArt,
-        ) => &ctx.master.body_style,
-        Some(_) => &ctx.master.other_style,
+    match shape.ph_type().map(PhType::text_style) {
+        Some(TextStyle::Title) => &ctx.master.title_style,
+        Some(TextStyle::Body) => &ctx.master.body_style,
+        Some(TextStyle::Other) => &ctx.master.other_style,
         None => &ctx.pres.default_text_style,
     }
+}
+
+/// The geometry a placeholder takes from its layout or master. A plain rectangle counts as unset,
+/// as it does in the file: the writer leaves a placeholder's rectangle out.
+pub fn inherited_geom<'a>(ctx: &Ctx<'a>, shape: &Shape) -> Option<&'a Geom> {
+    if !shape.geom.is_plain_rect() {
+        return None;
+    }
+    let (lp, mp) = parents(ctx, shape);
+    [lp, mp].into_iter().flatten().map(|s| &s.geom).find(|g| !g.is_plain_rect())
 }
 
 pub fn xfrm(ctx: &Ctx, shape: &Shape) -> Xfrm {
