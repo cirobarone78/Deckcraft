@@ -37,7 +37,8 @@ fn describe_names_commands_like_an_unknown_one() {
 fn a_label_before_the_command_is_an_unknown_command() {
     assert_eq!(
         stderr(&cli(&["run", "--cmd", r#"new=file.new={"blank":true}"#])),
-        "deckcraft-cli: --cmd 1 of 1: unknown command `new`; commands named like it: file.new, slide.new; nothing ran\n"
+        "deckcraft-cli: --cmd 1 of 1 was read as command `new` with parameters `file.new={\"blank\":true}`. `new` is not a command: \
+         --cmd takes COMMAND=PARAMS, a command id, then `=`, then a JSON object, e.g. --cmd 'slide.new={\"title\":\"Q3\"}'. Nothing ran.\n"
     );
 }
 

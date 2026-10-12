@@ -226,7 +226,12 @@ fn run(args: &[String]) -> Result<(), String> {
         .map(|(n, c)| {
             let (id, json) = c.split_once('=').unwrap_or((c, ""));
             if deckcraft_engine::find_command(id).is_none() {
-                return Err(format!("{}: {}; nothing ran", at(n), deckcraft_engine::EngineError::UnknownCommand(id.into())));
+                let read = if json.is_empty() { "no parameters".to_string() } else { format!("parameters `{}`", shown(json)) };
+                return Err(format!(
+                    "{} was read as command `{id}` with {read}. `{id}` is not a command: --cmd takes COMMAND=PARAMS, a command id, \
+                     then `=`, then a JSON object, e.g. --cmd 'slide.new={{\"title\":\"Q3\"}}'. Nothing ran.",
+                    at(n)
+                ));
             }
             let params = if json.is_empty() { json!({}) } else { params(id, json).map_err(|e| format!("{}: {e}; nothing ran", at(n)))? };
             Ok((id, params))
@@ -260,11 +265,12 @@ fn run(args: &[String]) -> Result<(), String> {
 }
 
 fn params(id: &str, json: &str) -> Result<Value, String> {
-    serde_json::from_str(json).map_err(|e| {
-        let shown: String = json.chars().take(200).collect();
-        let cut = if shown.len() < json.len() { "…" } else { "" };
-        format!("the parameters of `{id}` are not JSON ({e}): {shown}{cut}")
-    })
+    serde_json::from_str(json).map_err(|e| format!("the parameters of `{id}` are not JSON ({e}): {}", shown(json)))
+}
+
+fn shown(json: &str) -> String {
+    let head: String = json.chars().take(200).collect();
+    if head.len() < json.len() { format!("{head}…") } else { head }
 }
 
 fn describe(id: Option<&str>) -> Result<(), String> {
