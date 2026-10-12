@@ -148,7 +148,8 @@ pub fn repair(p: &mut Presentation) {
 }
 
 /// Outline text: one slide per unindented line; tab-indented lines become body bullets at their
-/// level (Insert ▸ Slides from Outline, View ▸ Outline copy).
+/// level (Insert ▸ Slides from Outline, View ▸ Outline copy). Markdown (any `#` heading) instead
+/// makes one slide per heading, and the lines under it bullets nested by their indentation.
 pub fn outline_to_slides(p: &mut Presentation, text: &str) -> usize {
     let Some(lay) = defaults::layout_of_kind(p, LayoutType::TitleAndContent) else { return 0 };
     let mut made = 0;
@@ -159,15 +160,17 @@ pub fn outline_to_slides(p: &mut Presentation, text: &str) -> usize {
             *made += 1;
         }
     };
+    let markdown = text.lines().any(|l| md_heading(l).is_some());
     for raw in text.lines() {
         if raw.trim().is_empty() {
             continue;
         }
+        let heading = if markdown { md_heading(raw) } else { None };
         let tabs = raw.chars().take_while(|c| *c == '\t').count();
         let spaces = raw.chars().take_while(|c| *c == ' ').count() / 2;
         let level = tabs.max(spaces);
-        let line = raw.trim().trim_start_matches(['-', '*', '•']).trim();
-        if level == 0 {
+        let line = heading.unwrap_or_else(|| raw.trim().trim_start_matches(['-', '*', '•']).trim());
+        if heading.is_some() || (!markdown && level == 0) {
             flush(p, cur.take(), &mut made);
             let mut s = defaults::new_slide(p, lay);
             if let Some(t) = s.shapes.first_mut() {
@@ -179,12 +182,20 @@ pub fn outline_to_slides(p: &mut Presentation, text: &str) -> usize {
         {
             let tb = body.text.get_or_insert_with(TextBody::default);
             let mut para = Paragraph::new(line);
-            para.level = (level - 1).min(8) as u8;
+            para.level = (if markdown { level } else { level - 1 }).min(8) as u8;
             tb.paragraphs.push(para);
         }
     }
     flush(p, cur, &mut made);
     made
+}
+
+/// The text of a Markdown ATX heading (`# Title`, `## Title ##`), or `None`.
+fn md_heading(line: &str) -> Option<&str> {
+    let t = line.trim_start();
+    let n = t.chars().take_while(|c| *c == '#').count();
+    let rest = &t[n..];
+    ((1..=6).contains(&n) && (rest.is_empty() || rest.starts_with([' ', '\t']))).then(|| rest.trim().trim_end_matches('#').trim())
 }
 
 /// The deck as outline text (titles unindented, body paragraphs tab-indented by level).
@@ -258,5 +269,15 @@ mod tests {
         assert_eq!(n, 2);
         let o = slides_to_outline(&p);
         assert!(o.contains("Intro\n\tPoint one\n\t\tSub point\nSecond"), "{o}");
+    }
+
+    /// #211: Markdown headings kept their `#` and top-level list items became slides.
+    #[test]
+    fn markdown_outline() {
+        let mut p = defaults::blank_presentation(defaults::WIDE, Default::default(), false);
+        let n = outline_to_slides(&mut p, "# Intro\n- Point one\n- Point two\n  - Sub point\n\n## Second ##\n* More\n#hashtag text");
+        assert_eq!(n, 2);
+        let o = slides_to_outline(&p);
+        assert!(o.contains("Intro\n\tPoint one\n\tPoint two\n\t\tSub point\nSecond\n\tMore\n\t#hashtag text"), "{o}");
     }
 }
