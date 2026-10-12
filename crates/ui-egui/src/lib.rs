@@ -12,6 +12,7 @@ pub mod control;
 pub mod credits;
 pub mod dialogs;
 pub mod fillui;
+pub mod i18n;
 pub mod icons;
 pub mod media;
 pub mod menus;
@@ -80,6 +81,8 @@ pub enum ViewMode {
 #[serde(default, rename_all = "camelCase")]
 pub struct UiState {
     pub brightness: theme::Brightness,
+    /// UI language (English default; العربية switches the interface and its alignment).
+    pub language: i18n::Language,
     pub tab: String,
     pub ribbon_collapsed: bool,
     pub view: ViewMode,
@@ -108,6 +111,7 @@ impl Default for UiState {
     fn default() -> Self {
         UiState {
             brightness: theme::Brightness::Light,
+            language: i18n::Language::English,
             tab: "Home".into(),
             ribbon_collapsed: false,
             view: ViewMode::Normal,
@@ -279,6 +283,12 @@ impl SlideApp {
         self.status = Some((msg.into(), now_ms()));
     }
 
+    /// Set the UI language and remember it in `UiState`.
+    pub fn set_language(&mut self, l: i18n::Language) {
+        self.ui.language = l;
+        i18n::set_language(l);
+    }
+
     /// Run a command by id (UI commands here, everything else in the engine). Errors show in the
     /// status bar and are returned.
     pub fn run(&mut self, id: &str, params: Value) -> Result<Value, String> {
@@ -288,7 +298,7 @@ impl SlideApp {
             self.session.execute(id, &params).map_err(|e| e.to_string())
         };
         if let Err(e) = &r {
-            self.set_status(e.clone());
+            self.set_status(i18n::t(e));
         }
         self.drain_requests();
         r
@@ -591,7 +601,7 @@ impl SlideApp {
                     _ => self.session.execute(cmd, &json!({"path": path})),
                 };
                 if let Err(e) = r {
-                    self.set_status(e.to_string());
+                    self.set_status(i18n::t(&e.to_string()));
                 }
             }
         } else if let Some(f) = self.services.open_async.as_mut() {
@@ -607,11 +617,11 @@ impl SlideApp {
             if let Some(path) = pick(&suggested) {
                 match self.session.execute("file.saveAs", &json!({"path": path})) {
                     Ok(_) => {
-                        self.set_status(format!("Saved {path}"));
+                        self.set_status(i18n::tf("Saved {}", &[path.clone()]));
                         self.ui.recent.retain(|p| *p != path);
                         self.ui.recent.insert(0, path);
                     }
-                    Err(e) => self.set_status(e.to_string()),
+                    Err(e) => self.set_status(i18n::t(&e.to_string())),
                 }
             }
         } else if let Some(dl) = self.services.download.as_mut()
@@ -619,7 +629,7 @@ impl SlideApp {
         {
             match deckcraft_engine::cmd::file::save_bytes(&d.doc, ext) {
                 Ok(bytes) => dl(&suggested, &bytes),
-                Err(e) => self.set_status(e.to_string()),
+                Err(e) => self.set_status(i18n::t(&e.to_string())),
             }
         }
     }
@@ -641,8 +651,8 @@ impl SlideApp {
     pub fn save(&mut self) {
         if self.session.active().and_then(|d| d.path.clone()).is_some() {
             match self.session.execute("file.save", &json!({})) {
-                Ok(_) => self.set_status("Saved"),
-                Err(e) => self.set_status(e.to_string()),
+                Ok(_) => self.set_status(i18n::t("Saved")),
+                Err(e) => self.set_status(i18n::t(&e.to_string())),
             }
         } else {
             self.save_as_dialog("deckcraft");
@@ -660,7 +670,7 @@ impl SlideApp {
                 }
                 UiRequest::Pane { id } => self.ui.pane = Some(id),
                 UiRequest::StartShow { from } => self.start_show(from, false),
-                UiRequest::Message { text } => self.set_status(text),
+                UiRequest::Message { text } => self.set_status(i18n::t(&text)),
                 UiRequest::PickFile { purpose } => {
                     if purpose == "saveAs" {
                         self.save_as_dialog("deckcraft");
@@ -705,7 +715,7 @@ impl SlideApp {
         } else if lower.ends_with(".txt") || lower.ends_with(".md") {
             "slide.fromOutline"
         } else {
-            self.set_status(format!("{name}: DeckCraft can't open this kind of file"));
+            self.set_status(crate::i18n::tf("{}: DeckCraft can't open this kind of file", &[name.clone()]));
             return;
         };
         let p = if cmd == "slide.fromOutline" { json!({"text": String::from_utf8_lossy(bytes)}) } else { json!({"name": name, "data": data}) };
@@ -766,7 +776,7 @@ impl SlideApp {
             if self.session.documents().iter().any(|d| d.is_dirty())
                 && let Err(e) = self.session.execute("file.recovery.save", &json!({}))
             {
-                self.set_status(format!("Couldn't save AutoRecover information: {e}"));
+                self.set_status(crate::i18n::tf("Couldn't save AutoRecover information: {}", &[e.to_string()]));
             }
         }
         // On the web, dropped files can only be read asynchronously: the host reads them and
@@ -928,6 +938,7 @@ impl SlideApp {
     /// Lay out the whole window.
     pub fn ui(&mut self, ui: &mut egui::Ui) {
         let ctx = ui.ctx().clone();
+        i18n::set_language(self.ui.language);
         if !self.fonts_ready {
             ctx.request_repaint();
             return;

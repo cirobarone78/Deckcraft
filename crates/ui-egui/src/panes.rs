@@ -29,6 +29,7 @@ pub fn show(app: &mut SlideApp, ui: &mut Ui) {
                 "designer" => "Design Ideas",
                 _ => "Pane",
             };
+            let title = crate::i18n::t(title);
             ui.horizontal(|ui| {
                 ui.label(egui::RichText::new(title).font(theme::bold(16.0)));
                 ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
@@ -89,7 +90,7 @@ fn format_shape(app: &mut SlideApp, ui: &mut Ui) {
     let t = Tokens::get(ui.ctx());
     let Some(st) = app.session.active() else { return };
     let Some(sh) = st.selected_shapes().first().map(|s| (*s).clone()) else {
-        ui.label(egui::RichText::new("Select a shape to format it.").color(t.text_dim));
+        ui.label(egui::RichText::new(crate::i18n::t("Select a shape to format it.")).color(t.text_dim));
         return;
     };
     let x = deckcraft_engine::cmd::xfrm_of(&st.doc, &st.selection, &sh);
@@ -115,15 +116,15 @@ fn format_shape(app: &mut SlideApp, ui: &mut Ui) {
     ui.separator();
     match app.ui.format_tab.as_str() {
         "effects" => {
-            ui.label(egui::RichText::new("Shadow").font(theme::bold(13.0)));
+            ui.label(egui::RichText::new(crate::i18n::t("Shadow")).font(theme::bold(13.0)));
             ui.horizontal_wrapped(|ui| {
                 for (l, v) in [
-                    ("None", "none"),
-                    ("Outer", "outer"),
-                    ("Bottom", "bottom"),
-                    ("Center", "center"),
-                    ("Inner", "inner"),
-                    ("Perspective", "perspective"),
+                    (crate::i18n::t("None"), "none"),
+                    (crate::i18n::t("Outer"), "outer"),
+                    (crate::i18n::t("Bottom"), "bottom"),
+                    (crate::i18n::t("Center"), "center"),
+                    (crate::i18n::t("Inner"), "inner"),
+                    (crate::i18n::t("Perspective"), "perspective"),
                 ] {
                     if ui.button(l).clicked() {
                         run(app, "shape.effects", json!({"shadow": v}));
@@ -131,26 +132,26 @@ fn format_shape(app: &mut SlideApp, ui: &mut Ui) {
                 }
             });
             ui.add_space(6.0);
-            ui.label(egui::RichText::new("Reflection").font(theme::bold(13.0)));
+            ui.label(egui::RichText::new(crate::i18n::t("Reflection")).font(theme::bold(13.0)));
             ui.horizontal_wrapped(|ui| {
-                for (l, v) in [("None", "none"), ("Tight", "tight"), ("Half", "half"), ("Full", "full")] {
+                for (l, v) in [(crate::i18n::t("None"), "none"), (crate::i18n::t("Tight"), "tight"), (crate::i18n::t("Half"), "half"), (crate::i18n::t("Full"), "full")] {
                     if ui.button(l).clicked() {
                         run(app, "shape.effects", json!({"reflection": v}));
                     }
                 }
             });
             ui.add_space(6.0);
-            ui.label(egui::RichText::new("Glow").font(theme::bold(13.0)));
+            ui.label(egui::RichText::new(crate::i18n::t("Glow")).font(theme::bold(13.0)));
             let mut g = sh.effects.as_ref().and_then(|e| e.glow.as_ref().map(|g| g.radius)).unwrap_or(0.0);
-            if ui.add(egui::Slider::new(&mut g, 0.0..=40.0).text("size (pt)")).drag_stopped() {
+            if ui.add(egui::Slider::new(&mut g, 0.0..=40.0).text(crate::i18n::t("size (pt)"))).drag_stopped() {
                 run(app, "shape.effects", json!({"glow": if g > 0.0 { json!(g) } else { Value::Null }}));
             }
-            ui.label(egui::RichText::new("Soft Edges").font(theme::bold(13.0)));
+            ui.label(egui::RichText::new(crate::i18n::t("Soft Edges")).font(theme::bold(13.0)));
             let mut s = sh.effects.as_ref().and_then(|e| e.soft_edge).unwrap_or(0.0);
-            if ui.add(egui::Slider::new(&mut s, 0.0..=50.0).text("size (pt)")).drag_stopped() {
+            if ui.add(egui::Slider::new(&mut s, 0.0..=50.0).text(crate::i18n::t("size (pt)"))).drag_stopped() {
                 run(app, "shape.effects", json!({"softEdges": s}));
             }
-            if ui.button("Reset Effects").clicked() {
+            if ui.button(crate::i18n::t("Reset Effects")).clicked() {
                 run(app, "shape.effects", json!({"reset": true}));
             }
         }
@@ -163,16 +164,16 @@ fn format_shape(app: &mut SlideApp, ui: &mut Ui) {
                     }
                 });
             };
-            ui.label(egui::RichText::new("Size").font(theme::bold(13.0)));
+            ui.label(egui::RichText::new(crate::i18n::t("Size")).font(theme::bold(13.0)));
             fields(ui, "Height", "fh", x.h, "h", "shape.resize", 72.0);
             fields(ui, "Width", "fw", x.w, "w", "shape.resize", 72.0);
             fields(ui, "Rotation", "fr", x.rot, "deg", "shape.rotate", 1.0);
             ui.add_space(6.0);
-            ui.label(egui::RichText::new("Position").font(theme::bold(13.0)));
+            ui.label(egui::RichText::new(crate::i18n::t("Position")).font(theme::bold(13.0)));
             fields(ui, "Horizontal", "fx", x.x, "x", "shape.move", 72.0);
             fields(ui, "Vertical", "fy", x.y, "y", "shape.move", 72.0);
             ui.add_space(6.0);
-            ui.label(egui::RichText::new("Alt Text").font(theme::bold(13.0)));
+            ui.label(egui::RichText::new(crate::i18n::t("Alt Text")).font(theme::bold(13.0)));
             let id = ui.id().with(("alt", sh.id.0));
             let mut alt: String = ui.data_mut(|d| d.get_temp(id).unwrap_or_else(|| sh.descr.clone()));
             let r = ui.add(egui::TextEdit::multiline(&mut alt).desired_rows(3).desired_width(f32::INFINITY));
@@ -182,17 +183,17 @@ fn format_shape(app: &mut SlideApp, ui: &mut Ui) {
             ui.data_mut(|d| d.insert_temp(id, alt));
         }
         "text" => {
-            ui.label(egui::RichText::new("Text Box").font(theme::bold(13.0)));
+            ui.label(egui::RichText::new(crate::i18n::t("Text Box")).font(theme::bold(13.0)));
             ui.horizontal(|ui| {
-                ui.label("Vertical alignment");
-                for (l, a) in [("Top", "top"), ("Middle", "middle"), ("Bottom", "bottom")] {
+                ui.label(crate::i18n::t("Vertical alignment"));
+                for (l, a) in [(crate::i18n::t("Top"), "top"), (crate::i18n::t("Middle"), "middle"), (crate::i18n::t("Bottom"), "bottom")] {
                     if ui.small_button(l).clicked() {
                         run(app, "format.anchor", json!({"anchor": a}));
                     }
                 }
             });
             ui.horizontal_wrapped(|ui| {
-                for (l, m) in [("Do not Autofit", "none"), ("Shrink text on overflow", "shrink"), ("Resize shape to fit text", "resize")] {
+                for (l, m) in [(crate::i18n::t("Do not Autofit"), "none"), (crate::i18n::t("Shrink text on overflow"), "shrink"), (crate::i18n::t("Resize shape to fit text"), "resize")] {
                     if ui.small_button(l).clicked() {
                         run(app, "format.autofit", json!({"mode": m}));
                     }
@@ -200,10 +201,10 @@ fn format_shape(app: &mut SlideApp, ui: &mut Ui) {
             });
             let wrap = sh.text.as_ref().and_then(|t| t.body.wrap).unwrap_or(true);
             let mut w = wrap;
-            if ui.checkbox(&mut w, "Wrap text in shape").changed() {
+            if ui.checkbox(&mut w, crate::i18n::t("Wrap text in shape")).changed() {
                 run(app, "format.wrap", json!({"on": w}));
             }
-            ui.label("Margins (pt)");
+            ui.label(crate::i18n::t("Margins (pt)"));
             let b = sh.text.as_ref().map(|t| t.body.clone()).unwrap_or_default();
             for (l, k, v) in [
                 ("Left", "left", b.inset_l.unwrap_or(7.2)),
@@ -219,7 +220,7 @@ fn format_shape(app: &mut SlideApp, ui: &mut Ui) {
                 });
             }
             ui.horizontal(|ui| {
-                ui.label("Columns");
+                ui.label(crate::i18n::t("Columns"));
                 for n in 1..=3 {
                     if ui.small_button(n.to_string()).clicked() {
                         run(app, "format.columns", json!({"count": n, "spacing": 18}));
@@ -230,29 +231,29 @@ fn format_shape(app: &mut SlideApp, ui: &mut Ui) {
         "picture" => {
             let adj = if let ShapeKind::Picture { fill } = &sh.kind { fill.adjust.clone() } else { Default::default() };
             let mut b = adj.brightness as f32;
-            if ui.add(egui::Slider::new(&mut b, -1.0..=1.0).text("Brightness")).drag_stopped() {
+            if ui.add(egui::Slider::new(&mut b, -1.0..=1.0).text(crate::i18n::t("Brightness"))).drag_stopped() {
                 run(app, "picture.adjust", json!({"brightness": b}));
             }
             let mut c = adj.contrast as f32;
-            if ui.add(egui::Slider::new(&mut c, -1.0..=1.0).text("Contrast")).drag_stopped() {
+            if ui.add(egui::Slider::new(&mut c, -1.0..=1.0).text(crate::i18n::t("Contrast"))).drag_stopped() {
                 run(app, "picture.adjust", json!({"contrast": c}));
             }
             let mut s = adj.saturation.unwrap_or(1.0) as f32;
-            if ui.add(egui::Slider::new(&mut s, 0.0..=4.0).text("Saturation")).drag_stopped() {
+            if ui.add(egui::Slider::new(&mut s, 0.0..=4.0).text(crate::i18n::t("Saturation"))).drag_stopped() {
                 run(app, "picture.adjust", json!({"saturation": s}));
             }
             let alpha = if let ShapeKind::Picture { fill } = &sh.kind { fill.alpha.unwrap_or(1.0) } else { 1.0 };
             let mut tr = (1.0 - alpha) as f32;
-            if ui.add(egui::Slider::new(&mut tr, 0.0..=1.0).text("Transparency")).drag_stopped() {
+            if ui.add(egui::Slider::new(&mut tr, 0.0..=1.0).text(crate::i18n::t("Transparency"))).drag_stopped() {
                 run(app, "picture.adjust", json!({"transparency": tr}));
             }
-            if ui.button("Reset Picture").clicked() {
+            if ui.button(crate::i18n::t("Reset Picture")).clicked() {
                 run(app, "picture.reset", json!({}));
             }
         }
         _ => {
             // Fill & Line.
-            ui.label(egui::RichText::new("Fill").font(theme::bold(13.0)));
+            ui.label(egui::RichText::new(crate::i18n::t("Fill")).font(theme::bold(13.0)));
             let kind = match &sh.fill {
                 None => "auto",
                 Some(Fill::None) => "none",
@@ -284,7 +285,7 @@ fn format_shape(app: &mut SlideApp, ui: &mut Ui) {
                 None => ("shape.fill".into(), json!({"none": true})),
             });
             ui.horizontal(|ui| {
-                ui.label("Transparency");
+                ui.label(crate::i18n::t("Transparency"));
                 let id = ui.id().with("ftr");
                 let mut v: f32 = ui.data_mut(|d| d.get_temp(id).unwrap_or(0.0));
                 let r = ui.add(egui::Slider::new(&mut v, 0.0..=100.0).suffix("%"));
@@ -299,21 +300,21 @@ fn format_shape(app: &mut SlideApp, ui: &mut Ui) {
                     run(app, "shape.fill", json!({"gradient": crate::fillui::gradient_json(&ng)}));
                 }
                 let mut rot = g.rotate_with_shape;
-                if ui.checkbox(&mut rot, "Rotate with shape").changed() {
+                if ui.checkbox(&mut rot, crate::i18n::t("Rotate with shape")).changed() {
                     let ng = deckcraft_model::style::Gradient { rotate_with_shape: rot, ..g.clone() };
                     run(app, "shape.fill", json!({"gradient": crate::fillui::gradient_json(&ng)}));
                 }
             }
             ui.add_space(8.0);
-            ui.label(egui::RichText::new("Line").font(theme::bold(13.0)));
+            ui.label(egui::RichText::new(crate::i18n::t("Line")).font(theme::bold(13.0)));
             let none = matches!(sh.line.as_ref().and_then(|l| l.fill.as_ref()), Some(Fill::None));
-            if ui.radio(none, "No line").clicked() {
+            if ui.radio(none, crate::i18n::t("No line")).clicked() {
                 run(app, "shape.line", json!({"none": true}));
             }
-            if ui.radio(!none && sh.line.is_some(), "Solid line").clicked() {
+            if ui.radio(!none && sh.line.is_some(), crate::i18n::t("Solid line")).clicked() {
                 run(app, "shape.line", json!({"color": "tx1", "width": 1}));
             }
-            if ui.radio(sh.line.is_none(), "Automatic").clicked() {
+            if ui.radio(sh.line.is_none(), crate::i18n::t("Automatic")).clicked() {
                 run(app, "shape.line", json!({"reset": true}));
             }
             color_button(app, ui, "Color", Some("No Outline"), |c| match c {
@@ -321,14 +322,14 @@ fn format_shape(app: &mut SlideApp, ui: &mut Ui) {
                 None => ("shape.line".into(), json!({"none": true})),
             });
             ui.horizontal(|ui| {
-                ui.label("Width");
+                ui.label(crate::i18n::t("Width"));
                 let w = sh.line.as_ref().and_then(|l| l.width).unwrap_or(0.75);
                 if let Some(v) = widgets::spinner(ui, "lw", w, 0.25, " pt", 60.0) {
                     run(app, "shape.line", json!({"width": v.max(0.0)}));
                 }
             });
             ui.horizontal_wrapped(|ui| {
-                ui.label("Dash");
+                ui.label(crate::i18n::t("Dash"));
                 for (l, d) in [("—", "solid"), ("···", "sysDot"), ("- -", "dash"), ("-·-", "dashDot"), ("— —", "lgDash")] {
                     if ui.small_button(l).clicked() {
                         run(app, "shape.line", json!({"dash": d}));
@@ -355,13 +356,13 @@ fn background(app: &mut SlideApp, ui: &mut Ui) {
     };
     // What "Apply to All" re-applies: the current slide's background as command params.
     let mut current: Option<Value> = None;
-    ui.label(egui::RichText::new("Fill").font(theme::bold(13.0)));
+    ui.label(egui::RichText::new(crate::i18n::t("Fill")).font(theme::bold(13.0)));
     for (l, k) in [
-        ("Solid fill", "solid"),
-        ("Gradient fill", "gradient"),
-        ("Picture or texture fill", "picture"),
-        ("Pattern fill", "pattern"),
-        ("Follow the layout", "auto"),
+        (crate::i18n::t("Solid fill"), "solid"),
+        (crate::i18n::t("Gradient fill"), "gradient"),
+        (crate::i18n::t("Picture or texture fill"), "picture"),
+        (crate::i18n::t("Pattern fill"), "pattern"),
+        (crate::i18n::t("Follow the layout"), "auto"),
     ] {
         if ui.radio(kind == k, l).clicked() && kind != k {
             match k {
@@ -389,7 +390,7 @@ fn background(app: &mut SlideApp, ui: &mut Ui) {
         Some(Fill::Solid { color }) => {
             current = Some(json!({"color": cref_param(color)}));
             ui.horizontal(|ui| {
-                ui.label("Color");
+                ui.label(crate::i18n::t("Color"));
                 let r = widgets::drop_button(ui, "Color", vec2(70.0, 20.0), true);
                 widgets::color_popup(&r).show(|ui| {
                     if let Some(Some(c)) = widgets::color_grid(ui, &sc, None) {
@@ -427,7 +428,7 @@ fn background(app: &mut SlideApp, ui: &mut Ui) {
             }
         }
         Some(Fill::Picture(_)) => {
-            if ui.button("Insert picture from file…").clicked()
+            if ui.button(crate::i18n::t("Insert picture from file…")).clicked()
                 && let Some(pick) = app.services.pick_open.as_mut()
                 && let Some(path) = pick("picture")
                 && let Some(Ok(bytes)) = app.services.read.as_ref().map(|r| r(&path))
@@ -440,18 +441,18 @@ fn background(app: &mut SlideApp, ui: &mut Ui) {
     ui.add_space(4.0);
     let hide = app.session.active().and_then(|d| d.current_slide().map(|s| !s.show_master_shapes)).unwrap_or(false);
     let mut h = hide;
-    if ui.checkbox(&mut h, "Hide background graphics").changed() {
+    if ui.checkbox(&mut h, crate::i18n::t("Hide background graphics")).changed() {
         run(app, "design.hideBackgroundGraphics", json!({"hide": h}));
     }
     ui.add_space(8.0);
     ui.horizontal(|ui| {
-        if ui.add_enabled(current.is_some(), egui::Button::new("Apply to All")).clicked()
+        if ui.add_enabled(current.is_some(), egui::Button::new(crate::i18n::t("Apply to All"))).clicked()
             && let Some(Value::Object(mut o)) = current.clone()
         {
             o.insert("all".into(), json!(true));
             run(app, "design.background", Value::Object(o));
         }
-        if ui.button("Reset Background").clicked() {
+        if ui.button(crate::i18n::t("Reset Background")).clicked() {
             run(app, "design.background", json!({"reset": true}));
         }
     });
@@ -465,7 +466,7 @@ fn animation(app: &mut SlideApp, ui: &mut Ui) {
     let names: Vec<(u32, String)> = st.shapes().iter().map(|s| (s.id.0, s.name.clone())).collect();
     let selected: Vec<u32> = st.selection.shapes.iter().map(|i| i.0).collect();
     ui.horizontal(|ui| {
-        if ui.button("▶ Play All").clicked() {
+        if ui.button(crate::i18n::t("▶ Play All")).clicked() {
             let from = app.session.active().map(|d| d.selection.slide).unwrap_or(0);
             app.start_show(from, true);
             if let Some(s) = app.show.as_mut() {
@@ -476,7 +477,7 @@ fn animation(app: &mut SlideApp, ui: &mut Ui) {
     });
     ui.separator();
     if anims.is_empty() {
-        ui.label(egui::RichText::new("Select an object on the slide and add an animation from the Animations tab.").color(t.text_dim));
+        ui.label(egui::RichText::new(crate::i18n::t("Select an object on the slide and add an animation from the Animations tab.")).color(t.text_dim));
         return;
     }
     let mut click = 0;
@@ -484,7 +485,7 @@ fn animation(app: &mut SlideApp, ui: &mut Ui) {
         if a.start == AnimStart::OnClick {
             click += 1;
         }
-        let name = names.iter().find(|(id, _)| *id == a.shape.0).map(|(_, n)| n.clone()).unwrap_or_else(|| format!("Shape {}", a.shape));
+        let name = names.iter().find(|(id, _)| *id == a.shape.0).map(|(_, n)| n.clone()).unwrap_or_else(|| crate::i18n::tf("Shape {}", &[(a.shape).to_string()]));
         let (r, resp) = ui.allocate_exact_size(vec2(ui.available_width(), 30.0), Sense::click());
         let sel = selected.contains(&a.shape.0);
         if sel || resp.hovered() {
@@ -524,22 +525,22 @@ fn animation(app: &mut SlideApp, ui: &mut Ui) {
             run(app, "edit.select", json!({"ids": [a.shape.0]}));
         }
         resp.context_menu(|ui| {
-            for (l, v) in [("Start On Click", "onClick"), ("Start With Previous", "withPrevious"), ("Start After Previous", "afterPrevious")] {
+            for (l, v) in [(crate::i18n::t("Start On Click"), "onClick"), (crate::i18n::t("Start With Previous"), "withPrevious"), (crate::i18n::t("Start After Previous"), "afterPrevious")] {
                 if ui.button(l).clicked() {
                     run(app, "animation.timing", json!({"index": i, "start": v}));
                     ui.close();
                 }
             }
             ui.separator();
-            if ui.button("Move Up").clicked() {
+            if ui.button(crate::i18n::t("Move Up")).clicked() {
                 run(app, "animation.move", json!({"index": i, "to": i.saturating_sub(1)}));
                 ui.close();
             }
-            if ui.button("Move Down").clicked() {
+            if ui.button(crate::i18n::t("Move Down")).clicked() {
                 run(app, "animation.move", json!({"index": i, "to": i + 1}));
                 ui.close();
             }
-            if ui.button("Remove").clicked() {
+            if ui.button(crate::i18n::t("Remove")).clicked() {
                 run(app, "animation.remove", json!({"index": i}));
                 ui.close();
             }
@@ -551,14 +552,14 @@ fn animation(app: &mut SlideApp, ui: &mut Ui) {
 
 fn comments(app: &mut SlideApp, ui: &mut Ui) {
     let t = Tokens::get(ui.ctx());
-    if ui.button("+ New Comment").clicked() {
+    if ui.button(crate::i18n::t("+ New Comment")).clicked() {
         app.dialog = Some(crate::dialogs::Dialog::new("comment"));
     }
     ui.separator();
     let Some(st) = app.session.active() else { return };
     let list = st.current_slide().map(|s| s.comments.clone()).unwrap_or_default();
     if list.is_empty() {
-        ui.label(egui::RichText::new("No comments on this slide.").color(t.text_dim));
+        ui.label(egui::RichText::new(crate::i18n::t("No comments on this slide.")).color(t.text_dim));
     }
     for (i, c) in list.iter().enumerate() {
         egui::Frame::NONE.fill(t.chrome).corner_radius(CornerRadius::same(8)).inner_margin(egui::Margin::same(8)).show(ui, |ui| {
@@ -579,7 +580,7 @@ fn comments(app: &mut SlideApp, ui: &mut Ui) {
             ui.horizontal(|ui| {
                 let id = ui.id().with(("reply", i));
                 let mut txt: String = ui.data_mut(|d| d.get_temp(id).unwrap_or_default());
-                let r = ui.add(egui::TextEdit::singleline(&mut txt).hint_text("Reply…").desired_width(ui.available_width() - 70.0));
+                let r = ui.add(egui::TextEdit::singleline(&mut txt).hint_text(crate::i18n::t("Reply…")).desired_width(ui.available_width() - 70.0));
                 if r.lost_focus() && ui.input(|i| i.key_pressed(egui::Key::Enter)) && !txt.trim().is_empty() {
                     run(app, "comment.reply", json!({"index": i, "text": txt}));
                     txt.clear();
@@ -600,7 +601,7 @@ fn comments(app: &mut SlideApp, ui: &mut Ui) {
 /// Design Ideas: offline suggestions — the current slide in each theme and layout variations.
 fn designer(app: &mut SlideApp, ui: &mut Ui) {
     let t = Tokens::get(ui.ctx());
-    ui.label(egui::RichText::new("Pick a look for your slides. Ideas are generated on your device.").color(t.text_dim));
+    ui.label(egui::RichText::new(crate::i18n::t("Pick a look for your slides. Ideas are generated on your device.")).color(t.text_dim));
     ui.add_space(6.0);
     let Some(st) = app.session.active() else { return };
     let doc = st.doc.clone();

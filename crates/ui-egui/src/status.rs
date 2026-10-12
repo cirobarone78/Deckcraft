@@ -15,12 +15,12 @@ pub fn status_bar(app: &mut SlideApp, ui: &mut Ui) {
         let Some(st) = app.session.active() else { return };
         let n = st.doc.slides.len();
         let left = match st.selection.target {
-            deckcraft_engine::Target::Slides => format!("Slide {} of {}", (st.selection.slide + 1).min(n.max(1)), n),
+            deckcraft_engine::Target::Slides => crate::i18n::tf("Slide {} of {}", &[((st.selection.slide + 1).min(n.max(1))).to_string(), (n).to_string()]),
             _ => "Slide Master".to_string(),
         };
         let p = ui.painter();
         p.text(pos2(rect.min.x + 14.0, rect.center().y), Align2::LEFT_CENTER, &left, theme::font(12.0), t.text_dim);
-        p.text(pos2(rect.min.x + 120.0, rect.center().y), Align2::LEFT_CENTER, "English (United States)", theme::font(12.0), t.text_dim);
+        p.text(pos2(rect.min.x + 120.0, rect.center().y), Align2::LEFT_CENTER, crate::i18n::t("English (United States)"), theme::font(12.0), t.text_dim);
         // Transient status message.
         if let Some((msg, at)) = app.status.clone() {
             if crate::now_ms() - at < 6000.0 {
@@ -40,7 +40,7 @@ pub fn status_bar(app: &mut SlideApp, ui: &mut Ui) {
             app.ui.zoom = None;
         }
         let pct = (app.ui.zoom.unwrap_or(app.canvas_scale) * 100.0).round();
-        let lbl = right.add(egui::Label::new(egui::RichText::new(format!("{pct}%")).size(12.0).color(t.text_dim)).sense(Sense::click()));
+        let lbl = right.add(egui::Label::new(egui::RichText::new(crate::i18n::tf("{}%", &[pct.to_string()])).size(12.0).color(t.text_dim)).sense(Sense::click()));
         if lbl.clicked() {
             app.dialog = Some(crate::dialogs::Dialog::new("zoom"));
         }
@@ -93,7 +93,7 @@ fn small_icon(ui: &mut Ui, icon: Icon, tip: &str, on: bool) -> egui::Response {
         ui.painter().rect_filled(r, CornerRadius::same(4), if on { t.selected } else { t.hover });
     }
     icons::paint(ui.painter(), Rect::from_center_size(r.center(), vec2(16.0, 16.0)), icon, t.text_dim, false);
-    resp.on_hover_text(tip)
+    resp.on_hover_text(crate::i18n::t(tip))
 }
 
 fn labeled(ui: &mut Ui, icon: Icon, label: &str, on: bool) -> egui::Response {
@@ -148,7 +148,7 @@ pub fn notes_pane(app: &mut SlideApp, ui: &mut Ui) {
             let r = ui.add(
                 egui::TextEdit::multiline(&mut buf)
                     .id(id)
-                    .hint_text("Click to add notes")
+                    .hint_text(crate::i18n::t("Click to add notes"))
                     .frame(egui::Frame::NONE)
                     .desired_width(f32::INFINITY)
                     .desired_rows(2)
