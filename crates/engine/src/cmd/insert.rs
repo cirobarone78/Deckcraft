@@ -18,7 +18,7 @@ pub fn specs() -> Vec<CommandSpec> {
             "Shapes",
             ["Insert", "Illustrations"],
             None,
-            "{preset: rect|roundRect|ellipse|triangle|rightArrow|star5|… (see shape.presets), rect: [x,y,w,h] pt, text?: string}",
+            "{preset: rect|roundRect|ellipse|triangle|rightArrow|star5|… (see shape.presets), rect: [x,y,w,h] pt, text?: string, adj?: [number] (preset adjustments), flip?: h|v|hv}",
             has_slide,
             insert_shape
         ),
@@ -33,13 +33,13 @@ pub fn specs() -> Vec<CommandSpec> {
             has_slide,
             picture
         ),
-        cmd!("insert.table", "Table…", ["Insert", "Tables"], None, "{rows, cols, rect?}", has_slide, table),
+        cmd!("insert.table", "Table…", ["Insert", "Tables"], None, "{rows, cols, rect?, data?: [[cell text]]}", has_slide, table),
         cmd!(
             "insert.chart",
             "Chart…",
             ["Insert", "Illustrations"],
             None,
-            "{type?: column|bar|line|pie|doughnut|area|scatter|stackedColumn|…, rect?, categories?: [..], series?: [{name, values}]}",
+            "{type?: column|bar|line|pie|doughnut|area|scatter|stackedColumn|…, rect?, categories?: [..], series?: [{name, values}], title?}",
             has_slide,
             chart
         ),
@@ -582,7 +582,8 @@ fn hyperlink(s: &mut Session, p: &Value) -> Result<Value> {
     let (action, display) = if let Some(u) = str_param(p, "url") {
         (Action::Url { url: u.to_string() }, u.strip_prefix("mailto:").unwrap_or(u).to_string())
     } else if let Some(i) = usize_param(p, "slide") {
-        let slide = s.doc()?.doc.slides.get(i).ok_or_else(|| bad("insert.hyperlink", "no such slide"))?;
+        let slides = &s.doc()?.doc.slides;
+        let slide = slides.get(i).ok_or_else(|| bad("insert.hyperlink", none_at("slide", i, slides.len())))?;
         let title = slide.title();
         (Action::Slide { slide: slide.id }, if title.is_empty() { format!("Slide {}", i + 1) } else { title })
     } else {

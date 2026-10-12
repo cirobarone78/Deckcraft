@@ -259,10 +259,24 @@ impl SlideApp {
     /// Run a command by id (UI commands here, everything else in the engine). Errors show in the
     /// status bar and are returned.
     pub fn run(&mut self, id: &str, params: Value) -> Result<Value, String> {
+        self.dispatch(id, params, Session::execute)
+    }
+
+    /// [`Self::run`] for a caller outside the app: engine commands go through [`Session::call`].
+    pub fn call(&mut self, id: &str, params: Value) -> Result<Value, String> {
+        self.dispatch(id, params, Session::call)
+    }
+
+    fn dispatch(
+        &mut self,
+        id: &str,
+        params: Value,
+        engine: fn(&mut Session, &str, &Value) -> deckcraft_engine::Result<Value>,
+    ) -> Result<Value, String> {
         let r = if UI_COMMANDS.iter().any(|c| c.0 == id) {
             self.run_ui(id, &params)
         } else {
-            self.session.execute(id, &params).map_err(|e| e.to_string())
+            engine(&mut self.session, id, &params).map_err(|e| e.to_string())
         };
         if let Err(e) = &r {
             self.set_status(e.clone());
@@ -930,6 +944,26 @@ mod tests {
         harness.run_steps(2);
         assert!(!harness.state().home_open(), "a new presentation leaves Home");
         assert_eq!(harness.state().session.documents().len(), 2);
+    }
+
+    #[test]
+    fn the_control_channel_answers_engine_commands_in_words() {
+        let mut app = SlideApp::new(Session::with_new(), Services::default());
+        let ctx = egui::Context::default();
+        let mut execute = |command: &str, params: Value| {
+            let (reply, _) = std::sync::mpsc::channel();
+            let req = control::ControlRequest { method: "engine.execute".into(), params: json!({"command": command, "params": params}), reply };
+            match control::handle(&mut app, &ctx, &req) {
+                control::Outcome::Done(v) => v,
+                control::Outcome::Screenshot { .. } => Value::Null,
+            }
+        };
+        let refused = execute("shape.insert", json!({"shape": "roundRect"}));
+        assert!(
+            refused["error"].as_str().unwrap().starts_with("`shape.insert` was given `shape`, which it doesn't take. `shape.insert` takes {preset: ")
+        );
+        let id = execute("shape.insert", json!({"preset": "roundRect", "text": "Hi"}))["result"]["id"].clone();
+        assert_eq!(execute("format.size", json!({"size": 28}))["result"], format!("changed shape {id} on slide index 0"));
     }
 
     #[test]
