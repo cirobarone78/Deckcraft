@@ -15,14 +15,16 @@ Open the command palette with Ctrl+Shift+P, run **Export…**, keep **PDF docume
 4. Tick **Include hidden slides** if you want them in the PDF.
 5. Click **Export**, then choose where to save the file.
 
-The PDF includes a text layer by default. An open issue reports that text copied from an exported PDF can come out garbled when a text run's glyph count differs from its character count, so check copied text if you rely on it.
-
 ## Other formats in the same window
 
 - **PNG images (current slide)** and **PNG images (all slides)**
 - **JPEG image (current slide)**
 - **PowerPoint Presentation (.pptx)**
 - **Outline (.txt)**
+
+## Copied text
+
+The PDF includes a text layer by default. An open issue reports that text copied from an exported PDF can come out garbled when a text run's glyph count differs from its character count, so check copied text if you rely on it.
 
 ## Related
 

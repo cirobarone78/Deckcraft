@@ -22,12 +22,16 @@ If DeckCraft flashes and quits, start it from PowerShell with `WGPU_BACKEND` set
         & .\deckcraft.exe
         Remove-Item Env:WGPU_BACKEND
 
-The last line resets the setting so later launches use the default again.
+   The last line resets the setting so later launches use the default again.
+
 Do not set `WGPU_BACKEND` to `gl`. The README warns that it can bring the driver crash back on affected systems.
 
 ## Why this happens
 
-By default the Windows app starts the graphics layer on DirectX 12 only. The README says that letting it also create an OpenGL instance can crash some graphics drivers (AMD's `atio6axx.dll`) before the window appears. A separate report on an NVIDIA PC (issue 153, still open for 0.5.0) shows the same symptom and says Vulkan works there.
+Two causes are documented, and the Vulkan workaround covers both.
+
+- **Missing DirectX shader compiler files.** Issue 153 reports that the 0.5.0 build, in both the MSI and the portable zip, ships neither `dxcompiler.dll` nor `dxil.dll`. DirectX 12 shader compilation then fails and the graphics device is lost before the first frame, which is where `Parent device is lost` comes from. The reporter saw this on an NVIDIA PC on Windows 11 and confirmed that `WGPU_BACKEND=vulkan` starts the app. A fix, pull request 176 ("Windows: compile DX12 shaders with FXC"), is open and is not in 0.5.0.
+- **An OpenGL crash in some AMD drivers.** The README says the Windows app starts the graphics layer on DirectX 12 only by default, because also creating an OpenGL instance can crash some drivers (AMD's `atio6axx.dll`) before the window appears.
 
 ## Find the log
 

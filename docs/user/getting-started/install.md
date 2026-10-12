@@ -30,7 +30,7 @@ If the window flashes and closes, see [DeckCraft closes right after it starts](.
 
 ## Install with ArtCraft Launcher
 
-ArtCraft Launcher lists DeckCraft in its app catalog under "Presentations and slide shows". Open the launcher and install DeckCraft from there. Steps are in the launcher docs: [ArtCraft Launcher](https://getartcraft.com/docs/craft-launcher).
+ArtCraft Launcher lists DeckCraft in its app catalog under "Presentations and slide shows". Open the launcher and install DeckCraft from there. The launcher route needs Windows 11 too. Steps are in the launcher docs: [ArtCraft Launcher](https://getartcraft.com/docs/craft-launcher).
 
 ## Other systems
 

@@ -20,18 +20,18 @@ The **Presenter View** button on the **Slide Show** tab is on by default. While 
 
 ## Keys during the show
 
-| Key                                          | What it does            |
-|----------------------------------------------|-------------------------|
-| Right arrow, Down arrow, Space, Page Down, N | Next step or slide      |
-| Left arrow, Up arrow, Backspace, Page Up, P  | Previous step or slide  |
-| A number, then Enter                         | Go to that slide        |
-| Home, End                                    | First slide, last slide |
-| B or . (period)                              | Black screen on or off  |
-| W or , (comma)                               | White screen on or off  |
-| Ctrl+P                                       | Pen on or off           |
-| Ctrl+A                                       | Pen off                 |
-| E                                            | Erase pen marks         |
-| Esc or -                                     | End the show            |
+| Key                                                 | What it does            |
+|-----------------------------------------------------|-------------------------|
+| Right arrow, Down arrow, Space, Page Down, N, Enter | Next step or slide      |
+| Left arrow, Up arrow, Backspace, Page Up, P         | Previous step or slide  |
+| A number, then Enter                                | Go to that slide        |
+| Home, End                                           | First slide, last slide |
+| B or . (period)                                     | Black screen on or off  |
+| W or , (comma)                                      | White screen on or off  |
+| Ctrl+P                                              | Pen on or off           |
+| Ctrl+A                                              | Pen off                 |
+| E                                                   | Erase pen marks         |
+| Esc or -                                            | End the show            |
 
 Clicking the slide moves on to the next step, and a right click goes back.
 
