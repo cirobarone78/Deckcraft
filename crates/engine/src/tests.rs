@@ -629,7 +629,7 @@ fn a_layout_can_hide_the_slide_master_graphics() {
 }
 
 #[test]
-fn a_layout_takes_placeholders_of_every_kind_powerpoint_has() {
+fn a_layout_takes_title_subtitle_date_footer_and_slide_number_placeholders() {
     use deckcraft_model::PhType;
     let mut s = template();
     s.execute("view.slideMaster", &json!({"master": 0})).unwrap();
@@ -681,6 +681,20 @@ fn new_slides_carry_the_footers_the_template_turns_on() {
     assert_eq!(kinds(1), [PhType::Footer, PhType::SlideNum]);
     let footer = st.doc.slides[1].shapes.iter().find(|sh| sh.ph_type() == Some(PhType::Footer)).unwrap();
     assert_eq!(footer.text.as_ref().unwrap().text(), "Acme");
+}
+
+#[test]
+fn slides_from_an_outline_carry_the_footers_too() {
+    use deckcraft_model::PhType;
+    let mut s = template();
+    s.execute("design.headerFooter", &json!({"slideNumber": true, "footerText": "Acme"})).unwrap();
+    s.execute("slide.fromOutline", &json!({"text": "Q3\n\tRevenue\nQ4\n\tCosts"})).unwrap();
+    let st = s.doc().unwrap();
+    assert_eq!(st.doc.slides.len(), 2);
+    for sl in &st.doc.slides {
+        let kinds: Vec<_> = sl.shapes.iter().filter_map(|sh| sh.ph_type()).filter(|k| k.is_footer_kind()).collect();
+        assert_eq!(kinds, [PhType::Footer, PhType::SlideNum]);
+    }
 }
 
 #[test]

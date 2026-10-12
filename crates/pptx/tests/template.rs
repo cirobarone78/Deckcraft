@@ -40,7 +40,7 @@ fn main_content_type(bytes: &[u8]) -> String {
     zip.by_name("[Content_Types].xml").expect("content types").read_to_string(&mut xml).expect("read");
     let at = xml.find("PartName=\"/ppt/presentation.xml\"").expect("presentation override");
     let tail = &xml[at..];
-    let ct = &tail[tail.find("ContentType=\"").expect("content type") + 13..];
+    let ct = &tail[tail.find("ContentType=\"").expect("content type") + "ContentType=\"".len()..];
     ct[..ct.find('"').expect("quote")].to_string()
 }
 
@@ -99,6 +99,17 @@ fn a_template_saves_with_the_template_content_type() {
     if let Ok(dir) = std::env::var("DECKCRAFT_PPTX_OUT") {
         std::fs::write(format!("{dir}/brand.potx"), &potx).expect("write");
     }
+}
+
+#[test]
+fn save_template_writes_a_template_file() {
+    let path = std::env::temp_dir().join(format!("dc-template-{}.potx", std::process::id()));
+    let mut s = Session::new();
+    run(&mut s, "file.new", json!({"blank": true}));
+    run(&mut s, "file.saveTemplate", json!({"path": path.to_str().expect("path")}));
+    let bytes = std::fs::read(&path).expect("saved");
+    std::fs::remove_file(&path).expect("remove");
+    assert_eq!(main_content_type(&bytes), "application/vnd.openxmlformats-officedocument.presentationml.template.main+xml");
 }
 
 #[test]
