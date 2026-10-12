@@ -94,6 +94,14 @@ fn print_shows_what_each_command_did() {
 }
 
 #[test]
+fn without_print_run_confirms_what_it_did() {
+    let out = std::env::temp_dir().join(format!("dc-cli-ok-{}.deckcraft", std::process::id()));
+    let path = out.to_str().unwrap();
+    assert_eq!(stdout(&cli(&["run", "--cmd", "slide.new", "--cmd", "slide.new", "--save", path])), format!("OK: 2 commands ran, saved {path}\n"));
+    std::fs::remove_file(&out).unwrap();
+}
+
+#[test]
 fn an_unknown_parameter_is_refused() {
     assert_eq!(
         stderr(&cli(&["run", "--cmd", r#"shape.insert={"shape":"roundRect"}"#])),

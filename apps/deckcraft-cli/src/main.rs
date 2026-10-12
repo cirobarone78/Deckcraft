@@ -51,7 +51,8 @@ PARAMS is the command's parameters as a JSON object, for example:
     --cmd 'format.size={\"size\":28}' --print --save q3.deckcraft
 
 Shape ids are looked up on the current slide. shape.insert selects the shape it inserts, and
-format.* acts on the selected text or shapes. --print shows each command's answer.";
+format.* acts on the selected text or shapes. --print shows each command's answer; without it,
+run ends with one OK line.";
 
 fn main() -> ExitCode {
     let args: Vec<String> = std::env::args().skip(1).collect();
@@ -243,11 +244,17 @@ fn run(args: &[String]) -> Result<(), String> {
             }
         }
     }
+    let mut done = vec![if total == 1 { "1 command ran".to_string() } else { format!("{total} commands ran") }];
     if let Some(p) = save {
         s.execute("file.saveAs", &json!({"path": p})).map_err(|e| e.to_string())?;
+        done.push(format!("saved {p}"));
     }
     if let Some(p) = export {
         s.execute("file.export", &json!({"path": p})).map_err(|e| e.to_string())?;
+        done.push(format!("exported {p}"));
+    }
+    if !print {
+        outln!("OK: {}", done.join(", "));
     }
     Ok(())
 }
