@@ -313,6 +313,9 @@ pub struct Session {
     pub media_status: std::collections::HashMap<ShapeId, MediaStatus>,
     /// Animated GIF pictures paused with `media.gifPlay` (the others play).
     pub gif_paused: std::collections::HashSet<ShapeId>,
+    /// Keys follow PowerPoint for Mac where its shortcuts differ from Windows (`keys.rs`). The
+    /// build target by default; the UI sets it from the OS it runs on (the web).
+    pub mac_keys: bool,
 }
 
 impl Default for Session {
@@ -340,6 +343,7 @@ impl Session {
             recovery_dir: None,
             media_status: Default::default(),
             gif_paused: Default::default(),
+            mac_keys: cfg!(target_os = "macos"),
         }
     }
     /// A session with one new presentation open.

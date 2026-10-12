@@ -38,7 +38,7 @@ pub fn pointer_kind(k: &str) -> Option<PointerKind> {
 
 pub fn mods_from(p: &Value) -> Mods {
     let b = |n: &str| p.get(n).and_then(Value::as_bool).unwrap_or(false);
-    Mods { shift: b("shift"), alt: b("alt"), cmd: b("cmd") || b("ctrl") }
+    Mods { shift: b("shift"), alt: b("alt"), cmd: b("cmd") || b("ctrl"), control: b("control") }
 }
 
 /// A tool name (`select`, `textBox`, `shape`, `pen`, `highlighter`, `eraser`) to a [`ToolKind`].

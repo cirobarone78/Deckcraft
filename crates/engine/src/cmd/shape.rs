@@ -31,7 +31,15 @@ pub fn specs() -> Vec<CommandSpec> {
         ),
         cmd!(query "shape.sites", "Connection Sites", [], None, "{id} → [[x, y]] connection sites in slide points", has_slide, sites),
         cmd!("shape.move", "Move", [], None, "{dx?, dy?: pt (relative) | x?, y?: pt (absolute), ids?}", has_selection, move_by),
-        cmd!("shape.resize", "Size", ["Shape Format", "Size"], None, "{w?, h?: pt, lockAspect?: bool, ids?}", has_selection, resize),
+        cmd!(
+            "shape.resize",
+            "Size",
+            ["Shape Format", "Size"],
+            None,
+            "{w?, h?: pt, dw?, dh?: pt (relative, Shift+arrows), lockAspect?: bool, ids?}",
+            has_selection,
+            resize
+        ),
         cmd!("shape.setBounds", "Position and Size", [], None, "{x, y, w, h, ids?}", has_selection, set_bounds),
         cmd!("shape.rotate", "Rotation", ["Shape Format", "Arrange", "Rotate"], None, "{deg?: absolute, by?: relative, ids?}", has_selection, rotate),
         cmd!("shape.flip", "Flip", ["Shape Format", "Arrange", "Rotate"], None, "{axis: horizontal|vertical, ids?}", has_selection, flip),
@@ -124,9 +132,12 @@ fn move_by(s: &mut Session, p: &Value) -> Result<Value> {
 
 fn resize(s: &mut Session, p: &Value) -> Result<Value> {
     let (w, h) = (f64_param(p, "w").map(|v| v.max(0.0)), f64_param(p, "h").map(|v| v.max(0.0)));
+    let (dw, dh) = (f64_param(p, "dw"), f64_param(p, "dh"));
     let lock = bool_or(p, "lockAspect", false);
     edit_shapes(s, p, "shape.resize", |sh| {
         if let Some(x) = sh.xfrm.as_mut() {
+            // Relative: each shape grows or shrinks by the same amount (never below zero).
+            let (w, h) = (w.or(dw.map(|d| (x.w + d).clamp(0.0, 1.0e7))), h.or(dh.map(|d| (x.h + d).clamp(0.0, 1.0e7))));
             let ar = if x.h > 0.0 { x.w / x.h } else { 1.0 };
             let (cx, cy) = (x.x + x.w / 2.0, x.y + x.h / 2.0);
             match (w, h, lock) {

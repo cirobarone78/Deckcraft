@@ -18,6 +18,10 @@ pub fn show(app: &mut SlideApp, ui: &mut Ui) {
         .frame(egui::Frame::NONE.fill(t.chrome))
         .show(ui, |ui| {
             app.ui.thumbs_width = ui.available_width();
+            if app.thumbs_focused {
+                // F6 put the keyboard here.
+                ui.painter().rect_stroke(ui.max_rect().shrink(1.0), CornerRadius::ZERO, Stroke::new(2.0, t.accent), egui::StrokeKind::Inside);
+            }
             if in_master {
                 master_list(app, ui);
                 return;

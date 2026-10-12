@@ -228,6 +228,23 @@ mod tests {
         assert!(s.execute("media.posterFrame", &json!({})).is_err(), "audio has no poster frame");
     }
 
+    /// Space (Mac) and Ctrl+Space (Windows) play or pause the selected audio; typing a space
+    /// doesn't try to edit it as text.
+    #[test]
+    fn space_plays_the_selected_media() {
+        let mut s = Session::with_new();
+        let _ = s.execute("slide.new", &json!({"layout": "blank"}));
+        let r = s.execute("insert.audio", &json!({"name": "tone.wav", "data": base64_encode(&wav())})).expect("insert");
+        let id = ShapeId(r["id"].as_u64().expect("id") as u32);
+        s.execute("edit.select", &json!({"ids": [id.0]})).expect("select");
+        s.ui_requests.clear();
+        assert_eq!(s.type_text(" ").expect("type")["handled"], false);
+        s.key("Space", crate::Mods::default()).expect("space");
+        s.key("Space", crate::Mods { cmd: true, ..Default::default() }).expect("ctrl+space");
+        let toggle = UiRequest::Media { action: "toggle".into(), shape: id, ms: None };
+        assert_eq!(s.ui_requests, vec![toggle.clone(), toggle]);
+    }
+
     #[test]
     fn media_commands_need_media() {
         let mut s = Session::with_new();

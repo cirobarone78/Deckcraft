@@ -28,7 +28,8 @@ impl Xf {
 }
 
 fn mods(ui: &Ui) -> Mods {
-    ui.input(|i| Mods { shift: i.modifiers.shift, alt: i.modifiers.alt, cmd: i.modifiers.command || i.modifiers.ctrl })
+    let mac = ui.ctx().os() == egui::os::OperatingSystem::Mac;
+    ui.input(|i| crate::mods_of(i.modifiers, mac))
 }
 
 /// The slide's rect on screen for the current zoom.

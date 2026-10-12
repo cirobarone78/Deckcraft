@@ -18,7 +18,7 @@ Coordinates are slide points (1/72 inch; a 16:9 slide is 960 × 540) unless note
 | `ui.inspect` | — | UI state, active tool, window/canvas/slide rects, dialog, Home (start screen over the open presentations), slide show state, documents, perf (fps, render ms) |
 | `ui.tool.select` | `{tool, preset?}` | `select`, `text`, `shape` + preset, any preset name, `curve`, `freeform`, `scribble`, `pen`, `highlighter`, `eraser` |
 | `ui.pointer` | `{events: [{kind: down\|drag\|up\|move\|doubleclick\|tripleclick, x, y, mods?}], mods?}` | Drive the active tool in slide points through the same code path as the mouse |
-| `ui.key` / `ui.text` | `{key, shift?, alt?, cmd?}` / `{text}` | Keyboard input (also drives a running slide show) |
+| `ui.key` / `ui.text` | `{key, shift?, alt?, cmd?, control?}` / `{text}` | Keyboard input, the same as the keyboard: the UI's own shortcuts (views, panes, dialogs, the show) first, then `Session::key`. `cmd` is Ctrl or Cmd; `control` is the Mac Control key in Cmd+Control shortcuts. Also drives a running slide show |
 | `ui.move` / `ui.click` / `ui.drag` | screen points | Real egui pointer input — reaches every widget, menu and pane |
 | `ui.set` | `{tab?, view?, pane?, notes?, zoom?, brightness?, ruler?, gridlines?, guides?, …}` | UI state (returns the full state) |
 | `ui.dialog.open` / `ui.dialog.close` | `{id, fields?}` | Open or close a dialog by id; `fields` pre-fills its fields (About: `{"tab": "contributors"}` or `"models"`) |

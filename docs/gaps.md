@@ -1,6 +1,6 @@
 # Where DeckCraft falls short of PowerPoint
 
-> **Last reviewed:** 2026-10-10 · **Last updated:** 2026-10-10 · **Change:** minor (core-workflow alpha gate added; stage stays alpha; previous: major, first itemized gap list; full re-measure against PowerPoint for Mac 16.113.4 and the open GitHub issues) · **Target:** Microsoft PowerPoint for Mac 16.113 (Microsoft 365)
+> **Last reviewed:** 2026-10-12 · **Last updated:** 2026-10-12 · **Change:** minor (shortcuts that wait for a feature; previous: minor, core-workflow alpha gate added; before that major, first itemized gap list; full re-measure against PowerPoint for Mac 16.113.4 and the open GitHub issues) · **Target:** Microsoft PowerPoint for Mac 16.113 (Microsoft 365)
 
 Every known shortfall, one entry each, ranked by how much it stops someone who presents with
 PowerPoint from switching. This is the work list: pick from the top. Numbers are summarized in
@@ -205,6 +205,11 @@ Detail in [ui-parity.md](ui-parity.md).
 - **Dialogs**: 27 dialogs vs PowerPoint's ~60 (Font, Bullets and Numbering, Find/Replace dialog,
   Replace Fonts, Action Settings, Print, Insert Object…). 8–14 h.
 - **Command palette defaults to an Export entry that fails** (#79). 0.5 h.
+- **Shortcuts that wait for a feature** (150 of PowerPoint's 192 shortcuts work; audit in
+  [ui-parity.md](ui-parity.md#shortcut-audit)): Find and Replace, the Font dialog, Print, Paste
+  Special, ribbon KeyTips and Shift+F10, outline levels (Alt+Shift+1 / + / -), moving paragraphs
+  (Alt+Shift+Up/Down), and in the show All Slides, volume, mute, bookmarks and rehearsal keys. Each
+  key is minutes once its feature exists; KeyTips are 3–5 h.
 
 ## Hardware
 
@@ -251,6 +256,7 @@ Detail in [localization-parity.md](localization-parity.md).
 
 | Date | Change | Summary |
 |---|---|---|
+| 2026-10-12 | minor | Added the shortcuts that wait for a feature (from the shortcut audit) |
 | 2026-10-12 | minor | Text warps render (all 40 presets, adjusts round-trip); the warp gap is now the gallery, command and handles |
 | 2026-10-10 | minor | Noted that no gap blocks alpha (core-workflow gate passes) |
 | 2026-10-10 | major | Created: every gap from the 2026-10-10 re-measure and the 16 open GitHub issues, ranked, with beta blockers marked |
