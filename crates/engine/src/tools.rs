@@ -798,6 +798,10 @@ impl Session {
                         }
                         Ok(Value::Null)
                     }
+                    ShapeKind::Chart(_) => {
+                        self.ui_requests.push(crate::UiRequest::Dialog { id: "chartData".into(), params: json!({"id": id.0}) });
+                        Ok(Value::Null)
+                    }
                     ShapeKind::Shape | ShapeKind::Connector { .. } if !sh.is_line() => {
                         let pos = text_pos(st, &sh, p);
                         self.execute("text.edit", &json!({"id": id, "at": [pos.0, pos.1]}))?;
