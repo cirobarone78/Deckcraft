@@ -33,6 +33,8 @@ The **Presenter View** button on the **Slide Show** tab is on by default. While 
 | E                                                   | Erase pen marks         |
 | Esc or -                                            | End the show            |
 
+On macOS, Ctrl+P and Ctrl+A become Cmd+P and Cmd+A.
+
 Clicking the slide moves on to the next step, and a right click goes back.
 
 ## Hide a slide

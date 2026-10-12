@@ -5,7 +5,7 @@ order: 50
 verified: 0.5.0
 ---
 
-Open the command palette with Ctrl+Shift+P, run **Export…**, keep **PDF document (.pdf)** selected and click **Export**.
+Open the command palette with Ctrl+Shift+P, run **Export…**, keep **PDF document (.pdf)** selected and click **Export**. On macOS, use Cmd in place of Ctrl.
 
 ## Steps
 
@@ -24,7 +24,7 @@ Open the command palette with Ctrl+Shift+P, run **Export…**, keep **PDF docume
 
 ## Copied text
 
-The PDF includes a text layer by default. An open issue reports that text copied from an exported PDF can come out garbled when a text run's glyph count differs from its character count, so check copied text if you rely on it.
+The PDF includes a text layer by default. Text copied from an exported PDF can come out garbled ([issue 164](https://github.com/storytold/deckcraft/issues/164)). Check copied text if you rely on it.
 
 ## Related
 

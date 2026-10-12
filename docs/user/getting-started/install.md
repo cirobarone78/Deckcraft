@@ -1,6 +1,6 @@
 ---
 title: Install DeckCraft
-description: Download DeckCraft for Windows 11 from GitHub or install it with ArtCraft Launcher, and find out which file fits your PC.
+description: Download DeckCraft for Windows 11 or macOS from GitHub or install it with ArtCraft Launcher, and find out which file fits your PC.
 order: 10
 verified: 0.5.0
 ---
@@ -22,15 +22,19 @@ Other Windows builds on the release page:
 |------------------------------------|-----------------------------------------|--------------------------------------------------|
 | 64-bit Intel or AMD                | `deckcraft-<version>-windows-x64.msi`   | `deckcraft-<version>-windows-x64-portable.zip`   |
 | Arm (Snapdragon and other Arm PCs) | `deckcraft-<version>-windows-arm64.msi` | `deckcraft-<version>-windows-arm64-portable.zip` |
-| 32-bit                             | `deckcraft-<version>-windows-x86.msi`   | `deckcraft-<version>-windows-x86-portable.zip`   |
 
 The README says the installers and executables are code-signed, and that `SHA256SUMS.txt` on the release lists a checksum for every file.
 
 If the window flashes and closes, see [DeckCraft closes right after it starts](../troubleshooting/app-closes-at-startup.md).
 
+## macOS
+
+1. Download `deckcraft-<version>-macos-universal.dmg`. It works on Apple silicon and Intel Macs and is signed and notarized.
+2. Open it and drag DeckCraft to Applications.
+
 ## Install with ArtCraft Launcher
 
-ArtCraft Launcher lists DeckCraft in its app catalog under "Presentations and slide shows". Open the launcher and install DeckCraft from there. The launcher route needs Windows 11 too. Steps are in the launcher docs: [ArtCraft Launcher](https://getartcraft.com/docs/craft-launcher).
+ArtCraft Launcher lists DeckCraft in its app catalog under "Presentations and slide shows". Open the launcher and install DeckCraft from there. Steps are in the launcher docs: [ArtCraft Launcher](https://getartcraft.com/docs/craft-launcher).
 
 ## Other systems
 

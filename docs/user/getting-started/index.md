@@ -16,6 +16,8 @@ Start DeckCraft, pick a theme tile under **New presentation**, then use **New Sl
 5. Press F5, or click **Present** in the title bar, to play the deck from the first slide. Press Esc to leave the show.
 6. Press Ctrl+S to save. The first save asks where to put the file.
 
+On macOS, use Cmd in place of Ctrl.
+
 If you would rather try DeckCraft on a finished deck first, click **Open the sample deck** on the start screen.
 
 ## Find a command

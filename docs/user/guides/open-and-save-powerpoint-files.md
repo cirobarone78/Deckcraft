@@ -5,7 +5,7 @@ order: 20
 verified: 0.5.0
 ---
 
-Press Ctrl+O to open a `.pptx`. To save as PowerPoint, press Ctrl+Shift+S and give the file a name that ends in `.pptx`.
+Press Ctrl+O to open a `.pptx`. To save as PowerPoint, press Ctrl+Shift+S and give the file a name that ends in `.pptx`. On macOS, use Cmd in place of Ctrl.
 
 ## Open a file
 
