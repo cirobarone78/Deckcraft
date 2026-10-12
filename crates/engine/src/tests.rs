@@ -801,6 +801,39 @@ fn slides_take_the_shape_of_their_layout_placeholders() {
 }
 
 #[test]
+fn a_layout_set_back_to_a_rectangle_stays_one_under_a_rounded_master() {
+    use deckcraft_model::PhType;
+    let mut s = template();
+    s.execute("view.slideMaster", &json!({"master": 0})).unwrap();
+    let body = placeholder(&s, PhType::Body);
+    s.execute("shape.change", &json!({"ids": [body], "preset": "roundRect"})).unwrap();
+    s.execute("view.slideMaster", &json!({"layout": 1})).unwrap();
+    let content = placeholder(&s, PhType::Obj);
+    s.execute("shape.change", &json!({"ids": [content], "preset": "rect"})).unwrap();
+    s.execute("view.closeMaster", &json!({})).unwrap();
+    s.execute("slide.new", &json!({"layout": "titleAndContent"})).unwrap();
+    let v = s.execute("slide.inspect", &json!({})).unwrap();
+    let presets: Vec<&str> = v["shapes"].as_array().unwrap().iter().filter_map(|sh| sh["preset"].as_str()).collect();
+    assert_eq!(presets, ["rect", "rect"], "{v}");
+}
+
+#[test]
+fn growing_a_layout_placeholder_steps_each_level_from_its_own_size() {
+    let mut s = template();
+    s.execute("view.slideMaster", &json!({"layout": 1})).unwrap();
+    let content = placeholder(&s, deckcraft_model::PhType::Obj);
+    s.execute("edit.select", &json!({"ids": [content]})).unwrap();
+    let st = s.doc().unwrap();
+    let before: Vec<f64> = (0..3).map(|l| st.doc.masters[0].body_style.level(l).unwrap().run.size.unwrap()).collect();
+    s.execute("format.grow", &json!({})).unwrap();
+    let st = s.doc().unwrap();
+    let style = &st.shape(deckcraft_model::ShapeId(content as u32)).unwrap().text.as_ref().unwrap().list_style;
+    let after: Vec<f64> = (0..3).map(|l| style.level(l).unwrap().run.size.unwrap()).collect();
+    assert!(after.iter().zip(&before).all(|(a, b)| a > b), "{before:?} → {after:?}");
+    assert!(after[0] > after[1] && after[1] > after[2], "{after:?}");
+}
+
+#[test]
 fn save_template_writes_a_potx_only() {
     let mut s = template();
     assert_eq!(
@@ -808,4 +841,7 @@ fn save_template_writes_a_potx_only() {
         "invalid parameters for `file.saveTemplate`: a template is a .potx file, and `/tmp/brand.pptx` isn't one"
     );
     assert_eq!(cmd::file::format_for_path("Brand.POTX"), "potx");
+    s.ui_requests.clear();
+    s.execute("file.saveTemplate", &json!({})).unwrap();
+    assert!(matches!(s.ui_requests.as_slice(), [crate::UiRequest::PickFile { purpose }] if purpose == "saveTemplate"), "{:?}", s.ui_requests);
 }
