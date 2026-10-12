@@ -5,7 +5,7 @@ order: 10
 verified: 0.5.0
 ---
 
-Download the installer from the [latest release](https://github.com/storytold/deckcraft/releases/latest) and run it, or install DeckCraft from ArtCraft Launcher. In file names, `<version>` stands for the version number, for example `0.5.0`.
+Download the file for your system from the [latest release](https://github.com/storytold/deckcraft/releases/latest) and install it, or install DeckCraft from ArtCraft Launcher. In file names, `<version>` stands for the version number, for example `0.5.0`.
 
 ## Windows 11
 
@@ -36,9 +36,9 @@ If the window flashes and closes, see [DeckCraft closes right after it starts](.
 
 ArtCraft Launcher lists DeckCraft in its app catalog under "Presentations and slide shows". Open the launcher and install DeckCraft from there. Steps are in the launcher docs: [ArtCraft Launcher](https://getartcraft.com/docs/craft-launcher).
 
-## Other systems
+## Linux, FreeBSD and the web
 
-The release also has builds for macOS, Linux, FreeBSD and the web. They are listed in the [README](https://github.com/storytold/deckcraft#downloads).
+The release also has builds for Linux, FreeBSD and the web. They are listed in the [README](https://github.com/storytold/deckcraft#downloads).
 
 ## Next step
 
