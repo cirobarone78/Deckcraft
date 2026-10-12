@@ -4,12 +4,12 @@
 //! deckcraft-cli info FILE                       # slides, titles, layouts (JSON)
 //! deckcraft-cli render (FILE | --sample) [--slide N | --all] [--scale S] OUT.png|OUT_DIR
 //! deckcraft-cli convert IN OUT                  # .deckcraft ⇄ .pptx, outline .txt, .png (first slide)
-//! deckcraft-cli run [--in FILE | --sample] [--cmd ID[=JSON]]... [--save OUT] [--export OUT] [--print]
+//! deckcraft-cli run [--in FILE | --sample] [--cmd COMMAND[=PARAMS]]... [--save OUT] [--export OUT] [--print]
 //! deckcraft-cli commands [FILTER]               # list commands (JSON)
-//! deckcraft-cli describe ID                     # one command
-//! deckcraft-cli app [--port PORT] COMMAND [JSON] | --method METHOD [JSON]   # drive the running app
+//! deckcraft-cli describe COMMAND                # one command
+//! deckcraft-cli app [--port PORT] COMMAND [PARAMS] | --method METHOD [PARAMS]   # drive the running app
 //! deckcraft-cli mcp [--connect PORT] [--sample] # MCP server over stdio
-//! deckcraft-cli links | --version
+//! deckcraft-cli links | --version | help
 //! ```
 #![deny(clippy::unwrap_used, clippy::expect_used, clippy::panic, clippy::unimplemented, clippy::todo, clippy::unreachable)]
 #![forbid(unsafe_code)]
@@ -35,12 +35,23 @@ macro_rules! outln {
 const USAGE: &str = "usage: deckcraft-cli info FILE
        deckcraft-cli render (FILE | --sample) [--slide N | --all] [--scale S] [--edit] OUT
        deckcraft-cli convert IN OUT
-       deckcraft-cli run [--in FILE | --sample] [--cmd ID[=JSON]]... [--save OUT] [--export OUT] [--print]
+       deckcraft-cli run [--in FILE | --sample] [--cmd COMMAND[=PARAMS]]... [--save OUT] [--export OUT] [--print]
        deckcraft-cli commands [FILTER]
        deckcraft-cli describe COMMAND
-       deckcraft-cli app [--port PORT] COMMAND [JSON] | --method METHOD [JSON]
+       deckcraft-cli app [--port PORT] COMMAND [PARAMS] | --method METHOD [PARAMS]
        deckcraft-cli mcp [--connect PORT] [--sample]
-       deckcraft-cli links | --version";
+       deckcraft-cli links | --version | help";
+
+const RUN_HELP: &str = "run applies each --cmd in order to one presentation, then saves and exports it.
+COMMAND is a command id: `commands` lists them, `describe COMMAND` gives its parameters.
+PARAMS is the command's parameters as a JSON object, for example:
+
+  deckcraft-cli run --cmd 'slide.new={\"layout\":\"titleOnly\",\"title\":\"Q3\"}' \\
+    --cmd 'shape.insert={\"preset\":\"roundRect\",\"rect\":[80,160,320,120],\"text\":\"Revenue\"}' \\
+    --cmd 'format.size={\"size\":28}' --print --save q3.deckcraft
+
+Shape ids are looked up on the current slide. shape.insert selects the shape it inserts, and
+format.* acts on the selected text or shapes. --print shows each command's answer.";
 
 fn main() -> ExitCode {
     let args: Vec<String> = std::env::args().skip(1).collect();
@@ -48,6 +59,14 @@ fn main() -> ExitCode {
     match args.first().map(String::as_str) {
         Some("--version" | "-V" | "version") => {
             outln!("deckcraft-cli {}", env!("CARGO_PKG_VERSION"));
+            ExitCode::SUCCESS
+        }
+        Some("help" | "--help" | "-h") => {
+            outln!("{USAGE}\n\n{RUN_HELP}");
+            ExitCode::SUCCESS
+        }
+        Some("run") if rest.iter().any(|a| a == "--help" || a == "-h") => {
+            outln!("{RUN_HELP}");
             ExitCode::SUCCESS
         }
         Some("info") => report(info(rest)),
@@ -74,7 +93,10 @@ fn main() -> ExitCode {
             outln!("Discord   {DISCORD}\nWebsite   {WEBSITE}\nApp page  {APP_PAGE}\nGitHub    {GITHUB}");
             ExitCode::SUCCESS
         }
-        _ => {
+        other => {
+            if let Some(sub) = other {
+                eprintln!("deckcraft-cli: unknown subcommand `{sub}`");
+            }
             eprintln!("{USAGE}");
             eprintln!("\nCommunity: {}  ·  {}", deckcraft_engine::links::DISCORD, deckcraft_engine::links::APP_PAGE);
             ExitCode::FAILURE
@@ -188,23 +210,37 @@ fn run(args: &[String]) -> Result<(), String> {
         match a.as_str() {
             "--in" => input = Some(it.next().cloned().ok_or("--in needs a file")?),
             "--sample" => sample = true,
-            "--cmd" => cmds.push(it.next().cloned().ok_or("--cmd needs ID[=JSON]")?),
+            "--cmd" => cmds.push(it.next().cloned().ok_or("--cmd needs COMMAND[=PARAMS]")?),
             "--save" => save = Some(it.next().cloned().ok_or("--save needs a path")?),
             "--export" => export = Some(it.next().cloned().ok_or("--export needs a path")?),
             "--print" => print = true,
             other => return Err(format!("unknown option `{other}`")),
         }
     }
+    let total = cmds.len();
+    let at = |n: usize| format!("--cmd {} of {total}", n + 1);
+    let steps = cmds
+        .iter()
+        .enumerate()
+        .map(|(n, c)| {
+            let (id, json) = c.split_once('=').unwrap_or((c, ""));
+            if deckcraft_engine::find_command(id).is_none() {
+                return Err(format!("{}: {}; nothing ran", at(n), deckcraft_engine::EngineError::UnknownCommand(id.into())));
+            }
+            let params = if json.is_empty() { json!({}) } else { params(id, json).map_err(|e| format!("{}: {e}; nothing ran", at(n)))? };
+            Ok((id, params))
+        })
+        .collect::<Result<Vec<_>, String>>()?;
     let mut s = Session::new();
     open(&mut s, input.as_deref(), sample)?;
-    for c in cmds {
-        let (id, p) = match c.split_once('=') {
-            Some((id, j)) => (id.to_string(), serde_json::from_str::<Value>(j).map_err(|e| format!("{id}: bad JSON: {e}"))?),
-            None => (c.clone(), json!({})),
-        };
-        let r = s.execute(&id, &p).map_err(|e| e.to_string())?;
+    let unsaved = if save.is_some() || export.is_some() { "; nothing was saved or exported" } else { "" };
+    for (n, (id, p)) in steps.iter().enumerate() {
+        let r = s.call(id, p).map_err(|e| format!("{}: {e}{unsaved}", at(n)))?;
         if print {
-            outln!("{id} → {r}");
+            match r {
+                Value::String(said) => outln!("{id} → {said}"),
+                r => outln!("{id} → {r}"),
+            }
         }
     }
     if let Some(p) = save {
@@ -214,6 +250,10 @@ fn run(args: &[String]) -> Result<(), String> {
         s.execute("file.export", &json!({"path": p})).map_err(|e| e.to_string())?;
     }
     Ok(())
+}
+
+fn params(id: &str, json: &str) -> Result<Value, String> {
+    serde_json::from_str(json).map_err(|e| format!("the parameters of `{id}` are not JSON ({e}): {json}"))
 }
 
 fn describe(id: Option<&str>) -> Result<(), String> {
@@ -238,14 +278,12 @@ fn app(args: &[String]) -> Result<(), String> {
     }
     let mut r = Remote::connect(&control_addr(&port))
         .map_err(|e| format!("no DeckCraft app on port {port} ({e}); start it with `deckcraft --control {port}`"))?;
-    let parse = |s: Option<&String>| -> Result<Value, String> {
-        s.map(|j| serde_json::from_str(j).map_err(|e| format!("bad JSON: {e}"))).transpose().map(|v| v.unwrap_or(json!({})))
-    };
+    let parse = |id: &str, s: Option<&String>| -> Result<Value, String> { s.map(|j| params(id, j)).transpose().map(|v| v.unwrap_or(json!({}))) };
     let v = match method {
-        Some(m) => r.call(&m, parse(rest.first())?)?,
+        Some(m) => r.call(&m, parse(&m, rest.first())?)?,
         None => {
             let id = rest.first().ok_or("app needs a COMMAND or --method")?;
-            r.call("engine.execute", json!({"command": id, "params": parse(rest.get(1))?}))?
+            r.call("engine.execute", json!({"command": id, "params": parse(id, rest.get(1))?}))?
         }
     };
     outln!("{}", serde_json::to_string_pretty(&v).unwrap_or_default());

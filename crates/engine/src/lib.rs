@@ -9,6 +9,7 @@
 
 pub mod cmd;
 pub mod connect;
+mod describe;
 pub mod guard;
 pub mod keys;
 pub mod links;
@@ -31,12 +32,14 @@ pub use tools::{Mods, PointerEvent, PointerKind, ToolKind};
 
 #[derive(Debug, thiserror::Error)]
 pub enum EngineError {
-    #[error("unknown command `{0}`")]
+    #[error("{}", unknown_command(.0))]
     UnknownCommand(String),
     #[error("command `{0}` is not available right now: {1}")]
     Disabled(String, String),
     #[error("invalid parameters for `{cmd}`: {msg}")]
     BadParams { cmd: String, msg: String },
+    #[error("{}", unknown_params(cmd, unknown, known))]
+    UnknownParams { cmd: String, unknown: Vec<String>, known: Vec<&'static str> },
     #[error("no active presentation")]
     NoDocument,
     #[error("{0}")]
@@ -49,6 +52,19 @@ impl From<deckcraft_model::ModelError> for EngineError {
     fn from(e: deckcraft_model::ModelError) -> Self {
         EngineError::Other(e.to_string())
     }
+}
+
+fn unknown_command(id: &str) -> String {
+    match cmd::similar_commands(id).as_slice() {
+        [] => format!("unknown command `{id}`"),
+        like => format!("unknown command `{id}`; commands named like it: {}", like.join(", ")),
+    }
+}
+
+fn unknown_params(cmd: &str, unknown: &[String], known: &[&str]) -> String {
+    let names = unknown.iter().map(|k| format!("`{k}`")).collect::<Vec<_>>().join(", ");
+    let has = if unknown.len() == 1 { format!("`{cmd}` has no parameter {names}") } else { format!("`{cmd}` has no parameters {names}") };
+    if known.is_empty() { format!("{has}; it takes none") } else { format!("{has}; its parameters are {}", known.join(", ")) }
 }
 
 pub type Result<T> = std::result::Result<T, EngineError>;
@@ -394,6 +410,21 @@ impl Session {
     /// presentation as it was.
     pub fn execute(&mut self, id: &str, params: &Value) -> Result<Value> {
         self.guarded(id, |s| s.execute_unguarded(id, params))
+    }
+
+    /// Run command `id` for a caller outside the app (CLI, MCP, control channel): parameters it
+    /// doesn't take are refused, and a command with no result of its own answers with what it
+    /// changed.
+    pub fn call(&mut self, id: &str, params: &Value) -> Result<Value> {
+        let spec = find_command(id).ok_or_else(|| EngineError::UnknownCommand(id.into()))?;
+        cmd::check_params(spec, params)?;
+        let before = self.active().map(|d| (d.uid, d.doc.clone(), d.selection.clone()));
+        let asked = self.ui_requests.len();
+        let r = self.execute(id, params)?;
+        if !r.is_null() {
+            return Ok(r);
+        }
+        Ok(describe::changes(before, self.active(), self.ui_requests.get(asked..).unwrap_or_default()).into())
     }
 
     fn execute_unguarded(&mut self, id: &str, params: &Value) -> Result<Value> {

@@ -543,3 +543,74 @@ fn inserted_hyperlinks_look_like_links() {
     s.execute("format.underline", &json!({})).unwrap();
     assert_eq!(s.execute("format.state", &json!({})).unwrap()["underline"], false);
 }
+
+fn said(s: &mut Session, id: &str, p: serde_json::Value) -> String {
+    match s.call(id, &p) {
+        Ok(serde_json::Value::String(t)) => t,
+        Ok(v) => v.to_string(),
+        Err(e) => e.to_string(),
+    }
+}
+
+fn insert(s: &mut Session, text: &str) -> u64 {
+    s.call("shape.insert", &json!({"preset": "roundRect", "rect": [80, 80, 300, 120], "text": text})).unwrap()["id"].as_u64().unwrap()
+}
+
+#[test]
+fn every_params_doc_names_its_keys() {
+    for c in command_specs() {
+        assert!(cmd::param_keys(c.params).is_ok(), "{}: {:?}", c.id, cmd::param_keys(c.params));
+    }
+    assert_eq!(cmd::param_keys("{index} | {id}").unwrap(), ["index", "id"]);
+    assert_eq!(cmd::param_keys("{color? | none?: true, kind?: a|b (x, y), ids?} → {id}").unwrap(), ["color", "none", "kind", "ids"]);
+}
+
+#[test]
+fn a_call_refuses_parameters_the_command_does_not_take() {
+    let mut s = session();
+    assert_eq!(
+        said(&mut s, "shape.insert", json!({"shape": "roundRect", "rect": [0, 0, 10, 10]})),
+        "`shape.insert` has no parameter `shape`; its parameters are preset, rect, text, adj, flip"
+    );
+    assert_eq!(said(&mut s, "slide.next", json!({"index": 1})), "`slide.next` has no parameter `index`; it takes none");
+    assert_eq!(said(&mut s, "slide.new", json!([1])), "invalid parameters for `slide.new`: parameters are a JSON object, not an array");
+    assert_eq!(s.doc().unwrap().current_slide().unwrap().shapes.len(), 2);
+    let id = insert(&mut s, "Hi");
+    assert_eq!(said(&mut s, "shape.resize", json!({"id": id, "w": 50})), format!("changed shape {id} on slide index 0"));
+}
+
+#[test]
+fn an_unknown_command_names_the_commands_like_it() {
+    let mut s = session();
+    assert_eq!(said(&mut s, "new", json!({})), "unknown command `new`; commands named like it: file.new, slide.new");
+    assert_eq!(said(&mut s, "shape.siz", json!({})), "unknown command `shape.siz`; commands named like it: format.size");
+    assert_eq!(said(&mut s, "zzz", json!({})), "unknown command `zzz`");
+}
+
+#[test]
+fn a_shape_off_the_current_slide_is_reported_where_it_is() {
+    let mut s = session();
+    let id = insert(&mut s, "Hi");
+    s.call("slide.new", &json!({})).unwrap();
+    let off_slide = format!("invalid parameters for `shape.resize`: shape {id} is on slide index 0, not on slide index 1, the one being edited");
+    assert_eq!(said(&mut s, "shape.resize", json!({"ids": [id], "w": 50})), off_slide);
+    assert_eq!(said(&mut s, "shape.inspect", json!({"id": 9999})), "invalid parameters for `shape.inspect`: no shape 9999 in the presentation");
+    s.call("slide.go", &json!({"index": 0})).unwrap();
+    let before = s.doc().unwrap().doc.clone();
+    assert!(said(&mut s, "shape.move", json!({"ids": [id, 9999], "dx": 10})).ends_with("no shape 9999 in the presentation"));
+    assert_eq!(s.doc().unwrap().doc, before);
+}
+
+#[test]
+fn a_call_that_returns_nothing_says_what_changed() {
+    let mut s = session();
+    let id = insert(&mut s, "Revenue");
+    assert_eq!(said(&mut s, "format.size", json!({"size": 28})), format!("changed shape {id} on slide index 0"));
+    assert_eq!(said(&mut s, "design.background", json!({"color": "#112233"})), "changed the background of slide index 0");
+    assert_eq!(said(&mut s, "text.edit", json!({"at": [0, 3]})), format!("editing the text of shape {id}, paragraph 0, character 3"));
+    assert_eq!(said(&mut s, "text.exit", json!({})), "stopped editing text");
+    assert_eq!(said(&mut s, "edit.deselect", json!({})), "no shape is selected");
+    assert_eq!(said(&mut s, "edit.deselect", json!({})), "nothing changed");
+    s.call("slide.new", &json!({})).unwrap();
+    assert_eq!(said(&mut s, "slide.notes", json!({"text": "Say hi", "index": 0})), "changed the notes of slide index 0");
+}

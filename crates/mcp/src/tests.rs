@@ -91,6 +91,17 @@ fn errors_are_reported_not_panics() {
 }
 
 #[test]
+fn run_command_answers_in_words() {
+    let mut s = Server::new(Box::new(Headless::with_document()));
+    let r = call(&mut s, 1, "tools/call", json!({"name": "run_command", "arguments": {"command": "shape.insert", "params": {"shape": "roundRect"}}}));
+    assert_eq!(r["result"]["isError"], true);
+    assert_eq!(r["result"]["content"][0]["text"], "`shape.insert` has no parameter `shape`; its parameters are preset, rect, text, adj, flip");
+    let id = tool(&mut s, "run_command", json!({"command": "shape.insert", "params": {"preset": "roundRect", "text": "Hi"}}))["id"].clone();
+    let r = call(&mut s, 2, "tools/call", json!({"name": "run_command", "arguments": {"command": "format.size", "params": {"size": 28}}}));
+    assert_eq!(r["result"]["content"][0]["text"], format!("changed shape {id} on slide index 0"));
+}
+
+#[test]
 fn export_tool_lists_pdf_and_its_options() {
     let mut s = Server::new(Box::new(Headless::new()));
     let tools = call(&mut s, 1, "tools/list", json!({}));

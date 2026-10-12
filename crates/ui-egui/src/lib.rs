@@ -259,10 +259,23 @@ impl SlideApp {
     /// Run a command by id (UI commands here, everything else in the engine). Errors show in the
     /// status bar and are returned.
     pub fn run(&mut self, id: &str, params: Value) -> Result<Value, String> {
+        self.dispatch(id, params, Session::execute)
+    }
+
+    pub fn call(&mut self, id: &str, params: Value) -> Result<Value, String> {
+        self.dispatch(id, params, Session::call)
+    }
+
+    fn dispatch(
+        &mut self,
+        id: &str,
+        params: Value,
+        engine: fn(&mut Session, &str, &Value) -> deckcraft_engine::Result<Value>,
+    ) -> Result<Value, String> {
         let r = if UI_COMMANDS.iter().any(|c| c.0 == id) {
             self.run_ui(id, &params)
         } else {
-            self.session.execute(id, &params).map_err(|e| e.to_string())
+            engine(&mut self.session, id, &params).map_err(|e| e.to_string())
         };
         if let Err(e) = &r {
             self.set_status(e.clone());

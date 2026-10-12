@@ -289,6 +289,7 @@ fn f(a: &Value, k: &str) -> Option<f64> {
 
 fn wrap(r: Result<Value, String>) -> ToolResult {
     match r {
+        Ok(Value::String(said)) => ToolResult::text(said),
         Ok(v) => ToolResult::json(&v),
         Err(e) => ToolResult::error(e),
     }

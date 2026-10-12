@@ -10,9 +10,13 @@ lines: one request object per line, one reply per line.
 
 Coordinates are slide points (1/72 inch; a 16:9 slide is 960 × 540) unless noted.
 
+`engine.execute` refuses parameters the command doesn't take, naming the ones it does. A command
+with no result of its own answers with what it changed, e.g. `"changed shape 258 on slide index 0"`
+or `"nothing changed"`.
+
 | Method | Params | What it does |
 |---|---|---|
-| `engine.execute` / `ui.menu.invoke` / `command` | `{command, params}` | Run any command (see `engine.commands`; `deckcraft-cli describe ID` documents one) |
+| `engine.execute` / `ui.menu.invoke` / `command` | `{command, params}` | Run any command (see `engine.commands`; `deckcraft-cli describe COMMAND` documents one) |
 | `engine.commands` | — | Every command: id, label, menu path, shortcut, params doc, enabled / disabled reason |
 | `document.inspect` | — | Slides, sections, layouts, shapes, selection |
 | `ui.inspect` | — | UI state, active tool, window/canvas/slide rects, dialog, Home (start screen over the open presentations), slide show state, documents, perf (fps, render ms) |

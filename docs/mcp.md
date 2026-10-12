@@ -18,7 +18,7 @@ deck.
 | Tool | What it does |
 |---|---|
 | `list_commands` | Every command (id, label, menu, shortcut, params doc), optionally filtered |
-| `run_command` | Run one command: `{command, params}` — every menu item, ribbon button and gesture is a command |
+| `run_command` | Run one command: `{command, params}` — every menu item, ribbon button and gesture is a command. Parameters the command doesn't take are refused; a command with no result of its own answers with what it changed |
 | `batch` | Run several commands in order and stop at the first error |
 | `new_presentation`, `open_presentation`, `save_presentation`, `export` | Files: native `.deckcraft`, PowerPoint `.pptx`, PDF (slides, notes pages, handouts), PNG/JPEG, outline |
 | `inspect_document`, `inspect_slide` | Structure of the deck / one slide (shapes, text, placeholders, animations) |

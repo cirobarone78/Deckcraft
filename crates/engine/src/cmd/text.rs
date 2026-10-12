@@ -186,7 +186,7 @@ fn edit(s: &mut Session, p: &Value) -> Result<Value> {
         sel.shapes = vec![id];
         sel.text = Some(TextSel { shape: id, anchor: at, caret: at, cell, notes: false });
     })?;
-    Ok(json!({"id": id, "at": [at.0, at.1]}))
+    ok()
 }
 
 fn exit(s: &mut Session, _p: &Value) -> Result<Value> {
@@ -225,7 +225,7 @@ pub(crate) fn insert_text(s: &mut Session, text: &str, props: Option<RunProps>) 
             None => text.to_string(),
         }
     };
-    let pos = edit_text(s, |body, t| {
+    edit_text(s, |body, t| {
         let (a, b) = t.ordered();
         let at = ed::delete(body, a, b);
         let props = props.clone().or_else(|| if a != b { Some(ed::props_at(body, at)) } else { unlinked_at_link_end(body, at) });
@@ -235,7 +235,7 @@ pub(crate) fn insert_text(s: &mut Session, text: &str, props: Option<RunProps>) 
         c
     })?;
     autocorrect(s)?;
-    Ok(json!({"caret": [pos.0, pos.1]}))
+    ok()
 }
 
 /// Typing right after a hyperlink doesn't extend it (as in PowerPoint): at the end of a linked
@@ -308,7 +308,7 @@ fn autocorrect(s: &mut Session) -> Result<()> {
 }
 
 pub(crate) fn paste_body(s: &mut Session, src: &TextBody) -> Result<Value> {
-    let pos = edit_text(s, |body, t| {
+    edit_text(s, |body, t| {
         let (a, b) = t.ordered();
         let at = ed::delete(body, a, b);
         let c = ed::insert_body(body, at, src);
@@ -316,7 +316,7 @@ pub(crate) fn paste_body(s: &mut Session, src: &TextBody) -> Result<Value> {
         t.caret = c;
         c
     })?;
-    Ok(json!({"caret": [pos.0, pos.1]}))
+    ok()
 }
 
 pub(crate) fn insert_field(s: &mut Session, field: &str, text: &str) -> Result<Value> {
@@ -432,7 +432,7 @@ fn move_caret(s: &mut Session, p: &Value) -> Result<Value> {
             }
         }
     })?;
-    Ok(json!({"caret": [new.0, new.1]}))
+    ok()
 }
 
 fn select(s: &mut Session, p: &Value) -> Result<Value> {
@@ -538,7 +538,7 @@ fn get(s: &mut Session, p: &Value) -> Result<Value> {
             None => st.selection.shapes.first().copied().ok_or_else(|| bad("text.get", "missing `id`"))?,
         },
     };
-    let sh = st.shape(id).ok_or_else(|| bad("text.get", "no such shape"))?;
+    let sh = st.shape(id).ok_or_else(|| bad("text.get", crate::describe::no_shape(st, id)))?;
     let t = sh.text.clone().unwrap_or_default();
     Ok(json!({"text": t.text(), "paragraphs": t.paragraphs.iter().map(|p| json!({"level": p.level, "text": p.text()})).collect::<Vec<_>>()}))
 }
@@ -625,7 +625,7 @@ pub(crate) fn link_text(s: &mut Session, link: Hyperlink, display: &str) -> Resu
     if display.is_empty() {
         return Err(bad("insert.hyperlink", "nothing to link: select text or give `text`"));
     }
-    let pos = edit_text(s, |body, t| {
+    edit_text(s, |body, t| {
         let mut props = ed::props_at(body, a);
         props.link = Some(link);
         let c = ed::insert(body, a, display, Some(props));
@@ -633,7 +633,7 @@ pub(crate) fn link_text(s: &mut Session, link: Hyperlink, display: &str) -> Resu
         t.caret = c;
         c
     })?;
-    Ok(json!({"caret": [pos.0, pos.1]}))
+    ok()
 }
 
 /// Apply paragraph changes to the paragraphs touched by the selection (or all paragraphs of the

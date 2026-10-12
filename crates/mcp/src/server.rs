@@ -22,9 +22,10 @@ const INSTRUCTIONS: &str = "DeckCraft is a presentation app (a PowerPoint clone)
 current slide (y down; the default 16:9 slide is 960×540). Every action is a command: find ids and parameters with \
 list_commands and run them with run_command (or several with batch). Typical flow: new_presentation → add_slide \
 {layout:\"titleAndContent\", title, body} → add_shape / add_text_box / insert_picture / insert_chart → \
-inspect_slide to read back ids, boxes and text → render_slide to look at the result. Shapes are selected with \
-run_command edit.select {ids:[…]}; formatting commands (format.*, shape.fill, shape.line…) act on the selection or \
-on `ids`. Save with save_presentation (.deckcraft or .pptx).";
+inspect_slide to read back ids, boxes and text → render_slide to look at the result. Shape ids are looked up on the \
+current slide. shape.* commands act on `ids` or the selection; format.* acts on the selected text or shapes. An \
+inserted shape is selected; select others with run_command edit.select {ids:[…]}. Save with save_presentation \
+(.deckcraft or .pptx).";
 
 /// Resource URIs.
 pub const DOC_URI: &str = "deckcraft://document";

@@ -148,6 +148,90 @@ pub fn find_command(id: &str) -> Option<&'static CommandSpec> {
     command_specs().iter().find(|c| c.id == id)
 }
 
+pub fn similar_commands(id: &str) -> Vec<&'static str> {
+    let q = id.to_lowercase();
+    let last = q.rsplit('.').next().unwrap_or_default();
+    command_specs()
+        .iter()
+        .map(|c| c.id)
+        .filter(|c| c.to_lowercase().contains(&q) || c.rsplit('.').next().is_some_and(|l| last.len() >= 3 && l.to_lowercase().starts_with(last)))
+        .take(8)
+        .collect()
+}
+
+/// Top-level keys a params doc names: `{preset, rect?: [x,y,w,h] pt} | {id}` gives preset, rect,
+/// id. Text after `→` is the result and is skipped. Errs where the doc strays from that grammar.
+pub fn param_keys(doc: &str) -> std::result::Result<Vec<&str>, String> {
+    let doc = doc.split('→').next().unwrap_or_default();
+    let mut keys = vec![];
+    let mut open: Vec<char> = vec![];
+    let mut expect_key = false;
+    let mut chars = doc.char_indices().peekable();
+    let mut prev = ' ';
+    while let Some((i, c)) = chars.next() {
+        let in_object = open == ['{'];
+        match c {
+            '{' | '[' | '(' => {
+                open.push(c);
+                expect_key = open == ['{'];
+            }
+            '}' | ']' | ')' => {
+                open.pop();
+            }
+            ',' if in_object => expect_key = true,
+            '|' if in_object && prev == ' ' && chars.peek().is_some_and(|(_, n)| *n == ' ') => expect_key = true,
+            c if in_object && expect_key && (c.is_ascii_alphabetic() || c == '_') => {
+                let mut end = i + c.len_utf8();
+                while let Some((j, n)) = chars.peek().copied().filter(|(_, n)| n.is_ascii_alphanumeric() || *n == '_') {
+                    end = j + n.len_utf8();
+                    chars.next();
+                }
+                if !keys.contains(&&doc[i..end]) {
+                    keys.push(&doc[i..end]);
+                }
+                let rest = doc[end..].trim_start_matches('?').trim_start();
+                if !rest.starts_with([':', ',', '}', '|', '(']) {
+                    return Err(format!("`{}` is followed by `{}`", &doc[i..end], rest.chars().take(12).collect::<String>()));
+                }
+                expect_key = false;
+            }
+            c if in_object && expect_key && !c.is_whitespace() => return Err(format!("expected a key at `{}`", &doc[i..])),
+            _ => {}
+        }
+        prev = c;
+    }
+    Ok(keys)
+}
+
+pub(crate) fn check_params(spec: &CommandSpec, p: &Value) -> Result<()> {
+    let given = match p {
+        Value::Null => return Ok(()),
+        Value::Object(m) => m,
+        other => {
+            let kind = match other {
+                Value::Array(_) => "an array",
+                Value::String(_) => "a string",
+                Value::Number(_) => "a number",
+                _ => "a boolean",
+            };
+            return Err(bad(spec.id, format!("parameters are a JSON object, not {kind}")));
+        }
+    };
+    let Ok(mut keys) = param_keys(spec.params) else { return Ok(()) };
+    if keys.iter().any(|k| matches!(*k, "id" | "ids")) {
+        keys.extend(["id", "ids"]);
+    }
+    let unknown: Vec<&str> = given.keys().map(String::as_str).filter(|k| !keys.contains(k)).collect();
+    if unknown.is_empty() {
+        return Ok(());
+    }
+    Err(EngineError::UnknownParams {
+        cmd: spec.id.into(),
+        unknown: unknown.iter().map(|k| k.to_string()).collect(),
+        known: param_keys(spec.params).unwrap_or_default(),
+    })
+}
+
 // ---------- param helpers ----------
 
 pub(crate) fn bad(cmd: &str, msg: impl Into<String>) -> EngineError {
@@ -243,7 +327,8 @@ pub(crate) fn color_value(v: &Value) -> Option<deckcraft_model::ColorRef> {
 
 /// Look a shape up by id in the edited tree.
 pub(crate) fn shape_of(s: &Session, id: ShapeId) -> Result<deckcraft_model::Shape> {
-    s.doc()?.shape(id).cloned().ok_or_else(|| EngineError::Other(format!("no shape {id}")))
+    let st = s.doc()?;
+    st.shape(id).cloned().ok_or_else(|| EngineError::Other(crate::describe::no_shape(st, id)))
 }
 
 /// Effective box of a shape (placeholders inherit theirs). A table's box is at least as tall as its
@@ -283,7 +368,11 @@ fn ctx_xfrm(doc: &deckcraft_model::Presentation, sel: &crate::Selection, shape: 
 pub(crate) fn edit_shapes(s: &mut Session, p: &Value, cmd: &str, f: impl Fn(&mut deckcraft_model::Shape) -> Result<()>) -> Result<Value> {
     let ids = targets(s, p)?;
     if ids.is_empty() {
-        return Err(bad(cmd, "no shapes selected"));
+        return Err(bad(cmd, "no shape is selected and no `ids` were given"));
+    }
+    let st = s.doc()?;
+    if let Some(id) = ids.iter().find(|id| st.shape(**id).is_none()) {
+        return Err(bad(cmd, crate::describe::no_shape(st, *id)));
     }
     s.edit(|doc, sel| {
         let boxes: Vec<(ShapeId, Xfrm)> = {
@@ -292,20 +381,15 @@ pub(crate) fn edit_shapes(s: &mut Session, p: &Value, cmd: &str, f: impl Fn(&mut
             st_shapes.iter().map(|sh| (sh.id, xfrm_of(doc, sel, sh))).collect()
         };
         let shapes = crate::shapes_mut(doc, sel).ok_or_else(|| bad(cmd, "no slide"))?;
-        let mut n = 0;
         for id in &ids {
             if let Some(sh) = deckcraft_model::find_shape_mut(shapes, *id) {
                 if sh.xfrm.is_none() {
                     sh.xfrm = boxes.iter().find(|(i, _)| i == id).map(|(_, x)| *x);
                 }
                 f(sh)?;
-                n += 1;
             }
         }
-        if n == 0 {
-            return Err(bad(cmd, "no such shape"));
-        }
-        Ok(Value::from(n))
+        Ok(Value::Null)
     })
 }
 

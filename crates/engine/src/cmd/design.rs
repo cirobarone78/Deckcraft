@@ -23,7 +23,7 @@ pub fn specs() -> Vec<CommandSpec> {
             "Format Background",
             ["Design", "Customize"],
             None,
-            "{color? | gradient? | picture?: base64 | style?: 1..12 | reset?, all?: bool (apply to all), index?}",
+            "{color? | gradient? | picture?: base64 | pattern?: {preset, fg, bg} | style?: 1..12 | reset?, all?: bool (apply to all), index?}",
             has_slide,
             background
         ),
