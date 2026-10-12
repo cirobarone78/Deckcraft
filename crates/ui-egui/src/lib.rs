@@ -10,6 +10,7 @@ pub mod canvas;
 pub mod control;
 pub mod credits;
 pub mod dialogs;
+pub mod eqdialog;
 pub mod fillui;
 pub mod icons;
 pub mod media;
@@ -526,6 +527,14 @@ impl SlideApp {
         if let Err(e) = self.session.execute(cmd, &p) {
             self.set_status(e.to_string());
         }
+    }
+
+    /// Another app has replaced the shared egui fonts and visuals (OfficeCraft hosts several in
+    /// one window): install this app's again before it draws its next frame.
+    pub fn context_changed(&mut self) {
+        self.styled = false;
+        self.fonts_ready = false;
+        self.restyle = true;
     }
 
     /// Per-frame logic before layout: styles, control requests, screenshots, shortcuts.

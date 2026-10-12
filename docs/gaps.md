@@ -249,3 +249,12 @@ Detail in [localization-parity.md](localization-parity.md).
 |---|---|---|
 | 2026-10-10 | minor | Noted that no gap blocks alpha (core-workflow gate passes) |
 | 2026-10-10 | major | Created: every gap from the 2026-10-10 re-measure and the 16 open GitHub issues, ranked, with beta blockers marked |
+
+## Equation editor (equation-editor branch)
+
+- OMML that rebinds prefixes (an alias prefix bound to the OMML URI plus a different URI bound to `m`)
+  is mis-namespaced on rewrite in `crates/math/src/xml.rs` `start_extras`.
+- Not yet: copy/paste of selected sub-trees inside the dialog canvas, undo inside the dialog,
+  auto-paired brackets.
+- Radical and stretchy-delimiter fit is close to, but not at, KaTeX quality; a math font (STIX Two
+  Math) is the fix, used for variants and extensible parts in `crates/text/src/math.rs`.
