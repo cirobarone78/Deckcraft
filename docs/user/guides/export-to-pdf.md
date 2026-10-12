@@ -1,0 +1,29 @@
+---
+title: Export a deck to PDF
+description: Save a deck as a PDF with full-page slides, notes pages or handouts, or export slides as PNG or JPEG images.
+order: 50
+verified: 0.5.0
+---
+
+Open the command palette with Ctrl+Shift+P, run **Export…**, keep **PDF document (.pdf)** selected and click **Export**.
+
+## Steps
+
+1. Press Ctrl+Shift+P and type `Export`. Choose **Export…**.
+2. In the **Export** window, leave **PDF document (.pdf)** selected.
+3. Pick a **Print layout:**. The choices are **Full Page Slides**, **Notes Pages**, and handouts with 1, 2, 3, 4, 6 or 9 slides per page.
+4. Tick **Include hidden slides** if you want them in the PDF.
+5. Click **Export**, then choose where to save the file.
+
+The PDF includes a text layer by default. An open issue reports that text copied from an exported PDF can come out garbled when a text run's glyph count differs from its character count, so check copied text if you rely on it.
+
+## Other formats in the same window
+
+- **PNG images (current slide)** and **PNG images (all slides)**
+- **JPEG image (current slide)**
+- **PowerPoint Presentation (.pptx)**
+- **Outline (.txt)**
+
+## Related
+
+- [Open and save PowerPoint files](open-and-save-powerpoint-files.md)

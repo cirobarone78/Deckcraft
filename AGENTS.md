@@ -191,3 +191,9 @@ the `ROADMAP.md` progress log, and update each touched doc's status line and rev
   GitHub profiles). Never hand-edit `contributors.json`.
 - Maintainers refresh the stats with `python3 ../../craftrules/scripts/contributors.py .` (it also
   re-verifies who wrote each `people.toml` entry; `--check` only verifies).
+
+## 8. User docs
+
+User docs live in `docs/user/` and are published at https://getartcraft.com/docs/deckcraft. If a
+change alters something a user sees or does (UI labels, install, files, errors), update the
+matching page in `docs/user/` in the same PR, or add one. Rules: `docs/user/AGENTS.md`.
