@@ -222,7 +222,7 @@ pub(crate) fn draw(
             // Equation radicals, brackets and big operators are shapes, not boxes.
             match &d.path {
                 Some(p) => ctx.fill_path(p),
-                None => crate::fill_deco(ctx, d);
+                None => crate::fill_deco(ctx, d),
             }
         }
     }

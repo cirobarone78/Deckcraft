@@ -892,7 +892,14 @@ fn shape_cells(
     byte_of.push(text.len());
     let char_at_byte: HashMap<usize, usize> = byte_of.iter().enumerate().map(|(i, b)| (*b, i)).collect();
     let style_rtl: Vec<bool> = styles.iter().map(|st| st.lang.as_deref().is_some_and(bidi::is_rtl_lang)).collect();
-    let rtl_lang: Vec<bool> = char_style.iter().map(|&si| style_rtl.get(si).copied().unwrap_or(false)).collect();
+    // An equation in right-to-left text goes with the text around it (it takes the reading
+    // direction between right-to-left words, and is a right-to-left neutral at their edges), as
+    // text in a right-to-left language would; a left-to-right paragraph keeps it left to right.
+    let rtl_lang: Vec<bool> = char_style
+        .iter()
+        .enumerate()
+        .map(|(i, &si)| style_rtl.get(si).copied().unwrap_or(false) || (rtl && atom_chars.get(i).copied().unwrap_or(false)))
+        .collect();
     let levels = bidi::levels_lang(text, &chars, rtl, &rtl_lang);
     let scripts = script::resolve(&chars);
     let is_atom = |i: usize| atom_chars.get(i).copied().unwrap_or(false);
@@ -2004,7 +2011,7 @@ fn layout_scaled(ctx: &Ctx, shape: &Shape, body: &TextBody, bp: &BodyProps, opts
                 if let Some(r) = cur.take() {
                     out.runs.push(r);
                 }
-                cur_key = (usize::MAX, usize::MAX);
+                cur_key = (usize::MAX, usize::MAX, false, false);
                 let joiners = p.cells.iter().skip(ci + 1).take_while(|c| c.atom.is_none() && c.ch == '\u{2060}').count();
                 let base_y = line.baseline - st.baseline * st.size;
                 math::emit(m, cx, base_y, st.color, st.alpha, line.para, (ci, ci + 1 + joiners), &mut out.runs, &mut out.decos);
@@ -2020,7 +2027,7 @@ fn layout_scaled(ctx: &Ctx, shape: &Shape, body: &TextBody, bp: &BodyProps, opts
                     display: m.display,
                 });
                 if let Some(hl) = st.highlight {
-                    out.decos.push(Deco { rect: Rect::new(cx, line.top, cx1, line.bottom), color: hl, behind: true, para: line.para, path: None });
+                    out.decos.push(Deco { rect: Rect::new(cx, line.top, cx1, line.bottom), color: hl, behind: true, para: line.para, line: DecoLine::Solid, path: None });
                 }
                 continue;
             }

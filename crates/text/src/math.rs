@@ -18,7 +18,7 @@ use equashion_layout::{DEFAULT_FAMILY, FontDb, MathFonts, Prim, Rgb};
 use equashion_math::{Math, from_omml};
 use kurbo::{Affine, BezPath, Shape as _};
 
-use crate::{Deco, GlyphRun};
+use crate::{Deco, DecoLine, GlyphRun};
 
 /// Cached equation layouts.
 const CACHE_MAX: usize = 256;
@@ -150,13 +150,13 @@ pub(crate) fn emit(
     for it in &b.items {
         match it {
             Item::Rule(r) => {
-                decos.push(Deco { rect: Rect::new(x + r.x0, baseline + r.y0, x + r.x1, baseline + r.y1), color, behind: false, para, path: None })
+                decos.push(Deco { rect: Rect::new(x + r.x0, baseline + r.y0, x + r.x1, baseline + r.y1), color, behind: false, para, line: DecoLine::Solid, path: None })
             }
             Item::Path(p) => {
                 let mut q = p.clone();
                 q.apply_affine(Affine::translate((x, baseline)));
                 let bb = q.bounding_box();
-                decos.push(Deco { rect: Rect::new(bb.x0, bb.y0, bb.x1, bb.y1), color, behind: false, para, path: Some(Arc::new(q)) });
+                decos.push(Deco { rect: Rect::new(bb.x0, bb.y0, bb.x1, bb.y1), color, behind: false, para, line: DecoLine::Solid, path: Some(Arc::new(q)) });
             }
         }
     }
