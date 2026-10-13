@@ -247,10 +247,36 @@ fn body(app: &mut SlideApp, ui: &mut Ui, d: &mut Dialog) -> bool {
             let nn = check(ui, d, "Show without narration", "nn", sh.without_narration);
             let na = check(ui, d, "Show without animation", "na", sh.without_animation);
             let ut = check(ui, d, "Use timings, if present", "ut", sh.use_timings);
+            ui.add_space(6.0);
+            ui.label("Laser pointer color");
+            let laser = d.get(
+                "laser",
+                match (sh.laser_color.r, sh.laser_color.g, sh.laser_color.b) {
+                    (0, 255, 0) => "green",
+                    (0, 0, 255) => "blue",
+                    (255, 0, 0) => "red",
+                    _ => "custom",
+                },
+            );
+            ui.horizontal(|ui| {
+                for (label, key) in [("Red", "red"), ("Green", "green"), ("Blue", "blue")] {
+                    if ui.selectable_label(laser == key, label).clicked() {
+                        d.fields.insert("laser".into(), key.into());
+                    }
+                }
+            });
+            ui.label("Hold Ctrl during the show.");
             let (ok, cancel) = buttons(ui, "OK");
             if ok {
                 let ty = d.get("type", "speaker");
-                run(app, "show.setup", json!({"type": ty, "loop": lp, "noNarration": nn, "noAnimation": na, "useTimings": ut}));
+                let key = d.get("laser", "red");
+                let rgb = match key.as_str() {
+                    "green" => [0, 255, 0],
+                    "blue" => [0, 0, 255],
+                    "custom" => [sh.laser_color.r, sh.laser_color.g, sh.laser_color.b],
+                    _ => [255, 0, 0],
+                };
+                run(app, "show.setup", json!({"type": ty, "loop": lp, "noNarration": nn, "noAnimation": na, "useTimings": ut, "laserColor": rgb}));
             }
             ok || cancel
         }

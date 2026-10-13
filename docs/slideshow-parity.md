@@ -1,11 +1,11 @@
 # Slide show and presenter view: parity with PowerPoint
 
-> **Last reviewed:** 2026-10-14 · **Last updated:** 2026-10-14 · **Change:** minor (Record Slide Show keeps narration and a laser trace; previous: minor, timings and pen ink) · **Target:** Microsoft PowerPoint for Mac 16.113 (Microsoft 365)
+> **Last reviewed:** 2026-10-14 · **Last updated:** 2026-10-14 · **Change:** minor (laser pointer in an ordinary show; Clear Timing and Clear Narration; previous: minor, narration and a laser trace) · **Target:** Microsoft PowerPoint for Mac 16.113 (Microsoft 365)
 
 Presenting is the job PowerPoint is hired for. This doc covers the show window, presenter view,
 rehearsal and recording. Transition and animation playback are in
 [animation-parity.md](animation-parity.md); display hardware in
-[hardware-parity.md](hardware-parity.md). Area score: checklist breadth **68%** (measured), **~60%
+[hardware-parity.md](hardware-parity.md). Area score: checklist breadth **71%** (measured), **~60%
 ready** (estimated), **10–16 h** to parity.
 
 ## Running the show
@@ -25,10 +25,10 @@ ready** (estimated), **10–16 h** to parity.
 | See All Slides grid during the show | yes | no | |
 | Zoom into part of a slide during the show | yes | no | |
 | Pen and highlighter ink | yes | pen only (Cmd+P pen, Cmd+A arrow, E erases all ink) | No highlighter, per-stroke eraser, ink colours, or keep/discard annotations prompt |
-| Laser pointer | yes | **no** | 1–2 h |
+| Laser pointer | yes | hold Ctrl, or the on-screen button; colour is red, green or blue in Set Up Slide Show | A recorded trace still replays. The presenter window does not draw the dot |
 | Subtitles and live captions | yes (cloud speech) | no | AI dimension |
 | Custom shows | yes | yes | |
-| Set Up Show: loop until Esc, kiosk (browsed at a kiosk), show without animation/narration, pen colour, slides range | yes | yes, most options | |
+| Set Up Show: loop until Esc, kiosk (browsed at a kiosk), show without animation/narration, pen colour, laser colour, slides range | yes | yes, most options | Laser colour is red, green or blue |
 | Use rehearsed timings | yes | yes | |
 
 ## Presenter view
@@ -52,7 +52,7 @@ ready** (estimated), **10–16 h** to parity.
 |---|---|---|
 | Rehearse Timings, keep timings | yes | yes |
 | Record Slide Show (narration, ink, laser, camera; Cameo) | yes | timings, per-slide narration audio, pen ink and a recorded laser trace; no camera or screen capture |
-| Clear timing / narration | yes | timings only |
+| Clear timing / narration | yes | current slide or all slides |
 | Export the recorded show to video | yes | no (see [file-format-parity.md](file-format-parity.md)) |
 
 ## Reading View
@@ -64,15 +64,16 @@ Reading View in a window with navigation: present (checklist row done).
 | Work | Hours |
 |---|---|
 | Presenter view on the right display, swap displays, pause/reset timer, clock, notes size | 3–5 |
-| Laser pointer, highlighter, eraser, keep-annotations prompt | 2–4 |
+| Highlighter, eraser, keep-annotations prompt | 1–3 |
 | See All Slides and zoom during the show | 2–3 |
 | Record slide show screen capture (narration, timings, ink and laser are kept) | 4–8 |
-| **Total** | **~11–20** (the slide-show row of the feature table carries 10–16 h; recording overlaps the Media row) |
+| **Total** | **~10–19** (the slide-show row of the feature table carries 10–16 h; recording overlaps the Media row) |
 
 ## Revision history
 
 | Date | Change | Summary |
 |---|---|---|
+| 2026-10-14 | minor | Ordinary show: hold Ctrl for the laser pointer, colour in Set Up Slide Show. Clear Timing and Clear Narration on the current slide or all slides. Checklist breadth 71% |
 | 2026-10-14 | minor | Record Slide Show keeps per-slide narration (played in the show, written to PPTX) and a laser trace. Camera and screen capture stay open |
 | 2026-10-14 | minor | Record Slide Show keeps timings and pen ink. Narration audio, laser and camera stay open |
 | 2026-10-10 | major | Created: show, presenter view, rehearse and record, compared with PowerPoint 16.113's Slide Show tab and menu |

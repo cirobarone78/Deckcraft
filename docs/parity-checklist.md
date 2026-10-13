@@ -1,15 +1,15 @@
 # PowerPoint feature checklist
 
-> **Generated:** 2026-10-14 (summary by `cargo xtask parity`; record slide show re-scored partial) · **Target:** Microsoft PowerPoint for Mac 16.113 (Microsoft 365)
+> **Generated:** 2026-10-14 (summary by `cargo xtask parity`; laser pointer re-scored partial) · **Target:** Microsoft PowerPoint for Mac 16.113 (Microsoft 365)
 
 The summary between `<!-- SUMMARY -->
-**Weighted breadth parity: 79%** over 191 features.
+**Weighted breadth parity: 80%** over 191 features.
 
 | Priority | Features | Done | Partial | Missing | Parity |
 |---|---|---|---|---|---|
 | P0 | 72 | 61 | 11 | 0 | 92% |
 | P1 | 65 | 38 | 21 | 6 | 75% |
-| P2 | 54 | 13 | 16 | 25 | 39% |
+| P2 | 54 | 13 | 17 | 24 | 40% |
 
 | Area | Parity |
 |---|---|
@@ -29,7 +29,7 @@ The summary between `<!-- SUMMARY -->
 | Media | 67% |
 | Transitions | 92% |
 | Animations | 79% |
-| Slide show | 68% |
+| Slide show | 71% |
 | Review | 60% |
 | Draw | 33% |
 | Undo & clipboard | 88% |
@@ -213,7 +213,7 @@ Open P0 items: Contextual tabs (Shape Format, Picture Format, Table Design/Layou
 | Slide show | Navigation (keys, click, go to slide, blank screen) | P0 | D |
 | Slide show | Presenter view (notes, next slide, timer) | P0 | P |
 | Slide show | Pen and highlighter ink during the show | P1 | P |
-| Slide show | Laser pointer | P2 | M |
+| Slide show | Laser pointer | P2 | P |
 | Slide show | Rehearse timings | P2 | D |
 | Slide show | Custom shows | P2 | D |
 | Slide show | Set up show (loop, kiosk, without animation) | P1 | D |

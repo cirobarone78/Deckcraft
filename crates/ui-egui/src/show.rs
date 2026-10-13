@@ -32,7 +32,8 @@ pub struct Show {
     next_tex: Option<(usize, TextureHandle)>,
     blank: Option<Color32>,
     pen: bool,
-    /// Laser pointer while recording. It leaves no ink; the points are kept with the slide.
+    /// Laser pointer left on (the Laser button, or L while recording). Hold Ctrl for the same
+    /// dot in any show. It leaves no ink; points are kept only while recording.
     laser: bool,
     strokes: Vec<Vec<Pos2>>,
     goto: String,
@@ -465,7 +466,9 @@ pub fn ui(app: &mut SlideApp, ui: &mut Ui) {
             _ => {}
         }
     }
-    let on_slide = !show.pen && !show.laser && !show.ended && show.blank.is_none() && !show.reading_bar_hit(&ctx) && !show.record_bar_hit(&ctx);
+    let ctrl = ctx.input(|i| i.modifiers.ctrl);
+    let laser_on = pointer_is_laser(show.laser, ctrl, show.blank.is_some());
+    let on_slide = !show.pen && !laser_on && !show.ended && show.blank.is_none() && !show.reading_bar_hit(&ctx) && !show.record_bar_hit(&ctx);
     let gif_click = if clicked && on_slide { gif_hit(&ctx, ui, &show, &doc, app) } else { None };
     let media_click = if clicked && on_slide && gif_click.is_none() { media_hit(&ctx, ui, &show, &doc) } else { None };
     let link = if on_slide && gif_click.is_none() && media_click.is_none() { link_hit(&ctx, ui, &mut show, &doc) } else { None };
@@ -481,7 +484,7 @@ pub fn ui(app: &mut SlideApp, ui: &mut Ui) {
             LinkJump::Exit => keep = false,
             LinkJump::None => {}
         }
-    } else if clicked && !show.pen && !show.laser && !show.reading_bar_hit(&ctx) && !show.record_bar_hit(&ctx) {
+    } else if clicked && !show.pen && !laser_on && !show.reading_bar_hit(&ctx) && !show.record_bar_hit(&ctx) {
         if show.ended {
             keep = false;
         } else if show.blank.is_some() {
@@ -490,7 +493,7 @@ pub fn ui(app: &mut SlideApp, ui: &mut Ui) {
             actions.push(show.state.next(&doc));
         }
     }
-    if secondary && !show.ended && !show.record_bar_hit(&ctx) {
+    if secondary && !show.ended && !laser_on && !show.record_bar_hit(&ctx) {
         actions.push(show.state.prev(&doc));
     }
     // Apply input first: a step started by this click must restart the clock before it is read.
@@ -722,8 +725,8 @@ pub fn ui(app: &mut SlideApp, ui: &mut Ui) {
         painter.rect_filled(full, CornerRadius::ZERO, c);
     }
     // Pen.
-    let resp = ui.interact(full, ui.id().with("show_pen"), if show.pen { Sense::drag() } else { Sense::hover() });
-    if show.pen {
+    let resp = ui.interact(full, ui.id().with("show_pen"), if show.pen && !laser_on { Sense::drag() } else { Sense::hover() });
+    if show.pen && !laser_on {
         if resp.drag_started() {
             show.strokes.push(vec![]);
         }
@@ -733,7 +736,7 @@ pub fn ui(app: &mut SlideApp, ui: &mut Ui) {
             s.push(pos2((p.x - srect.min.x) / srect.width(), (p.y - srect.min.y) / srect.height()));
         }
         ctx.set_cursor_icon(egui::CursorIcon::Crosshair);
-    } else if show.laser {
+    } else if laser_on {
         ctx.set_cursor_icon(egui::CursorIcon::None);
         ctx.request_repaint();
     } else if link.is_some() {
@@ -747,11 +750,11 @@ pub fn ui(app: &mut SlideApp, ui: &mut Ui) {
         let pts: Vec<Pos2> = s.iter().map(|q| pos2(srect.min.x + q.x * srect.width(), srect.min.y + q.y * srect.height())).collect();
         painter.add(egui::Shape::line(pts, Stroke::new(3.0, pen_col)));
     }
-    if show.record && show.laser {
+    if laser_on {
         if let Some(p) = ctx.input(|i| i.pointer.hover_pos()) {
             let nx = (p.x - srect.min.x) / srect.width().max(1.0);
             let ny = (p.y - srect.min.y) / srect.height().max(1.0);
-            if (0.0..=1.0).contains(&nx) && (0.0..=1.0).contains(&ny) {
+            if show.record && (0.0..=1.0).contains(&nx) && (0.0..=1.0).contains(&ny) {
                 let ms = (now - show.slide_start).max(0.0) * 1000.0;
                 if ms.is_finite() {
                     show.note_laser(nx as f64 * doc.slide_size.width, ny as f64 * doc.slide_size.height, ms.min(3_600_000.0) as u32);
@@ -808,7 +811,7 @@ pub fn ui(app: &mut SlideApp, ui: &mut Ui) {
             show.apply(a, &doc, now);
         }
     } else if now - show.last_move < 2.5 {
-        let bar = Rect::from_min_size(pos2(full.min.x + 20.0, full.max.y - 50.0), vec2(250.0, 34.0));
+        let bar = Rect::from_min_size(pos2(full.min.x + 20.0, full.max.y - 50.0), vec2(310.0, 34.0));
         painter.rect_filled(bar, CornerRadius::same(17), Color32::from_black_alpha(140));
         let mut child =
             ui.new_child(egui::UiBuilder::new().max_rect(bar.shrink2(vec2(10.0, 4.0))).layout(egui::Layout::left_to_right(egui::Align::Center)));
@@ -829,6 +832,13 @@ pub fn ui(app: &mut SlideApp, ui: &mut Ui) {
             show.pen = !show.pen;
             if show.pen {
                 show.laser = false;
+            }
+        }
+        if b(&mut child, if show.laser { "● on" } else { "●" }).on_hover_text("Laser pointer. Hold Ctrl to point without leaving it on.").clicked()
+        {
+            show.laser = !show.laser;
+            if show.laser {
+                show.pen = false;
             }
         }
         if b(&mut child, "⬛").clicked() {
@@ -991,7 +1001,7 @@ impl Show {
         // Clicks on the on-screen controls must not also advance.
         ctx.input(|i| i.pointer.interact_pos()).is_some_and(|p| {
             let r = ctx.content_rect();
-            (self.reading && p.y > r.max.y - 34.0) || (!self.reading && p.y > r.max.y - 56.0 && p.x < r.min.x + 280.0)
+            (self.reading && p.y > r.max.y - 34.0) || (!self.reading && p.y > r.max.y - 56.0 && p.x < r.min.x + 340.0)
         })
     }
 }
@@ -1152,6 +1162,12 @@ fn saved_status(narr: bool, ink: bool, laser: bool) -> &'static str {
 }
 
 /// The laser dot at `elapsed_ms`, held briefly after the last sample.
+/// The laser dot: the button (or L while recording) leaves it on, and holding Ctrl shows it
+/// in any show. A blank screen hides it. It never draws ink.
+fn pointer_is_laser(sticky: bool, ctrl: bool, blank: bool) -> bool {
+    !blank && (sticky || ctrl)
+}
+
 fn laser_pos(points: &[deckcraft_model::LaserSample], elapsed_ms: u32) -> Option<(f64, f64)> {
     let last = points.last()?;
     if elapsed_ms > last.t_ms.saturating_add(300) {
@@ -1205,6 +1221,14 @@ mod tests {
         assert!(!play_on_enter(&narr, true));
         let clip = deckcraft_model::MediaClip { autoplay: true, ..Default::default() };
         assert!(play_on_enter(&clip, true));
+    }
+
+    #[test]
+    fn ctrl_shows_the_laser_without_a_trace_and_the_button_can_leave_it_on() {
+        assert!(pointer_is_laser(false, true, false));
+        assert!(pointer_is_laser(true, false, false));
+        assert!(!pointer_is_laser(false, false, false));
+        assert!(!pointer_is_laser(true, true, true));
     }
 
     #[test]

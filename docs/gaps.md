@@ -1,6 +1,6 @@
 # Where DeckCraft falls short of PowerPoint
 
-> **Last reviewed:** 2026-10-14 · **Last updated:** 2026-10-14 · **Change:** minor (Record Slide Show keeps narration and a laser trace; previous: minor, timings and pen ink) · **Target:** Microsoft PowerPoint for Mac 16.113 (Microsoft 365)
+> **Last reviewed:** 2026-10-14 · **Last updated:** 2026-10-14 · **Change:** minor (laser pointer during a show; Clear Timing and Clear Narration; previous: minor, narration and a laser trace) · **Target:** Microsoft PowerPoint for Mac 16.113 (Microsoft 365)
 
 Every known shortfall, one entry each, ranked by how much it stops someone who presents with
 PowerPoint from switching. This is the work list: pick from the top. Numbers are summarized in
@@ -184,8 +184,7 @@ Detail in [animation-parity.md](animation-parity.md). 10–16 h; the pane is a *
 - **Estimate:** 3–6 h to review, land and round-trip.
 
 ### Smaller missing rows
-Zoom (summary/section/slide, 6–10 h), reuse slides (2–4 h), laser pointer during a normal show
-(1–2 h; a recorded trace already replays), transition
+Zoom (summary/section/slide, 6–10 h), reuse slides (2–4 h), transition
 sounds (1–2 h), artistic effects (6–10 h), remove background (6–10 h; needs a model or a classical
 matte), compress pictures (2–3 h), insert screenshot (2–3 h), screen capture while recording
 (4–8 h; Record Slide Show keeps timings, narration, pen ink and a laser trace), compare presentations (6–10 h), password protection (4–6 h, ECMA-376 agile
@@ -257,6 +256,7 @@ Detail in [localization-parity.md](localization-parity.md).
 
 | Date | Change | Summary |
 |---|---|---|
+| 2026-10-14 | minor | Laser pointer during a show (hold Ctrl, red/green/blue). Clear Timing and Clear Narration on the current slide or all slides |
 | 2026-10-14 | minor | Record Slide Show keeps narration audio and a laser trace. Screen capture and camera stay open |
 | 2026-10-14 | minor | Record Slide Show keeps timings and pen ink. Audio and screen capture stay open |
 | 2026-10-13 | minor | Shape, picture and table rendering checked against PowerPoint on ~150 synthetic edge-case slides; 3-D bevels, cameras and face lighting now render approximately (gap narrowed to extrusion, rigs and the 3-D pane) |

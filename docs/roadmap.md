@@ -1,6 +1,6 @@
 # DeckCraft roadmap: milestones and what's next
 
-> **Last reviewed:** 2026-10-14 · **Last updated:** 2026-10-14 · **Change:** trivial (Record Slide Show keeps narration and a laser trace; previous: trivial, timings and pen ink) · **Target:** Microsoft PowerPoint for Mac 16.113 (Microsoft 365)
+> **Last reviewed:** 2026-10-14 · **Last updated:** 2026-10-14 · **Change:** trivial (ordinary-show laser pointer and Clear Timing / Clear Narration; previous: trivial, narration and a laser trace) · **Target:** Microsoft PowerPoint for Mac 16.113 (Microsoft 365)
 
 Forward-looking: where DeckCraft is going and in what order. The one-page summary is
 [ROADMAP.md](../ROADMAP.md); every shortfall is in [gaps.md](gaps.md); numbers are in
@@ -78,7 +78,7 @@ From the local execution plan (`plan/execution-plan.md`, gitignored). Status as 
 | M4 | Design | mostly | Notes/Handout masters, variants, Designer |
 | M5 | Pictures and media | mostly | SVG/EMF, remove background, compress, icons, WMA/WMV |
 | M6 | Transitions and animations | mostly | Animation Pane timeline, remaining effects, transition sounds |
-| M7 | Slide show | mostly | second-display placement, laser, record |
+| M7 | Slide show | mostly | second-display placement, highlighter, screen capture |
 | M8 | Tables and charts | partly | chart data grid, elements, chartex types, draw table |
 | M9 | SmartArt, equations, WordArt | partly | SmartArt text pane and layouts, equations (PR #55), text warps |
 | M10 | Views | done | grid options, New Window |
@@ -110,6 +110,7 @@ plan above.
 
 | Date | Change | Summary |
 |---|---|---|
+| 2026-10-14 | trivial | Laser pointer during a show, and Clear Timing / Clear Narration on the current slide or all slides |
 | 2026-10-14 | trivial | Record Slide Show keeps narration and a laser trace; screen capture and camera stay after beta |
 | 2026-10-14 | trivial | Record Slide Show keeps timings and pen ink; narration audio and screen capture stay after beta |
 | 2026-10-10 | minor | Added the alpha gate (six core workflows): all pass, two with partial depth; stage stays alpha |
