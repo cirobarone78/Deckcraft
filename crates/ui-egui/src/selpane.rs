@@ -209,7 +209,7 @@ pub fn show(app: &mut SlideApp, ui: &mut Ui) {
         let eye_label = crate::i18n::tf("{} {}", &[crate::i18n::t(if row.hidden { "Show" } else { "Hide" }), row.name.clone()]);
         eye_resp.widget_info(|| WidgetInfo::labeled(WidgetType::Button, true, &eye_label));
         let lock_resp = ui.interact(lock.expand(3.0), ui.id().with(("lock", row.id)), Sense::click());
-        let lock_label = crate::i18n::tf("{} {}", &[crate::i18n::t(if row.locked { "Unlock" } else { "Lock" }), row.name.clone()]);
+        let lock_label = crate::i18n::tf(if row.locked { "Unlock {}" } else { "Lock {}" }, &[row.name.clone()]);
         lock_resp.widget_info(|| WidgetInfo::labeled(WidgetType::Button, true, &lock_label));
         if eye_resp.clicked() {
             run(app, "shape.visible", json!({"id": row.id, "visible": row.hidden}));

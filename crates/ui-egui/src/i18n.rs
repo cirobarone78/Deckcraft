@@ -6,7 +6,15 @@
 //! translates patterns with `{}` placeholders. `set_language`/`language` drive the
 //! language state (persisted in `UiState`), and `row_layout` provides the
 //! right-to-left row alignment Arabic needs.
+//!
+//! egui lays a label's runs left to right and runs no bidi over them, so Arabic's
+//! translations are handed out in visual order (`bidi.rs`): the runs in the order a
+//! right-to-left reader meets them, the letters inside each run in logical order for
+//! the shaper, brackets mirrored. What a user types keeps its logical order.
 
+mod bidi;
+
+use std::sync::OnceLock;
 use std::sync::atomic::{AtomicU8, Ordering};
 
 /// The UI language. English is the source language; العربية (Arabic) is right-to-left.
@@ -66,26 +74,48 @@ pub fn is_arabic() -> bool {
 }
 
 /// Translate an English UI string into the active language. Unknown strings (and English)
-/// come back unchanged, so untranslated additions keep working.
+/// come back unchanged, so untranslated additions keep working. Arabic's translations come
+/// back in visual order (`bidi.rs`): the runs in the order egui draws them, left to right,
+/// so the label reads right to left.
 pub fn t(s: &str) -> String {
     if !is_arabic() {
         return s.to_string();
     }
-    match tr_ar(s) {
-        Some(ar) => ar.to_string(),
+    match tr_ar_index(s) {
+        Some(i) => visual_ar()[i].clone(),
         None => s.to_string(),
     }
 }
 
 /// Translate a pattern with `{}` placeholders, substituting the arguments in order.
-/// The Arabic pattern keeps its `{}` placeholders, so word order is free.
+/// The Arabic pattern keeps its `{}` placeholders, so word order is free: it is filled in
+/// logical order and reordered into visual order afterwards (`bidi.rs`), so two
+/// placeholders cannot land in each other's places and a number keeps its reading spot.
+/// The arguments should be numbers, names or single words — not already-translated phrases.
 pub fn tf(pattern: &str, args: &[String]) -> String {
-    let mut out = t(pattern);
-    for a in args {
-        if let Some(p) = out.find("{}") {
-            out.replace_range(p..p + 2, a);
-        }
+    if !is_arabic() {
+        return fill(pattern, args);
     }
+    match tr_ar_index(pattern) {
+        Some(i) => bidi::visual_rtl(&fill(AR[i].1, args)),
+        None => fill(pattern, args),
+    }
+}
+
+/// `pattern` with each `{}` replaced by the next of `args`, in order. Leftover `{}`
+/// placeholders stay; an argument is never read as a pattern again.
+fn fill(mut pattern: &str, args: &[String]) -> String {
+    let mut out = String::with_capacity(pattern.len());
+    let mut args = args.iter();
+    while let Some((before, after)) = pattern.split_once("{}") {
+        out.push_str(before);
+        match args.next() {
+            Some(a) => out.push_str(a),
+            None => out.push_str("{}"),
+        }
+        pattern = after;
+    }
+    out.push_str(pattern);
     out
 }
 
@@ -437,7 +467,7 @@ static AR: &[(&str, &str)] = &[
     ("Intersect", "تقاطع"),
     ("Italiano", "Italiano"),
     ("Italic", "مائل"),
-    ("JPEG Picture (*.jpg)", "صورة JPEG‏ (*.jpg)"),
+    ("JPEG Picture (*.jpg)", "صورة JPEG (*.jpg)"),
     ("JPEG image (current slide)", "صورة JPEG (الشريحة الحالية)"),
     ("Join our community on Discord", "انضم إلى مجتمعنا على Discord"),
     ("Join the ArtCraft community on Discord", "انضم إلى مجتمع ArtCraft على Discord"),
@@ -461,6 +491,7 @@ static AR: &[(&str, &str)] = &[
     ("List Commands", "عرض الأوامر"),
     ("Location", "الموقع"),
     ("Lock", "تأمين"),
+    ("Lock {}", "تأمين {}"),
     ("Long Dash", "شرطة طويلة"),
     ("Long Dash Dot", "شرطة طويلة نقطة"),
     ("Loop until Stopped", "تكرار حتى الإيقاف"),
@@ -555,9 +586,9 @@ static AR: &[(&str, &str)] = &[
     ("Outline (.txt)", "مخطط تفصيلي (.txt)"),
     ("Outline View", "طريقة عرض المخطط التفصيلي"),
     ("Oval ends", "طرفان بيضاويان"),
-    ("PDF (*.pdf)", "PDF‏ (*.pdf)"),
-    ("PDF document (.pdf)", "مستند PDF ‏(.pdf)"),
-    ("PNG Picture (*.png)", "صورة PNG‏ (*.png)"),
+    ("PDF (*.pdf)", "PDF (*.pdf)"),
+    ("PDF document (.pdf)", "مستند PDF (.pdf)"),
+    ("PNG Picture (*.png)", "صورة PNG (*.png)"),
     ("PNG images (all slides)", "صور PNG (كل الشرائح)"),
     ("PNG images (current slide)", "صور PNG (الشريحة الحالية)"),
     ("Page Setup…", "إعداد الصفحة…"),
@@ -595,7 +626,7 @@ static AR: &[(&str, &str)] = &[
     ("Position and Size", "الموضع والحجم"),
     ("Poster Frame", "إطار ملصق"),
     ("PowerPoint Presentation (*.pptx)", "عرض PowerPoint التقديمي (*.pptx)"),
-    ("PowerPoint Presentation (.pptx)", "عرض PowerPoint ‏(.pptx)"),
+    ("PowerPoint Presentation (.pptx)", "عرض PowerPoint (.pptx)"),
     ("Preferences", "تفضيلات"),
     ("Preferences…", "تفضيلات…"),
     ("Presentation", "عرض تقديمي"),
@@ -860,6 +891,7 @@ static AR: &[(&str, &str)] = &[
     ("Undo (⌘Z)", "تراجع (⌘Z)"),
     ("Ungroup", "إلغاء التجميع"),
     ("Unlock", "فتح التأمين"),
+    ("Unlock {}", "فتح تأمين {}"),
     ("Untitled Section", "مقطع بدون عنوان"),
     ("Use Timings", "استخدام التوقيتات"),
     ("Use timings, if present", "استخدام التوقيتات إن وُجدت"),
@@ -987,7 +1019,7 @@ static AR: &[(&str, &str)] = &[
     ("{} (Headings)", "{} (عناوين)"),
     ("{} ({} slides)", "{} ({} شريحة)"),
     ("{} Columns", "{} أعمدة"),
-    ("{} Columns {}", "{} أعمدة"),
+    ("{} Columns {}", "{} أعمدة {}"),
     ("{} Slide Master", "رئيسية {}"),
     ("{} contributors · {} commits", "{} مساهماً · {} ارتكازاً"),
     ("{} of {}", "{} من {}"),
@@ -1009,8 +1041,16 @@ static AR: &[(&str, &str)] = &[
     ("日本語", "日本語"),
 ];
 
-fn tr_ar(s: &str) -> Option<&'static str> {
-    AR.binary_search_by(|(k, _)| (*k).cmp(s)).ok().map(|i| AR[i].1)
+fn tr_ar_index(s: &str) -> Option<usize> {
+    AR.binary_search_by(|(k, _)| (*k).cmp(s)).ok()
+}
+
+/// The dictionary's Arabic side in visual order (`bidi.rs`), built once and shared by every
+/// `t()` call: the runs left to right as a right-to-left reader meets them, the letters
+/// inside each run in logical order for the shaper.
+fn visual_ar() -> &'static [String] {
+    static VISUAL: OnceLock<Vec<String>> = OnceLock::new();
+    VISUAL.get_or_init(|| AR.iter().map(|(_, ar)| bidi::visual_rtl(ar)).collect())
 }
 
 /// The horizontal row layout for the active language: right-to-left in Arabic.
@@ -1019,5 +1059,73 @@ pub fn row_layout(valign: egui::Align) -> egui::Layout {
         egui::Layout::right_to_left(valign)
     } else {
         egui::Layout::left_to_right(valign)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// The dictionary is a binary-searched static: it must stay sorted by its English keys.
+    #[test]
+    fn dictionary_is_sorted() {
+        assert!(AR.windows(2).all(|w| w[0].0 < w[1].0));
+    }
+
+    /// Arabic's lookups come back in visual order (`bidi.rs`): the first word of a sentence
+    /// sits at the reading end, a single word stays as it is, and unknown strings fall back
+    /// to English. (The language is a global and tests run in parallel, so the row is looked
+    /// up directly rather than through `t`.)
+    #[test]
+    fn arabic_lookups_read_right_to_left() {
+        let row = |s: &str| visual_ar()[tr_ar_index(s).unwrap()];
+        assert_eq!(row("Align Left"), "اليسار إلى محاذاة");
+        assert_eq!(row("Animations"), "حركات");
+        assert!(tr_ar_index("unknown future label").is_none());
+    }
+
+    /// A pattern is filled in logical order and reordered afterwards: two placeholders
+    /// cannot land in each other's places, the percent sign stays with its number, and an
+    /// argument is never read as a pattern again.
+    #[test]
+    fn arabic_patterns_fill_before_the_pass() {
+        let pattern = |s: &str| AR[tr_ar_index(s).unwrap()].1;
+        assert_eq!(bidi::visual_rtl(&fill(pattern("Slide {} of {}"), &["3".into(), "10".into()])), "10 من 3 الشريحة");
+        assert_eq!(bidi::visual_rtl(&fill(pattern("{}%"), &["75".into()])), "75٪");
+        assert_eq!(bidi::visual_rtl(&fill(pattern("Unlock {}"), &["Layer 1".into()])), "Layer 1 تأمين فتح");
+        assert_eq!(fill("Slide {} of {}", &["3".into(), "10".into()]), "Slide 3 of 10");
+    }
+
+    /// egui lays a label out run by run, left to right, and the bidi pass (`bidi.rs`)
+    /// orders an Arabic label's runs for it. On a real headless layout: after the pass the
+    /// first word of a sentence sits rightmost, and a left-to-right island inside it keeps
+    /// its own order — the pass and the shaper must not reverse each other's work.
+    #[test]
+    fn arabic_labels_lay_out_right_to_left() {
+        if !deckcraft_fonts::CRAFT_FONTS.iter().any(|f| f.family == "Noto Sans Arabic") {
+            eprintln!("skipped: built without craft-fonts (set CRAFT_FONTS_DIR to a checkout)");
+            return;
+        }
+        let ctx = egui::Context::default();
+        crate::theme::install_fonts(&ctx);
+        let mut output = ctx.run_ui(egui::RawInput::default(), |ui| {
+            let font = egui::FontId::new(13.0, egui::FontFamily::Proportional);
+            for (label, first, second) in [("شريحة جديدة", "شريحة", "جديدة"), ("حفظ كـ PDF…", "حفظ", "PDF")] {
+                let job = egui::text::LayoutJob::single_section(
+                    bidi::visual_rtl(label),
+                    egui::TextFormat { font_id: font.clone(), ..Default::default() },
+                );
+                let galley = ui.painter().layout_job(job);
+                let glyphs = &galley.rows[0].row.glyphs;
+                let x_of = |word: &str| glyphs.iter().filter(|g| word.contains(g.chr)).map(|g| g.pos.x).collect::<Vec<f32>>();
+                let (a, b) = (x_of(first), x_of(second));
+                assert!(!a.is_empty() && !b.is_empty(), "{label}: no glyphs for `{first}`/`{second}`");
+                assert!(
+                    a.iter().all(|&x| b.iter().all(|&y| x > y)),
+                    "`{label}`: `{first}` must sit right of `{second}` after the pass"
+                );
+            }
+        });
+        output.textures_delta.clear();
     }
 }
