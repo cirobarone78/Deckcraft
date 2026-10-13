@@ -835,3 +835,25 @@ fn slide_ranges_parse_like_powerpoints_print_box() {
     let opts = cmd::file::pdf_options(&json!({"slides": [0, 7, 1]}), 2).unwrap();
     assert_eq!(opts.slides, Some(vec![0, 1]), "indices past the end are dropped");
 }
+
+#[test]
+fn exports_odp_with_text_shapes_pictures_and_notes() {
+    let mut s = session();
+    s.execute("slide.fromOutline", &json!({"text": "Quarterly review\n\tRevenue up 12%\n\t\tEurope led\n\tHiring on track\n"})).unwrap();
+    s.execute("shape.insert", &json!({"preset": "rightArrow", "rect": [500, 300, 200, 80], "text": "Next"})).unwrap();
+    s.execute("shape.fill", &json!({"color": "#2e6fd8"})).unwrap();
+    s.execute("arrange.rotate", &json!({"angle": 30})).ok();
+    s.execute("shape.insert", &json!({"preset": "ellipse", "rect": [100, 380, 120, 80]})).unwrap();
+    let png = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==";
+    s.execute("insert.picture", &json!({"data": png, "name": "dot.png", "rect": [700, 40, 100, 100]})).unwrap();
+    s.execute("slide.notes", &json!({"text": "Mention the Berlin office"})).unwrap();
+    let dir = std::env::temp_dir().join(format!("deckcraft-odp-{}", std::process::id()));
+    std::fs::create_dir_all(&dir).unwrap();
+    let path = std::env::var("ODP_OUT").map(std::path::PathBuf::from).unwrap_or_else(|_| dir.join("deck.odp"));
+    s.execute("file.export", &json!({"path": path.to_string_lossy()})).unwrap();
+    let bytes = std::fs::read(&path).unwrap();
+    assert_eq!(&bytes[30..38], b"mimetype");
+    let text = String::from_utf8_lossy(&bytes);
+    assert!(text.contains("application/vnd.oasis.opendocument.presentation"));
+    let _ = std::fs::remove_dir_all(&dir);
+}
