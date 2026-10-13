@@ -1,6 +1,6 @@
 # PowerPoint feature checklist
 
-> **Generated:** 2026-10-10 (summary by `cargo xtask parity`; rows re-scored 2026-10-10 against PowerPoint for Mac 16.113.4) · **Target:** Microsoft PowerPoint for Mac 16.113 (Microsoft 365)
+> **Generated:** 2026-10-12 (summary by `cargo xtask parity`; rows re-scored 2026-10-10 against PowerPoint for Mac 16.113.4, the password row 2026-10-12) · **Target:** Microsoft PowerPoint for Mac 16.113 (Microsoft 365)
 
 The summary between `<!-- SUMMARY -->
 **Weighted breadth parity: 79%** over 191 features.
@@ -9,12 +9,12 @@ The summary between `<!-- SUMMARY -->
 |---|---|---|---|---|---|
 | P0 | 72 | 61 | 11 | 0 | 92% |
 | P1 | 65 | 38 | 21 | 6 | 75% |
-| P2 | 54 | 13 | 15 | 26 | 38% |
+| P2 | 54 | 13 | 16 | 25 | 39% |
 
 | Area | Parity |
 |---|---|
 | Application shell | 77% |
-| Files | 71% |
+| Files | 72% |
 | Slides | 90% |
 | Views | 90% |
 | Masters & themes | 85% |
@@ -67,7 +67,7 @@ Open P0 items: Contextual tabs (Shape Format, Picture Format, Table Design/Layou
 | Files | Export outline / RTF | P2 | P |
 | Files | Export video (MP4) / animated GIF | P2 | M |
 | Files | Print (slides, handouts, notes, outline) | P1 | M |
-| Files | Password protection | P2 | M |
+| Files | Password protection (open only; no encryption on save) | P2 | P |
 | Files | Reuse slides from another file | P1 | M |
 | Files | Drag and drop files onto the window | P1 | D |
 | Files | OpenDocument .odp open/save | P2 | M |

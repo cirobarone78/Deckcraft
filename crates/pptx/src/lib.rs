@@ -7,6 +7,7 @@
 #![deny(clippy::unwrap_used, clippy::expect_used, clippy::panic, clippy::unimplemented, clippy::todo, clippy::unreachable)]
 #![forbid(unsafe_code)]
 
+pub mod crypt;
 mod custgeom;
 mod maps;
 mod opc;
@@ -25,6 +26,12 @@ pub(crate) const SECTION_EXT_URI: &str = "{521415D9-36F7-43E2-AB2F-B90AF26B5E84}
 pub enum PptxError {
     #[error("not a PPTX file: {0}")]
     NotPptx(String),
+    #[error("this presentation is password-protected")]
+    PasswordRequired,
+    #[error("incorrect password")]
+    WrongPassword,
+    #[error("encrypted: {0}")]
+    Encrypted(String),
     #[error("unsupported: {0}")]
     Unsupported(String),
     #[error("write failed: {0}")]
@@ -44,9 +51,24 @@ pub fn sniff(bytes: &[u8]) -> bool {
     zip::ZipArchive::new(std::io::Cursor::new(bytes)).map(|z| z.index_for_name("[Content_Types].xml").is_some()).unwrap_or(false)
 }
 
+/// Is this an encrypted PowerPoint package (an OLE compound file holding `/EncryptionInfo`)?
+pub fn is_encrypted(bytes: &[u8]) -> bool {
+    crypt::is_encrypted(bytes)
+}
+
 /// Read a `.pptx` / `.potx` / `.ppsx` package.
 pub fn import(bytes: &[u8]) -> Result<Presentation, PptxError> {
-    read::import(bytes)
+    import_with_password(bytes, None)
+}
+
+/// Read a package, decrypting it with `password` if it is password-protected.
+pub fn import_with_password(bytes: &[u8], password: Option<&str>) -> Result<Presentation, PptxError> {
+    if crypt::is_encrypted(bytes) {
+        let decrypted = crypt::decrypt(bytes, password)?;
+        read::import(&decrypted)
+    } else {
+        read::import(bytes)
+    }
 }
 
 /// Write a `.pptx` package.

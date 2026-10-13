@@ -1,6 +1,6 @@
 # File-format parity with PowerPoint
 
-> **Last reviewed:** 2026-10-10 · **Last updated:** 2026-10-12 · **Change:** trivial (Groups with a small legacy child coordinate space draw outlines, dashes, arrowheads and ink at their own width (#233); previously major: created; formats taken from PowerPoint 16.113.4's Info.plist, PPTX coverage measured from `crates/pptx`) · **Target:** Microsoft PowerPoint for Mac 16.113 (Microsoft 365)
+> **Last reviewed:** 2026-10-10 · **Last updated:** 2026-10-12 · **Change:** minor (encrypted PPTX can now be read: standard and agile decryption, password dialog; the encryption row moves from "no" to "yes" for reading) · **Target:** Microsoft PowerPoint for Mac 16.113 (Microsoft 365)
 
 Every format PowerPoint reads or writes, DeckCraft's support, fidelity and how it is tested.
 Gaps are itemized in [gaps.md](gaps.md#file-formats). Dimension score: **~58% ready**
@@ -85,7 +85,7 @@ the round trip even though DeckCraft doesn't model it.
 | Unknown slide-level elements (`graphicFrame` OLE, extensions, `mc:AlternateContent`) | kept | kept | Rendered as a labelled placeholder with the preview picture when present |
 | Tags, custom XML, VBA | no / no / no | | |
 | Embedded fonts | no | no | |
-| Encryption (password to open) | no | no | |
+| Encryption (password to open) | yes | no | Standard (AES-128/192/256, SHA-1) and agile (AES-128/192/256, SHA-1/256/384/512); the password is asked for in a dialog and a wrong one is reported. Tested against msoffcrypto-tool fixtures: `crates/pptx/tests/crypt.rs` |
 
 ### What would move the PPTX number
 
@@ -103,3 +103,4 @@ the round trip even though DeckCraft doesn't model it.
 | 2026-10-12 | minor | Text warps rendered; their adjust values read and written |
 | 2026-10-12 | trivial | Groups with a small legacy child coordinate space draw outlines, dashes, arrowheads and ink at their own width (#233) |
 | 2026-10-10 | major | Created from PowerPoint 16.113.4's `CFBundleDocumentTypes`, `crates/pptx` reader/writer and tests, and the open round-trip issues |
+| 2026-10-12 | minor | Encrypted PPTX (password to open) is readable: MS-OFFCRYPTO standard and agile decryption in `crates/pptx/src/crypt.rs`, a password dialog in the UI, and `crates/pptx/tests/crypt.rs` with fixtures cross-validated by msoffcrypto-tool |

@@ -2,7 +2,7 @@
 
 **Stage: alpha** · next: beta, ~20 points and ~120–210 h away
 
-> **Last reviewed:** 2026-10-10 · **Last updated:** 2026-10-10 · **Change:** minor (hours to ~95% per audience added; ready 56% → 55%; stage stays alpha; previous: major, full re-measure against PowerPoint for Mac 16.113.4; restructured to the craftrules progress-docs standard) · **Target:** Microsoft PowerPoint for Mac 16.113 (Microsoft 365)
+> **Last reviewed:** 2026-10-10 · **Last updated:** 2026-10-12 · **Change:** minor (encrypted PPTX can be opened: standard and agile decryption behind a password dialog) · **Target:** Microsoft PowerPoint for Mac 16.113 (Microsoft 365)
 
 DeckCraft aims at full PowerPoint parity, and to be better: faster, open (a documented zip+JSON
 format plus PPTX), scriptable by agents (CLI, JSON control channel, MCP), and available everywhere
@@ -139,6 +139,7 @@ app's JSON control channel (`deckcraft --control PORT`).
 | 2026-10-12 | File tab (Backstage) like PowerPoint's (#76): File or Alt+F opens Home, New, Open, Info, Save, Save As, Print, Export, Close, Account and Options over the window, Esc or Back returns, arrows walk the side menu; the start screen is File › Home. Pages run the existing file commands; new `file.info`, print slide ranges (`"1-3, 5"`), Print through a PDF, Ctrl+P, and Close/Ctrl+W ask about unsaved changes |
 | 2026-10-12 | WordArt text warps (`prstTxWarp`): all 40 presets drawn, curves fitted to PowerPoint by observation; warp adjusts round-trip |
 | 2026-10-12 | Render: line widths, dashes and arrowheads inside a group no longer scale with the group's child-coordinate mapping, so a group in a small legacy child space (scale about 1600) draws thin lines instead of covering the slide (#233) |
+| 2026-10-12 | Encrypted PPTX (password to open): MS-OFFCRYPTO standard and agile decryption, a password dialog on open with a wrong-password retry, and fixtures cross-validated against msoffcrypto-tool; a legacy binary `.ppt` is no longer mistaken for a password-protected file |
 | 2026-10-10 | Progress docs restructured to the craftrules standard; full re-measure (breadth 79%, ready ~55%, mainstream ~53%, essentials ~62%, alpha). Landed: Animation Painter (#54), Morph geometry outlines (#27), animated GIF playback (#39), hyperlink colour and following links in the show (#37, #45), date fields in their own format (#36), flipped shapes keep readable text (#35), show transition fix (#46), start screen from the Home button (#49), MCP export lists PDF (#65), OmaStore manifest (#57) |
 | 2026-10-09 | v0.4.0 released. UAX #9 bidi and Arabic shaping (#4), Morph with Words and Characters (#5), tables grow to fit and PDF cell text (#14), rotating log file (#7), DX12 default on Windows (#16), H.264/HEVC overflow hardening (#2), PPTX sniffing anywhere in the zip (#19) |
 | 2026-10-08 | v0.2.0 and v0.3.0 released: Windows arm64, Flatpak aarch64, AppImage zsync updates, branded DMG |
@@ -153,6 +154,7 @@ app's JSON control channel (`deckcraft --control PORT`).
 | 2026-10-13 | trivial | Progress log: wild text cases |
 | 2026-10-12 | trivial | Progress log: File tab (Backstage, #76) |
 | 2026-10-12 | trivial | Progress log: lines in scaled groups (#233) |
+| 2026-10-12 | minor | Encrypted PPTX can be opened (password dialog, standard and agile); `docs/file-format-parity.md` encryption row `no` → `yes` for reading; legacy `.ppt` reported as unsupported instead of password-protected |
 | 2026-10-10 | minor | Readiness-by-audience table with hours to ~95% for full, mainstream and essentials |
 | 2026-10-10 | minor | Added mainstream practitioner (~53%) and essentials user (~62%); features recomputed from written area weights, ready ~56% → ~55% |
 | 2026-10-10 | minor | Stage checked against the new core-workflow gate: passes, stays alpha |

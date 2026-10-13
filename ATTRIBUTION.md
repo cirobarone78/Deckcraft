@@ -31,6 +31,9 @@ deck and UI icons are original work of the DeckCraft contributors (drawn or gene
 | `crates/fonts/tests/fixtures/legacy-semibold.ttf` | DeckCraft contributors | a one-glyph Semibold face named like Segoe UI Semibold (its Windows family differs from the typographic one), built by `make_legacy_font.py` (fontTools as the builder only) | CC0-1.0 | Font lookup by Windows family name tests |
 | `crates/fonts/tests/fixtures/legacy-regular.ttf` | DeckCraft contributors | the same family's one-glyph Regular face, built by `make_legacy_font.py` (fontTools as the builder only) | CC0-1.0 | Font lookup by Windows family name tests |
 | `crates/render/tests/fixtures/make_colr_font.py` | DeckCraft contributors | this repository | MIT OR Apache-2.0 | Regenerates the COLR test font |
+| `crates/pptx/tests/fixtures/plain.pptx` | DeckCraft contributors | written part by part from the ECMA-376 part names by `crates/pptx/tests/fixtures/make.py` — three slides with placeholder title/body text as filler (no Microsoft material, no vendor fonts or themes) | CC0-1.0 | Plaintext that the encrypted fixtures are built from |
+| `crates/pptx/tests/fixtures/*-*.pptx` | DeckCraft contributors | `plain.pptx` encrypted to MS-OFFCRYPTO standard (AES-128/SHA-1, AES-256/SHA-1) and agile (AES-256/SHA-512, AES-256/SHA-256, AES-128/SHA-384) form by `crates/pptx/tests/fixtures/make.py` using msoffcrypto-tool (MIT) as the encoder only; each one decrypted back to `plain.pptx` by that library before it was committed | CC0-1.0 | Decryption tests (`crates/pptx/tests/crypt.rs`); password in `make.py` |
+| `crates/pptx/tests/fixtures/make.py` | DeckCraft contributors | this repository | MIT OR Apache-2.0 | Regenerates the encrypted fixtures and verifies them |
 
 ## Bundled through dependencies
 

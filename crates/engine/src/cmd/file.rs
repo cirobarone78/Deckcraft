@@ -9,8 +9,8 @@ use crate::{DocState, EngineError, Result, Session};
 pub fn specs() -> Vec<CommandSpec> {
     vec![
         cmd!(noundo "file.new", "New Presentation", ["File"], Some("Cmd+N"), "{theme?: name, size?: [w,h] pt, blank?: bool}", always, new),
-        cmd!(noundo "file.open", "Open…", ["File"], Some("Cmd+O"), "{path}", always, open),
-        cmd!(noundo "file.openBytes", "Open Data", [], None, "{name, data: base64}", always, open_bytes),
+        cmd!(noundo "file.open", "Open…", ["File"], Some("Cmd+O"), "{path, password?}", always, open),
+        cmd!(noundo "file.openBytes", "Open Data", [], None, "{name, data: base64, password?}", always, open_bytes),
         cmd!(noundo "file.save", "Save", ["File"], Some("Cmd+S"), "{path?, format?: deckcraft|pptx}", has_doc, save),
         cmd!(noundo "file.saveAs", "Save As…", ["File"], Some("Cmd+Shift+S"), "{path, format?}", has_doc, save_as),
         cmd!(noundo "file.saveTemplate", "Save as Template…", ["File"], None, "{path}", has_doc, save_as),
@@ -63,13 +63,22 @@ fn new(s: &mut Session, p: &Value) -> Result<Value> {
     Ok(json!({"document": i}))
 }
 
-/// Recognise and read presentation bytes (native, PPTX).
-pub fn open_presentation(name: &str, bytes: &[u8]) -> Result<Presentation> {
+/// Recognise and read presentation bytes (native, PPTX), optionally with a password.
+pub fn open_presentation_with_password(name: &str, bytes: &[u8], password: Option<&str>) -> Result<Presentation> {
     if deckcraft_format::sniff(bytes) {
         return deckcraft_format::load(bytes).map_err(|e| EngineError::Other(e.to_string()));
     }
-    if deckcraft_pptx::sniff(bytes) {
-        let mut p = deckcraft_pptx::import(bytes).map_err(|e| EngineError::Other(e.to_string()))?;
+    if deckcraft_pptx::sniff(bytes) || deckcraft_pptx::is_encrypted(bytes) {
+        let mut p = match deckcraft_pptx::import_with_password(bytes, password) {
+            Ok(p) => p,
+            Err(deckcraft_pptx::PptxError::PasswordRequired) => {
+                return Err(EngineError::PasswordRequired(name.to_string()));
+            }
+            Err(deckcraft_pptx::PptxError::WrongPassword) => {
+                return Err(EngineError::WrongPassword(name.to_string()));
+            }
+            Err(e) => return Err(EngineError::Other(e.to_string())),
+        };
         deckcraft_format::repair(&mut p);
         return Ok(p);
     }
@@ -83,7 +92,42 @@ pub fn open_presentation(name: &str, bytes: &[u8]) -> Result<Presentation> {
         }
         return Ok(p);
     }
+    if is_cfb(bytes) {
+        // An OLE/CFB compound file that carries no `/EncryptionInfo` stream is a legacy binary
+        // `.ppt` (or another application's document). It is not encrypted, so it must not be
+        // answered with a password prompt.
+        return Err(EngineError::Other(format!(
+            "{name}: legacy binary PowerPoint (.ppt) files and other OLE compound documents are not supported — save as .pptx"
+        )));
+    }
     Err(EngineError::Other(format!("{name}: not a presentation DeckCraft can read")))
+}
+
+pub fn open_presentation(name: &str, bytes: &[u8]) -> Result<Presentation> {
+    open_presentation_with_password(name, bytes, None)
+}
+
+/// Does this look like an OLE/CFB Compound File?  An encrypted Office document and a legacy
+/// `.ppt` share this container, so the eight magic bytes alone say nothing about encryption.
+pub fn is_cfb(bytes: &[u8]) -> bool {
+    bytes.starts_with(&[0xD0, 0xCF, 0x11, 0xE0, 0xA1, 0xB1, 0x1A, 0xE1])
+}
+
+/// Ask the UI to prompt for a password. Only raised when none was supplied: a password that was
+/// just rejected is reported to the caller, which already has an open dialog holding the text the
+/// user typed — pushing a fresh prompt would discard it.
+fn password_prompt(s: &mut Session, name: &str, params: Value) -> Result<Value> {
+    s.ui_requests.push(crate::UiRequest::Dialog { id: "password".into(), params });
+    Err(EngineError::PasswordRequired(name.to_string()))
+}
+
+/// DeckCraft can read an encrypted presentation but not write one back, so a save would quietly
+/// drop the protection the user relies on. Say so as the file opens, while it still matters.
+fn warn_not_encrypted_on_save(s: &mut Session, name: &str) {
+    let label = std::path::Path::new(name).file_name().map(|n| n.to_string_lossy().to_string()).unwrap_or_else(|| name.to_string());
+    s.ui_requests.push(crate::UiRequest::Message {
+        text: format!("{label}: opened decrypted — DeckCraft can't encrypt on save yet, so saving it would drop the password"),
+    });
 }
 
 pub fn add_opened(s: &mut Session, name: &str, path: Option<String>, p: Presentation) -> usize {
@@ -97,9 +141,19 @@ pub fn add_opened(s: &mut Session, name: &str, path: Option<String>, p: Presenta
 #[cfg(not(target_arch = "wasm32"))]
 fn open(s: &mut Session, p: &Value) -> Result<Value> {
     let path = str_param(p, "path").ok_or_else(|| bad("file.open", "missing `path`"))?;
+    let password = str_param(p, "password");
     let bytes = std::fs::read(path).map_err(|e| EngineError::Other(format!("{path}: {e}")))?;
-    let doc = open_presentation(path, &bytes)?;
-    let native = deckcraft_format::sniff(&bytes) || deckcraft_pptx::sniff(&bytes);
+    let doc = match open_presentation_with_password(path, &bytes, password) {
+        Ok(doc) => doc,
+        Err(EngineError::PasswordRequired(name)) => {
+            return password_prompt(s, &name, json!({"name": name, "path": path}));
+        }
+        Err(e) => return Err(e),
+    };
+    let native = deckcraft_format::sniff(&bytes) || deckcraft_pptx::sniff(&bytes) || deckcraft_pptx::is_encrypted(&bytes);
+    if deckcraft_pptx::is_encrypted(&bytes) {
+        warn_not_encrypted_on_save(s, path);
+    }
     let i = add_opened(s, path, native.then(|| path.to_string()), doc);
     let st = s.doc()?;
     Ok(json!({"document": i, "slides": st.doc.slides.len(), "missingFonts": st.missing_fonts}))
@@ -111,9 +165,20 @@ fn open(_s: &mut Session, _p: &Value) -> Result<Value> {
 
 fn open_bytes(s: &mut Session, p: &Value) -> Result<Value> {
     let name = str_param(p, "name").unwrap_or("Presentation");
-    let data = str_param(p, "data").and_then(base64_decode).ok_or_else(|| bad("file.openBytes", "missing or invalid base64 `data`"))?;
-    let doc = open_presentation(name, &data)?;
+    let password = str_param(p, "password");
+    let data_str = str_param(p, "data").ok_or_else(|| bad("file.openBytes", "missing base64 `data`"))?;
+    let data = base64_decode(data_str).ok_or_else(|| bad("file.openBytes", "invalid base64 `data`"))?;
+    let doc = match open_presentation_with_password(name, &data, password) {
+        Ok(doc) => doc,
+        Err(EngineError::PasswordRequired(n)) => {
+            return password_prompt(s, &n, json!({"name": n, "data": data_str}));
+        }
+        Err(e) => return Err(e),
+    };
     let i = add_opened(s, name, None, doc);
+    if deckcraft_pptx::is_encrypted(&data) {
+        warn_not_encrypted_on_save(s, name);
+    }
     Ok(json!({"document": i, "missingFonts": s.doc()?.missing_fonts}))
 }
 
