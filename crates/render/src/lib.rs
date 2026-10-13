@@ -51,6 +51,7 @@ pub use morph_path::PathMorph;
 pub use morph_text::TextMorph;
 pub use placed::{Placed, PlacedLink, PlacedText, place_slide};
 pub use table::row_heights as table_row_heights;
+pub use table::{CellLook as TableCellLook, look as table_cell_look};
 pub use transition::{SlideParts, composite_transition, render_transition};
 
 /// Largest pixmap side we render (vello_cpu uses u16 sizes).
