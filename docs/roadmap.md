@@ -1,6 +1,6 @@
 # DeckCraft roadmap: milestones and what's next
 
-> **Last reviewed:** 2026-10-10 · **Last updated:** 2026-10-10 · **Change:** minor (core-workflow alpha gate added; stage stays alpha; previous: major, created; milestones carried from the local execution plan, the beta plan built from gaps.md) · **Target:** Microsoft PowerPoint for Mac 16.113 (Microsoft 365)
+> **Last reviewed:** 2026-10-10 · **Last updated:** 2026-10-13 · **Change:** trivial (font weights left beta item 7; previous: minor, core-workflow alpha gate added) · **Target:** Microsoft PowerPoint for Mac 16.113 (Microsoft 365)
 
 Forward-looking: where DeckCraft is going and in what order. The one-page summary is
 [ROADMAP.md](../ROADMAP.md); every shortfall is in [gaps.md](gaps.md); numbers are in
@@ -44,7 +44,7 @@ Beta means ~75% ready for real work and opening and saving PowerPoint's `.pptx` 
 | 4 | EMF/WMF and SVG pictures | 8–14 | File formats, Pictures |
 | 5 | Vector PDF, printing | 10–16 | File formats, Files |
 | 6 | Localization infrastructure + zh-Hans, es, fr, de, ja (with IME) | 27–46 | Localization 8 → ~40% |
-| 7 | Font weights (#69), image paste (#53), Tab in text (#78) | 6–11 | Features |
+| 7 | Image paste (#53), Tab in text (#78) | 3–6 | Features |
 | 8 | Charts: data grid, elements | 6–10 | Features |
 | 9 | Animation Pane timeline, preview, effect options | 5–8 | Features |
 | 10 | Presenter view on the right display, timer controls | 3–5 | Hardware, Slide show |
@@ -109,5 +109,6 @@ plan above.
 
 | Date | Change | Summary |
 |---|---|---|
+| 2026-10-13 | trivial | Named font faces left beta item 7 (#69) |
 | 2026-10-10 | minor | Added the alpha gate (six core workflows): all pass, two with partial depth; stage stays alpha |
 | 2026-10-10 | major | Created: current focus, ranked beta plan with hours, milestones M0–M14 with status, the old alpha checklist as history |
