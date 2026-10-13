@@ -1338,9 +1338,11 @@ mod tests {
         let mut harness = canvas_harness();
         if let Some(path) = std::env::var_os("DECKCRAFT_THEME_SCREENSHOT") {
             harness.state_mut().ui.brightness = crate::theme::Brightness::Dark;
+            harness.state_mut().restyle = true;
             harness.run_steps(4);
             harness.render().unwrap().save(path).unwrap();
             harness.state_mut().ui.brightness = crate::theme::Brightness::Light;
+            harness.state_mut().restyle = true;
             harness.run_steps(2);
         }
         let off =
