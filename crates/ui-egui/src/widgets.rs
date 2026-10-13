@@ -35,6 +35,7 @@ pub fn big_button(ui: &mut Ui, icon: Icon, label: &str, enabled: bool) -> Respon
 pub fn big_button_ex(ui: &mut Ui, icon: Icon, label: &str, enabled: bool, split: bool, selected: bool) -> (Response, Option<Response>) {
     let label = crate::i18n::tr(label);
     let t = Tokens::get(ui.ctx());
+    let rtl = crate::rtl::flows(ui);
     let font = theme::font(11.0);
     let lines: Vec<&str> = wrap_label(label);
     let text_w = lines.iter().map(|l| ui.fonts_mut(|f| f.layout_no_wrap(l.to_string(), font.clone(), t.text).size().x)).fold(0.0f32, f32::max);
@@ -66,9 +67,11 @@ pub fn big_button_ex(ui: &mut Ui, icon: Icon, label: &str, enabled: bool, split:
         let label_w = ui.fonts_mut(|f| f.layout_no_wrap(l.to_string(), font.clone(), col).size().x);
         let extra = if split && last { 9.0 } else { 0.0 };
         let x = rect.center().x - (label_w + extra) / 2.0;
-        painter.text(pos2(x, y), Align2::LEFT_TOP, crate::i18n::tr(l), font.clone(), col);
+        // The chevron follows the label: on its right, or on its left in a right-to-left window.
+        let (text_x, chevron_x) = if rtl { (x + extra, x + 4.0) } else { (x, x + label_w + 5.0) };
+        painter.text(pos2(text_x, y), Align2::LEFT_TOP, crate::i18n::tr(l), font.clone(), col);
         if split && last {
-            chevron(&painter, pos2(x + label_w + 5.0, y + 7.0), 3.0, col);
+            chevron(&painter, pos2(chevron_x, y + 7.0), 3.0, col);
         }
         y += 12.5;
     }
@@ -95,7 +98,8 @@ fn wrap_label(label: &str) -> Vec<&str> {
         }
         let split_at: usize = words.iter().take(best).map(|w| w.len() + 1).sum::<usize>().saturating_sub(1);
         if let (Some(a), Some(b)) = (label.get(..split_at), label.get(split_at + 1..)) {
-            return vec![a, b];
+            // A right-to-left label is in display order, so its first words are on the right.
+            return if crate::i18n::current().rtl() { vec![b, a] } else { vec![a, b] };
         }
     }
     vec![label]
@@ -114,42 +118,49 @@ pub fn small_button(ui: &mut Ui, icon: Icon, label: &str, enabled: bool, selecte
 pub fn small_button_ex(ui: &mut Ui, icon: Icon, label: &str, enabled: bool, selected: bool, split: bool) -> (Response, Option<Response>) {
     let label = crate::i18n::tr(label);
     let t = Tokens::get(ui.ctx());
+    let rtl = crate::rtl::flows(ui);
     let font = theme::font(12.0);
     let tw = if label.is_empty() { 0.0 } else { ui.fonts_mut(|f| f.layout_no_wrap(label.to_string(), font.clone(), t.text).size().x) + 5.0 };
     let arrow_w = if split { 12.0 } else { 0.0 };
     let w = 24.0 + tw + arrow_w;
     let (rect, resp) = ui.allocate_exact_size(vec2(w, 22.0), if enabled { Sense::click() } else { Sense::hover() });
     let painter = ui.painter_at(rect);
-    let main_rect = Rect::from_min_max(rect.min, pos2(rect.max.x - arrow_w, rect.max.y));
+    // The icon leads, the label follows and the drop-down arrow ends the button (on the left in a
+    // right-to-left window).
+    let (main_rect, arrow_rect) = if rtl {
+        (Rect::from_min_max(pos2(rect.min.x + arrow_w, rect.min.y), rect.max), Rect::from_min_max(rect.min, pos2(rect.min.x + arrow_w, rect.max.y)))
+    } else {
+        (Rect::from_min_max(rect.min, pos2(rect.max.x - arrow_w, rect.max.y)), Rect::from_min_max(pos2(rect.max.x - arrow_w, rect.min.y), rect.max))
+    };
     let main_resp =
         if split { ui.interact(main_rect, resp.id.with("m"), if enabled { Sense::click() } else { Sense::hover() }) } else { resp.clone() };
-    let arrow_resp = split.then(|| {
-        ui.interact(
-            Rect::from_min_max(pos2(rect.max.x - arrow_w, rect.min.y), rect.max),
-            resp.id.with("a"),
-            if enabled { Sense::click() } else { Sense::hover() },
-        )
-    });
+    let arrow_resp = split.then(|| ui.interact(arrow_rect, resp.id.with("a"), if enabled { Sense::click() } else { Sense::hover() }));
     if let Some(c) = bg(ui, &main_resp, selected, &t) {
         painter.rect_filled(main_rect, CornerRadius::same(4), c);
     }
     if let Some(a) = &arrow_resp
         && let Some(c) = bg(ui, a, false, &t)
     {
-        painter.rect_filled(Rect::from_min_max(pos2(rect.max.x - arrow_w, rect.min.y), rect.max), CornerRadius::same(4), c);
+        painter.rect_filled(arrow_rect, CornerRadius::same(4), c);
     }
-    icons::paint(&painter, Rect::from_center_size(pos2(rect.min.x + 12.0, rect.center().y), vec2(17.0, 17.0)), icon, t.text, !enabled);
+    icons::paint(
+        &painter,
+        Rect::from_center_size(pos2(crate::rtl::lead_x(rtl, main_rect, 12.0), rect.center().y), vec2(17.0, 17.0)),
+        icon,
+        t.text,
+        !enabled,
+    );
     if !label.is_empty() {
         painter.text(
-            pos2(rect.min.x + 24.0, rect.center().y),
-            Align2::LEFT_CENTER,
+            pos2(crate::rtl::lead_x(rtl, main_rect, 24.0), rect.center().y),
+            crate::rtl::lead_center(rtl),
             crate::i18n::tr(label),
             font,
             if enabled { t.text } else { t.text_faint },
         );
     }
     if split {
-        chevron(&painter, pos2(rect.max.x - 6.0, rect.center().y), 2.8, t.text_dim);
+        chevron(&painter, pos2(arrow_rect.center().x, rect.center().y), 2.8, t.text_dim);
     }
     (if split { main_resp } else { resp }, arrow_resp)
 }
@@ -169,13 +180,19 @@ pub fn icon_toggle(ui: &mut Ui, icon: Icon, tip: &str, enabled: bool, on: bool) 
 /// Icon with a colour bar under it and a dropdown arrow (Font Color, Highlight, Shape Fill…).
 pub fn color_split(ui: &mut Ui, icon: Icon, tip: &str, color: Color32, enabled: bool) -> (Response, Response) {
     let t = Tokens::get(ui.ctx());
+    let rtl = crate::rtl::flows(ui);
     let (rect, resp) = ui.allocate_exact_size(vec2(34.0, 22.0), Sense::hover());
-    let main = ui.interact(Rect::from_min_size(rect.min, vec2(23.0, 22.0)), resp.id.with("m"), if enabled { Sense::click() } else { Sense::hover() });
-    let arrow = ui.interact(
-        Rect::from_min_max(pos2(rect.min.x + 23.0, rect.min.y), rect.max),
-        resp.id.with("a"),
-        if enabled { Sense::click() } else { Sense::hover() },
-    );
+    // Icon and colour bar lead; the drop-down arrow ends the button.
+    let (main_rect, arrow_rect) = if rtl {
+        (
+            Rect::from_min_size(pos2(rect.max.x - 23.0, rect.min.y), vec2(23.0, 22.0)),
+            Rect::from_min_max(rect.min, pos2(rect.min.x + 11.0, rect.max.y)),
+        )
+    } else {
+        (Rect::from_min_size(rect.min, vec2(23.0, 22.0)), Rect::from_min_max(pos2(rect.min.x + 23.0, rect.min.y), rect.max))
+    };
+    let main = ui.interact(main_rect, resp.id.with("m"), if enabled { Sense::click() } else { Sense::hover() });
+    let arrow = ui.interact(arrow_rect, resp.id.with("a"), if enabled { Sense::click() } else { Sense::hover() });
     let painter = ui.painter_at(rect);
     if let Some(c) = bg(ui, &main, false, &t) {
         painter.rect_filled(main.rect, CornerRadius::same(4), c);
@@ -183,13 +200,13 @@ pub fn color_split(ui: &mut Ui, icon: Icon, tip: &str, color: Color32, enabled: 
     if let Some(c) = bg(ui, &arrow, false, &t) {
         painter.rect_filled(arrow.rect, CornerRadius::same(4), c);
     }
-    icons::paint(&painter, Rect::from_min_size(rect.min + vec2(3.0, 1.0), vec2(17.0, 15.0)), icon, t.text, !enabled);
+    icons::paint(&painter, Rect::from_min_size(main_rect.min + vec2(3.0, 1.0), vec2(17.0, 15.0)), icon, t.text, !enabled);
     painter.rect_filled(
-        Rect::from_min_size(rect.min + vec2(4.0, 17.0), vec2(15.0, 3.5)),
+        Rect::from_min_size(main_rect.min + vec2(4.0, 17.0), vec2(15.0, 3.5)),
         CornerRadius::ZERO,
         if enabled { color } else { t.text_faint },
     );
-    chevron(&painter, pos2(rect.max.x - 5.5, rect.center().y), 2.6, t.text_dim);
+    chevron(&painter, pos2(arrow_rect.center().x, rect.center().y), 2.6, t.text_dim);
     (main.on_hover_text(crate::i18n::tr(tip)), arrow)
 }
 
@@ -211,7 +228,7 @@ pub fn separator(ui: &mut Ui) {
 
 /// Two or three rows of small controls stacked in one ribbon column.
 pub fn rows<R>(ui: &mut Ui, add: impl FnOnce(&mut Ui) -> R) -> R {
-    ui.vertical(|ui| {
+    crate::rtl::vertical(ui, |ui| {
         ui.spacing_mut().item_spacing = vec2(1.0, 0.0);
         ui.add_space(0.0);
         add(ui)
@@ -231,17 +248,23 @@ pub fn dropdown(ui: &mut Ui, id: &str, current: &str, width: f32, enabled: bool,
         Stroke::new(1.0, if resp.hovered() { t.text_faint } else { t.border }),
         egui::StrokeKind::Inside,
     );
+    let rtl = crate::rtl::flows(ui);
     let clip = rect.shrink2(vec2(6.0, 0.0));
-    painter.with_clip_rect(Rect::from_min_max(clip.min, pos2(clip.max.x - 12.0, clip.max.y))).text(
-        pos2(rect.min.x + 6.0, rect.center().y),
-        Align2::LEFT_CENTER,
+    let text_clip = if rtl {
+        Rect::from_min_max(pos2(clip.min.x + 12.0, clip.min.y), clip.max)
+    } else {
+        Rect::from_min_max(clip.min, pos2(clip.max.x - 12.0, clip.max.y))
+    };
+    painter.with_clip_rect(text_clip).text(
+        pos2(crate::rtl::lead_x(rtl, rect, 6.0), rect.center().y),
+        crate::rtl::lead_center(rtl),
         current,
         theme::font(12.0),
         if enabled { t.text } else { t.text_faint },
     );
-    chevron(&painter, pos2(rect.max.x - 9.0, rect.center().y), 3.0, t.text_dim);
+    chevron(&painter, pos2(crate::rtl::trail_x(rtl, rect, 9.0), rect.center().y), 3.0, t.text_dim);
     let _ = id;
-    egui::Popup::menu(&resp).width(width.max(140.0)).show(|ui| {
+    crate::rtl::menu(&resp).width(width.max(140.0)).show(|ui| {
         egui::ScrollArea::vertical().max_height(360.0).show(ui, add_items);
     });
     resp
@@ -251,7 +274,7 @@ pub fn dropdown(ui: &mut Ui, id: &str, current: &str, width: f32, enabled: bool,
 /// (egui menus close on any click inside). Picking a colour closes it (`color_grid` calls
 /// `ui.close()`); other buttons in it must close it themselves.
 pub fn color_popup(button: &Response) -> egui::Popup<'_> {
-    egui::Popup::menu(button).close_behavior(egui::PopupCloseBehavior::CloseOnClickOutside)
+    crate::rtl::menu(button).close_behavior(egui::PopupCloseBehavior::CloseOnClickOutside)
 }
 
 /// The colour grid popup body: theme colours with tints/shades, standard colours, extra entries.
@@ -285,7 +308,7 @@ pub fn color_grid(ui: &mut Ui, scheme: &ColorScheme, none_label: Option<&str>) -
         );
         resp.on_hover_text(crate::i18n::tr(tip)).clicked()
     };
-    egui::Grid::new("theme_colors").spacing(vec2(3.0, 1.0)).show(ui, |ui| {
+    crate::rtl::grid(ui, egui::Grid::new("theme_colors").spacing(vec2(3.0, 1.0)), |ui| {
         for slot in slots {
             let alias = match slot {
                 SchemeSlot::Lt1 => SchemeSlot::Bg1,
@@ -435,25 +458,31 @@ pub fn fmt_num(v: f64, suffix: &str) -> String {
 /// Section header inside panes.
 pub fn section(ui: &mut Ui, title: &str, open: bool) -> bool {
     let t = Tokens::get(ui.ctx());
+    let rtl = crate::rtl::flows(ui);
     let (rect, resp) = ui.allocate_exact_size(vec2(ui.available_width(), 26.0), Sense::click());
     let p = ui.painter();
-    let c = pos2(rect.min.x + 8.0, rect.center().y);
+    let c = pos2(crate::rtl::lead_x(rtl, rect, 8.0), rect.center().y);
     if open {
         chevron(p, c, 3.5, t.text);
     } else {
-        p.line_segment([pos2(c.x - 2.0, c.y - 4.0), pos2(c.x + 2.0, c.y)], Stroke::new(1.2, t.text));
-        p.line_segment([pos2(c.x + 2.0, c.y), pos2(c.x - 2.0, c.y + 4.0)], Stroke::new(1.2, t.text));
+        // A closed section points to where the text goes: right, or left in a right-to-left window.
+        let tip = if rtl { -2.0 } else { 2.0 };
+        p.line_segment([pos2(c.x - tip, c.y - 4.0), pos2(c.x + tip, c.y)], Stroke::new(1.2, t.text));
+        p.line_segment([pos2(c.x + tip, c.y), pos2(c.x - tip, c.y + 4.0)], Stroke::new(1.2, t.text));
     }
-    p.text(pos2(rect.min.x + 18.0, rect.center().y), Align2::LEFT_CENTER, title, theme::bold(13.0), t.text);
+    p.text(pos2(crate::rtl::lead_x(rtl, rect, 18.0), rect.center().y), crate::rtl::lead_center(rtl), title, theme::bold(13.0), t.text);
     if resp.clicked() { !open } else { open }
 }
 
 /// A button with an optional label and a painted dropdown chevron (the UI font has no ▾).
 pub fn drop_button(ui: &mut Ui, label: &str, size: egui::Vec2, enabled: bool) -> egui::Response {
     let t = Tokens::get(ui.ctx());
-    let r = ui.add_enabled(enabled, egui::Button::new(if label.is_empty() { String::new() } else { format!("{label}   ") }).min_size(size));
+    let r = ui.add_enabled(
+        enabled,
+        egui::Button::new(if label.is_empty() { String::new() } else { format!("{}   ", crate::i18n::tr(label)) }).min_size(size),
+    );
     let col = if enabled { t.text_dim } else { t.text_faint };
-    chevron(ui.painter(), egui::pos2(r.rect.max.x - 8.0, r.rect.center().y), 3.0, col);
+    chevron(ui.painter(), egui::pos2(crate::rtl::trail_x(crate::rtl::flows(ui), r.rect, 8.0), r.rect.center().y), 3.0, col);
     r
 }
 

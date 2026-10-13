@@ -1,0 +1,1475 @@
+# Arabic (ar) interface catalog. English source<TAB>translation; \n denotes a line break.
+# Contributor-original translation, MIT OR Apache-2.0.
+#
+# Write every translation in normal typing (logical) order, as you would in any editor. The
+# catalog is put into display order when it loads (crates/ui-egui/src/bidi.rs), because egui lays
+# words out left to right; never reorder words by hand here. `{name}` and `{}` placeholders must
+# appear in both columns, and keyboard-shortcut text (Ctrl+, Alt+, ⌘) stays as it is.
+#
+# Clean room: every entry was written from the plain meaning of the English label in ordinary
+# Arabic computing vocabulary (Modern Standard Arabic, Western digits). No Microsoft PowerPoint (or
+# other product) localisation, string table or translated UI was consulted or copied; add entries
+# the same way. Product, format and technology names (DeckCraft, PDF, PPTX, SmartArt, WordArt,
+# Discord, GitHub ...) and key names (Tab, Backspace, Esc) stay in Latin letters.
+# Counts use count-neutral wording (`الشرائح: 21`), so no plural forms are needed.
+# Terminology: Slide = شريحة, Presentation = عرض تقديمي, Slide Show = عرض الشرائح, Layout = تخطيط,
+# Theme = نسق, Slide Master = الشريحة الرئيسية, Placeholder = عنصر نائب, Transition = انتقال,
+# Animation = حركة, Section = قسم, Notes = ملاحظات, Handout = نشرة, Comment = تعليق,
+# Chart = مخطط بياني, Table = جدول, Shape = شكل, Picture = صورة, Outline = مخطط تفصيلي,
+# Hyperlink = ارتباط تشعبي, Ribbon = الشريط, Pane = جزء, Dialog = مربع حوار.
+
+  Fixed date (empty = update automatically):	  تاريخ ثابت (اتركه فارغًا للتحديث تلقائيًا):
+  Footer text:	  نص التذييل:
+  Present  	  تقديم  
+ pt	 نقطة
+ — Edited	 — تم التعديل
+"Not Allowed" Symbol	رمز «غير مسموح»
+% of all commits	% من كل الإيداعات
++ New Comment	+ تعليق جديد
++ New Slide	+ شريحة جديدة
++ Row	+ صف
++ Series	+ سلسلة
++Bin	+ فئة
+100% Stacked Bar	أشرطة مكدّسة بنسبة 100%
+100% Stacked Column	أعمدة مكدّسة بنسبة 100%
+35mm Slides	شرائح 35 ملم
+@ribbon:Home	الرئيسية
+@ribbon:Insert	إدراج
+@{}: {} PRs, {} commits, +{} / −{} lines (Δ {}), +{} / −{} binary assets, {} – {}	@{}: طلبات السحب {}، الإيداعات {}، الأسطر +{} / −{} (الفرق {})، الأصول الثنائية +{} / −{}، {} – {}
+A fixed copy that keeps its layout on any device	نسخة ثابتة تحافظ على تخطيطها على أي جهاز
+A3 Paper (297x420 mm)	ورق A3 (297×420 ملم)
+A4 Paper (210x297 mm)	ورق A4 (210×297 ملم)
+Aa	Aa
+Abc	Abc
+About	حول
+About DeckCraft	حول DeckCraft
+Accent 1	تمييز 1
+Accent 2	تمييز 2
+Accent 3	تمييز 3
+Accent 4	تمييز 4
+Accent 5	تمييز 5
+Accent 6	تمييز 6
+Accessibility Checker	مدقق إمكانية الوصول
+Account	الحساب
+Across	عبر
+Action	إجراء
+Action Button: Custom	زر إجراء: مخصص
+Action Button: Document	زر إجراء: مستند
+Action Button: Get Information	زر إجراء: الحصول على معلومات
+Action Button: Go Back	زر إجراء: رجوع
+Action Button: Go Back or Previous	زر إجراء: رجوع أو السابق
+Action Button: Go Forward or Next	زر إجراء: تقدم أو التالي
+Action Button: Go Home	زر إجراء: الصفحة الرئيسية
+Action Button: Go to Beginning	زر إجراء: الانتقال إلى البداية
+Action Button: Go to End	زر إجراء: الانتقال إلى النهاية
+Action Button: Help	زر إجراء: مساعدة
+Action Button: Return	زر إجراء: عودة
+Action Button: Sound	زر إجراء: صوت
+Action Button: Video	زر إجراء: فيديو
+Action Button: {k}	زر إجراء: {k}
+Action Buttons	أزرار الإجراءات
+Add Animation	إضافة حركة
+Add Section	إضافة قسم
+Add a category	إضافة فئة
+Add a tag	إضافة وسم
+Add a title	إضافة عنوان
+Add an author	إضافة مؤلف
+Add comments	إضافة تعليقات
+Add\nAnimation	إضافة\nحركة
+Address:	العنوان:
+Adjust Shape	ضبط الشكل
+After Previous	بعد السابق
+After:	بعد:
+Airplane	طائرة
+Align	محاذاة
+Align Bottom	محاذاة إلى الأسفل
+Align Center	محاذاة للوسط
+Align Left	محاذاة لليسار
+Align Middle	محاذاة إلى الوسط
+Align Right	محاذاة لليمين
+Align Text	محاذاة النص
+Align Top	محاذاة إلى الأعلى
+Alt Text	نص بديل
+Alt+	Alt+
+Alt+F9	Alt+F9
+Alt\nText	نص\nبديل
+An open-source, clean-room project. Not affiliated with Microsoft.	مشروع مفتوح المصدر مكتوب بأسلوب الغرفة النظيفة. لا ينتمي إلى Microsoft.
+Angle	الزاوية
+Animation	الحركة
+Animation Gallery	معرض الحركات
+Animation Painter	نسخ الحركة
+Animation Painter (double-click to keep it on)	نسخ الحركة (انقر نقرًا مزدوجًا لإبقائه مفعّلًا)
+Animation Pane	جزء الحركات
+Animation Styles	أنماط الحركة
+Animation\nPainter	نسخ\nالحركة
+Animation\nPane	جزء\nالحركات
+Animations	الحركات
+Animations on Slide	الحركات على الشريحة
+Appear	ظهور
+Appearance	المظهر
+Apply	تطبيق
+Apply Animation	تطبيق الحركة
+Apply To All	تطبيق على الكل
+Apply to All	تطبيق على الكل
+Apply\nTo All	تطبيق\nعلى الكل
+Arc	قوس
+Arcs	أقواس
+Area	مساحة
+Arrange	ترتيب
+Arrow	سهم
+Arrow at end	سهم في النهاية
+Arrow at start	سهم في البداية
+Arrow: Bent	سهم: منحنٍ
+Arrow: Bent-Up	سهم: منحنٍ للأعلى
+Arrow: Chevron	سهم: شيفرون
+Arrow: Circular	سهم: دائري
+Arrow: Circular Counter-clockwise	سهم: دائري عكس عقارب الساعة
+Arrow: Circular Two-headed	سهم: دائري برأسين
+Arrow: Curved Down	سهم: منحنٍ لأسفل
+Arrow: Curved Left	سهم: منحنٍ لليسار
+Arrow: Curved Right	سهم: منحنٍ لليمين
+Arrow: Curved Up	سهم: منحنٍ لأعلى
+Arrow: Down	سهم: لأسفل
+Arrow: Left	سهم: لليسار
+Arrow: Left-Right	سهم: لليسار واليمين
+Arrow: Left-Right-Up	سهم: لليسار واليمين وأعلى
+Arrow: Left-Up	سهم: لليسار وأعلى
+Arrow: Notched Right	سهم: مسنّن لليمين
+Arrow: Pentagon	سهم: خماسي
+Arrow: Quad	سهم: رباعي الاتجاه
+Arrow: Right	سهم: لليمين
+Arrow: Striped Right	سهم: مخطط لليمين
+Arrow: Swoosh	سهم: انسيابي
+Arrow: U-Turn	سهم: دوران عكسي
+Arrow: Up	سهم: لأعلى
+Arrow: Up-Down	سهم: لأعلى وأسفل
+Arrows	أسهم
+Arrows at both ends	أسهم في الطرفين
+As One Object	ككائن واحد
+Audio	صوت
+Audio from File…	صوت من ملف…
+Author	المؤلف
+AutoCorrect as you type	تصحيح تلقائي أثناء الكتابة
+Autofit	ملاءمة تلقائية
+Automatic	تلقائي
+B4 (ISO) Paper (250x353 mm)	ورق B4 ‏(ISO) ‏(250×353 ملم)
+B5 (ISO) Paper (176x250 mm)	ورق B5 ‏(ISO) ‏(176×250 ملم)
+Back	رجوع
+Back (Esc)	رجوع (Esc)
+Background	الخلفية
+Background Styles	أنماط الخلفية
+Background\nStyles	أنماط\nالخلفية
+Backspace	Backspace
+Banded Columns	أعمدة متناوبة التظليل
+Banded Rows	صفوف متناوبة التظليل
+Banner	لافتة
+Basic Cycle	دورة أساسية
+Basic List	قائمة أساسية
+Basic Process	عملية أساسية
+Basic Shapes	أشكال أساسية
+Before text (in):	قبل النص (بوصة):
+Before you share it, check the presentation for things people with disabilities might find hard to read.	قبل مشاركة العرض التقديمي، افحصه بحثًا عمّا قد يصعب على ذوي الإعاقة قراءته.
+Berry	التوت
+Bevel	شطب
+Binary assets added	الأصول الثنائية المضافة
+Binary assets removed	الأصول الثنائية المُزالة
+Black Left	عبر الأسود لليسار
+Black Pen	قلم أسود
+Black Right	عبر الأسود لليمين
+Blank Presentation	عرض تقديمي فارغ
+Blinds	ستائر
+Block Arc	قوس سميك
+Block Arrows	أسهم كتلية
+Blue	أزرق
+Blue Pen	قلم أزرق
+Bold	غامق
+Bold Flash	وميض غامق
+Both	كلاهما
+Bottom	أسفل
+Bounce	ارتداد
+Box	إطار
+Box In	صندوق للداخل
+Box Out	صندوق للخارج
+Box and Whisker	مخطط الصندوق والشارب
+Brightness	السطوع
+Brightness {:+}%	السطوع {:+}%
+Bring Forward	إحضار للأمام
+Bring to Front	إحضار إلى الأمام
+Bring\nForward	إحضار\nللأمام
+Browse	استعراض
+Browsed at a kiosk (full screen)	تصفح في كشك (ملء الشاشة)
+Browsed by an individual (window)	تصفح فردي (في نافذة)
+Bubble	فقاعي
+Bullets	تعداد نقطي
+Burst	انفجار
+By Paragraph	حسب الفقرة
+Callout: Bent Line	وسيلة شرح: خط مكسور
+Callout: Bent Line with Accent Bar	وسيلة شرح: خط مكسور مع شريط تمييز
+Callout: Bent Line with Border and Accent Bar	وسيلة شرح: خط مكسور مع حد وشريط تمييز
+Callout: Bent Line with No Border	وسيلة شرح: خط مكسور بلا حد
+Callout: Double Bent Line	وسيلة شرح: خط مزدوج الكسر
+Callout: Double Bent Line with Accent Bar	وسيلة شرح: خط مزدوج الكسر مع شريط تمييز
+Callout: Double Bent Line with Border and Accent Bar	وسيلة شرح: خط مزدوج الكسر مع حد وشريط تمييز
+Callout: Double Bent Line with No Border	وسيلة شرح: خط مزدوج الكسر بلا حد
+Callout: Down Arrow	وسيلة شرح: سهم لأسفل
+Callout: Left Arrow	وسيلة شرح: سهم لليسار
+Callout: Left-Right Arrow	وسيلة شرح: سهم لليسار واليمين
+Callout: Line	وسيلة شرح: خط
+Callout: Line with Accent Bar	وسيلة شرح: خط مع شريط تمييز
+Callout: Line with Border and Accent Bar	وسيلة شرح: خط مع حد وشريط تمييز
+Callout: Line with No Border	وسيلة شرح: خط بلا حد
+Callout: Quad Arrow	وسيلة شرح: سهم رباعي الاتجاه
+Callout: Right Arrow	وسيلة شرح: سهم لليمين
+Callout: Up Arrow	وسيلة شرح: سهم لأعلى
+Callout: Up-Down Arrow	وسيلة شرح: سهم لأعلى وأسفل
+Callouts	وسائل الشرح
+Cameo	ظهور مصغّر
+Camera capture is not available yet	الالتقاط من الكاميرا غير متاح بعد
+Cancel	إلغاء
+Capitalize Each Word	تكبير أول حرف من كل كلمة
+Caps	أحرف كبيرة
+Categories	الفئات
+Center	توسيط
+Centered	توسيط
+Change Case	تغيير حالة الأحرف
+Change Chart Type	تغيير نوع المخطط
+Change File Type	تغيير نوع الملف
+Change Picture	تغيير الصورة
+Change Shape	تغيير الشكل
+Change\nChart Type	تغيير\nنوع المخطط
+Character Spacing	تباعد الأحرف
+Characters	الأحرف
+Chart	مخطط بياني
+Chart Data	بيانات المخطط
+Chart Design	تصميم المخطط
+Chart Elements	عناصر المخطط
+Chart Marker: Cross Lines	علامة مخطط: خطوط متقاطعة
+Chart Marker: Plus Lines	علامة مخطط: خطوط زائد
+Chart Marker: Star Lines	علامة مخطط: خطوط نجمية
+Chart…	مخطط بياني…
+Check Accessibility	فحص إمكانية الوصول
+Check for Issues	بحث عن المشكلات
+Check\nAccessibility	فحص\nإمكانية الوصول
+Checkerboard	رقعة شطرنج
+Chevron	شيفرون
+Choose a SmartArt Graphic	اختر رسم SmartArt
+Choose where to save	اختر مكان الحفظ
+Chord	وتر
+Circle	دائرة
+Circle In	دائرة للداخل
+Circle Out	دائرة للخارج
+Classic	كلاسيكي
+Clear All Formatting	مسح كل التنسيقات
+Click a symbol to insert it at the insertion point.	انقر رمزًا لإدراجه عند نقطة الإدراج.
+Click icon to add SmartArt graphic	انقر الأيقونة لإضافة رسم SmartArt
+Click icon to add chart	انقر الأيقونة لإضافة مخطط
+Click icon to add media	انقر الأيقونة لإضافة وسائط
+Click icon to add picture	انقر الأيقونة لإضافة صورة
+Click icon to add table	انقر الأيقونة لإضافة جدول
+Click to add first slide	انقر لإضافة الشريحة الأولى
+Click to add notes	انقر لإضافة ملاحظات
+Click to add subtitle	انقر لإضافة عنوان فرعي
+Click to add text	انقر لإضافة نص
+Click to add title	انقر لإضافة عنوان
+Click to edit Master text styles	انقر لتحرير أنماط النص الرئيسية
+Click to edit Master title style	انقر لتحرير نمط العنوان الرئيسي
+Clock	ساعة
+Clockwise	باتجاه عقارب الساعة
+Close	إغلاق
+Close Master View	إغلاق العرض الرئيسي
+Close\nMaster View	إغلاق\nالعرض الرئيسي
+Cloud	سحابة
+Clustered Bar	أشرطة مجمّعة
+Clustered Column	أعمدة مجمّعة
+Cmd+	Cmd+
+Cmd+,	Cmd+,
+Cmd+-	Cmd+-
+Cmd+=	Cmd+=
+Cmd+F1	Cmd+F1
+Cmd+Shift+P	Cmd+Shift+P
+Collapse the Ribbon	طي الشريط
+Color	اللون
+Color Pulse	نبضة لونية
+Colors	الألوان
+Columns	أعمدة
+Comb	مشط
+Combo	مركّب
+Command Palette	لوحة الأوامر
+Comment	تعليق
+Comments	التعليقات
+Commit Composition	اعتماد التركيب
+Commits	الإيداعات
+Community Links	روابط المجتمع
+Company	الشركة
+Complementary Color	لون مكمّل
+Compose Text	تركيب النص
+Connect Shapes	ربط الأشكال
+Connection Sites	مواضع الاتصال
+Connector: Curved	رابط: منحنٍ
+Connector: Elbow	رابط: مرفقي
+Connector: Elbow (one bend)	رابط: مرفقي (انحناءة واحدة)
+Content	المحتوى
+Contrast	التباين
+Contrast {:+}%	التباين {:+}%
+Contributors	المساهمون
+Conveyor	سير ناقل
+Copied the path	تم نسخ المسار
+Copy	نسخ
+Copy path	نسخ المسار
+Coral Reef	الشعاب المرجانية
+Corner Tabs: Quarter Circles	ألسنة زاوية: أرباع دوائر
+Corner Tabs: Squares	ألسنة زاوية: مربعات
+Corner Tabs: Triangles	ألسنة زاوية: مثلثات
+Corrections	تصحيحات
+Couldn't save AutoRecover information: {e}	تعذّر حفظ معلومات الاسترداد التلقائي: {e}
+Counter Clockwise	عكس عقارب الساعة
+Counterclockwise	عكس عقارب الساعة
+Cover	تغطية
+Create	إنشاء
+Create Handouts	إنشاء نشرات
+Create PDF	إنشاء PDF
+Create PDF Document	إنشاء مستند PDF
+Create a PDF Document	إنشاء مستند PDF
+Crop	اقتصاص
+Crop 10% each side	اقتصاص 10% من كل جانب
+Crop 20% each side	اقتصاص 20% من كل جانب
+Crop to Shape	اقتصاص إلى شكل
+Cross	صليب
+Crush	سحق
+Ctrl+	Ctrl+
+Cube	مكعب
+Currency	العملة
+Curtains	ستارتان
+Curve	منحنى
+Custom	مخصص
+Custom Path	مسار مخصص
+Custom Range	نطاق مخصص
+Custom Show	عرض مخصص
+Custom Show 1	عرض مخصص 1
+Custom Shows	عروض مخصصة
+Custom Slide Show	عرض شرائح مخصص
+Custom\nShow	عرض\nمخصص
+Cut	قص
+Cylinder	أسطوانة
+Dark	داكن
+Dark Blue	أزرق داكن
+Dark Mode	الوضع الداكن
+Dark Red	أحمر داكن
+Dark appearance	مظهر داكن
+Dark\nMode	الوضع\nالداكن
+Darken	تعتيم
+Dash	شرطة
+Dash Dot	شرطة ونقطة
+Dashes	شرطات
+Database	قاعدة بيانات
+Date	التاريخ
+Date & Time	التاريخ والوقت
+Date &\nTime	التاريخ\nوالوقت
+Date and Time	التاريخ والوقت
+Date and time	التاريخ والوقت
+Decagon	عشاري الأضلاع
+Decision	قرار
+DeckCraft	DeckCraft
+DeckCraft Presentation (*.deckcraft)	عرض تقديمي DeckCraft (*.deckcraft)
+DeckCraft can't export “{}”	لا يستطيع DeckCraft التصدير إلى «{}»
+DeckCraft has no accounts: there is nothing to sign in to, and your presentations stay on your device.	لا يملك DeckCraft حسابات: لا شيء لتسجيل الدخول إليه، وتبقى عروضك التقديمية على جهازك.
+DeckCraft prints through a PDF: it downloads, ready to print from your browser or PDF viewer.	تتم الطباعة في DeckCraft عبر PDF: يُنزَّل الملف جاهزًا للطباعة من المتصفح أو من عارض PDF.
+DeckCraft prints through a PDF: it opens in your PDF viewer, where you choose the printer.	تتم الطباعة في DeckCraft عبر PDF: يُفتح الملف في عارض PDF لديك، حيث تختار الطابعة.
+DeckCraft's own format: everything is kept	صيغة DeckCraft الخاصة: يُحفظ كل شيء
+Decrease Font Size	تصغير حجم الخط
+Decrease List Level	تقليل مستوى القائمة
+Delay:	التأخير:
+Delete	حذف
+Delete Columns	حذف أعمدة
+Delete Comment	حذف التعليق
+Delete Layout	حذف التخطيط
+Delete Rows	حذف صفوف
+Delete Slide	حذف الشريحة
+Delete Table	حذف الجدول
+Delete Text	حذف النص
+Desaturate	إزالة التشبع
+Deselect	إلغاء التحديد
+Design	تصميم
+Design Ideas	أفكار التصميم
+Design\nIdeas	أفكار\nالتصميم
+Deutsch	Deutsch
+Diagonal Stripe	شريط قطري
+Diamond	معيّن
+Diamond In	معيّن للداخل
+Diamond Out	معيّن للخارج
+Diamonds From Bottom	معيّنات من الأسفل
+Diamonds From Left	معيّنات من اليسار
+Diamonds From Right	معيّنات من اليمين
+Diamonds From Top	معيّنات من الأعلى
+Direction	الاتجاه
+Disappear	اختفاء
+Discard Recovered Presentations	تجاهل العروض التقديمية المستردة
+Display name	الاسم المعروض
+Dissolve	ذوبان
+Dissolve In	ذوبان للداخل
+Dissolve Out	ذوبان للخارج
+Distribute	توزيع
+Distribute Columns	توزيع الأعمدة
+Distribute Horizontally	توزيع أفقي
+Distribute Rows	توزيع الصفوف
+Distribute Vertically	توزيع عمودي
+Division Sign	علامة القسمة
+Do not Autofit	بلا ملاءمة تلقائية
+Do you want to save the changes you made to {what}?	هل تريد حفظ التغييرات التي أجريتها على {what}؟
+Document	المستند
+Dodecagon	اثنا عشري الأضلاع
+Don't Save	عدم الحفظ
+Don't show on title slide	عدم الإظهار في شريحة العنوان
+Done	تم
+Donut	حلقة
+Doors	أبواب
+Double Brace	قوس مزدوج معقوف
+Double Bracket	قوس مزدوج مربع
+Double Left	مزدوج لليسار
+Double Right	مزدوج لليمين
+Double Wave	موجة مزدوجة
+Doughnut	دونات
+Down	لأسفل
+Download	تنزيل
+Download the file	تنزيل الملف
+Drape	ستار
+Draw	رسم
+Drop Shadow Rectangle	مستطيل بظل
+Duplicate	تكرار
+Duplicate Selected Slides	تكرار الشرائح المحددة
+Duplicate Slide	تكرار الشريحة
+Duration:	المدة:
+Dynamic Content	محتوى ديناميكي
+Edit	تحرير
+Edit Alt Text…	تحرير النص البديل…
+Edit Data	تحرير البيانات
+Edit Header & Footer	تحرير الرأس والتذييل
+Edit Shape	تحرير الشكل
+Edit Text	تحرير النص
+Edit the data: first row = series names, first column = categories.	حرّر البيانات: الصف الأول أسماء السلاسل، والعمود الأول الفئات.
+Edit\nData	تحرير\nالبيانات
+Edit\nShape	تحرير\nالشكل
+Editing	التحرير
+Editorial	تحريري
+Effect Options	خيارات التأثير
+Effect\nOptions	خيارات\nالتأثير
+Effects	التأثيرات
+Email Address	عنوان البريد الإلكتروني
+Email address:	عنوان البريد الإلكتروني:
+Ember	الجمر
+Emphasis	توكيد
+End	End
+End Show	إنهاء العرض
+End of slide show	نهاية عرض الشرائح
+End of slide show, click to exit.	نهاية عرض الشرائح، انقر للخروج.
+End trim (s):	القص من النهاية (ث):
+English (United Kingdom)	الإنجليزية (المملكة المتحدة)
+English (United States)	الإنجليزية (الولايات المتحدة)
+Enter	Enter
+Entrance	دخول
+Equals	يساوي
+Equation	معادلة
+Equation Shapes	أشكال المعادلات
+Eraser	ممحاة
+Escape	Escape
+Español	Español
+Exciting	مثير
+Exit	خروج
+Expand	توسيع
+Explosion: 14 Points	انفجار: 14 نقطة
+Explosion: 8 Points	انفجار: 8 نقاط
+Export	تصدير
+Export the presentation as:	تصدير العرض التقديمي بصيغة:
+Exported {path}	تم التصدير إلى {path}
+Export…	تصدير…
+Fade	تلاشٍ
+Fade in (s):	التلاشي للداخل (ث):
+Fade out (s):	التلاشي للخارج (ث):
+Fall Over	سقوط
+Ferris Wheel	عجلة دوّارة
+File	ملف
+File (Alt+F)	ملف (Alt+F)
+Fill	تعبئة
+Fill & Line	التعبئة والخط
+Fill Color	لون التعبئة
+Filled Radar	رادار معبّأ
+Find…	بحث…
+First	الأول
+First Column	العمود الأول
+First Slide	الشريحة الأولى
+First commit	أول إيداع
+Fit	ملاءمة
+Fit slide to current window	ملاءمة الشريحة للنافذة الحالية
+Fit to Window	ملاءمة النافذة
+Fit to\nWindow	ملاءمة\nالنافذة
+Flash	وميض
+Flip	قلب
+Flip Horizontal	قلب أفقي
+Flip Vertical	قلب عمودي
+Float In	طفو للداخل
+Float Out	طفو للخارج
+Flowchart	مخطط انسيابي
+Flowchart: Alternate Process	مخطط انسيابي: عملية بديلة
+Flowchart: Card	مخطط انسيابي: بطاقة
+Flowchart: Collate	مخطط انسيابي: دمج مرتب
+Flowchart: Connector	مخطط انسيابي: رابط
+Flowchart: Data	مخطط انسيابي: بيانات
+Flowchart: Decision	مخطط انسيابي: قرار
+Flowchart: Delay	مخطط انسيابي: تأخير
+Flowchart: Direct Access Storage	مخطط انسيابي: تخزين وصول مباشر
+Flowchart: Display	مخطط انسيابي: عرض
+Flowchart: Document	مخطط انسيابي: مستند
+Flowchart: Extract	مخطط انسيابي: استخراج
+Flowchart: Internal Storage	مخطط انسيابي: تخزين داخلي
+Flowchart: Magnetic Disk	مخطط انسيابي: قرص مغناطيسي
+Flowchart: Manual Input	مخطط انسيابي: إدخال يدوي
+Flowchart: Manual Operation	مخطط انسيابي: عملية يدوية
+Flowchart: Merge	مخطط انسيابي: دمج
+Flowchart: Multidocument	مخطط انسيابي: مستندات متعددة
+Flowchart: Off-page Connector	مخطط انسيابي: رابط خارج الصفحة
+Flowchart: Offline Storage	مخطط انسيابي: تخزين غير متصل
+Flowchart: Or	مخطط انسيابي: أو
+Flowchart: Predefined Process	مخطط انسيابي: عملية معرّفة مسبقًا
+Flowchart: Preparation	مخطط انسيابي: تحضير
+Flowchart: Process	مخطط انسيابي: عملية
+Flowchart: Punched Tape	مخطط انسيابي: شريط مثقب
+Flowchart: Sequential Access Storage	مخطط انسيابي: تخزين وصول تسلسلي
+Flowchart: Sort	مخطط انسيابي: فرز
+Flowchart: Stored Data	مخطط انسيابي: بيانات مخزنة
+Flowchart: Summing Junction	مخطط انسيابي: نقطة جمع
+Flowchart: Terminator	مخطط انسيابي: بداية/نهاية
+Fly In	طيران للداخل
+Fly Out	طيران للخارج
+Fly Through	طيران عبر
+Folded Corner	زاوية مطوية
+Follow the layout	اتباع التخطيط
+Followed Hyperlink	ارتباط تشعبي تمت زيارته
+Font	الخط
+Font Color	لون الخط
+Font Size	حجم الخط
+Fonts	الخطوط
+Footer	التذييل
+Foreground	المقدمة
+Forest	الغابة
+Format	تنسيق
+Format Background	تنسيق الخلفية
+Format Background…	تنسيق الخلفية…
+Format Painter	نسخ التنسيق
+Format Painter (double-click to keep it on)	نسخ التنسيق (انقر نقرًا مزدوجًا لإبقائه مفعّلًا)
+Format Pane	جزء التنسيق
+Format Shape	تنسيق الشكل
+Format Shape…	تنسيق الشكل…
+Format\nBackground	تنسيق\nالخلفية
+Format\nPane	جزء\nالتنسيق
+Formatting State	حالة التنسيق
+Fracture	كسر
+Frame	إطار
+Frame Slides	تأطير الشرائح
+Français	Français
+Freeform	شكل حر
+Freeform: Scribble	شكل حر: خربشة
+Freeform: Shape	شكل حر: شكل
+Friendly	ودّي
+From 	من
+From Beginning	من البداية
+From Bottom	من الأسفل
+From Bottom Left	من أسفل اليسار
+From Bottom Right	من أسفل اليمين
+From Bottom-Left	من أسفل اليسار
+From Bottom-Right	من أسفل اليمين
+From Current Slide	من الشريحة الحالية
+From Left	من اليسار
+From Right	من اليمين
+From Top	من الأعلى
+From Top Left	من أعلى اليسار
+From Top Right	من أعلى اليمين
+From Top-Left	من أعلى اليسار
+From Top-Right	من أعلى اليمين
+From bottom left	من أسفل اليسار
+From bottom right	من أسفل اليمين
+From center	من المركز
+From top left	من أعلى اليسار
+From top right	من أعلى اليمين
+From\nBeginning	من\nالبداية
+From\nCurrent Slide	من الشريحة\nالحالية
+Full	كامل
+Full Page Slides	شرائح بحجم الصفحة
+Funnel	قمع
+Gallery	معرض
+Gear: 6 Teeth	ترس: 6 أسنان
+Gear: 9 Teeth	ترس: 9 أسنان
+General	عام
+Geometric	هندسي
+Get Text	الحصول على النص
+Glitter	بريق
+Glow	توهج
+Go to	انتقال إلى
+Go to Slide	الانتقال إلى شريحة
+Grab bag	متفرقات
+Gradient fill	تعبئة متدرجة
+Gradient stops	نقاط التدرج
+Gradient…	تدرج…
+Grayscale	تدرج رمادي
+Greek	اليونانية
+Green	أخضر
+Gridlines	خطوط الشبكة
+Group	تجميع
+Group Objects	تجميع الكائنات
+Grow & Turn	تكبير ودوران
+Grow/Shrink	تكبير/تصغير
+Guides	الأدلة
+Half	نصف
+Half Frame	نصف إطار
+Handout Master	النشرة الرئيسية
+Handout Master (coming soon)	النشرة الرئيسية (قريبًا)
+Handout\nMaster	النشرة\nالرئيسية
+Handouts (1 slide per page)	نشرات (شريحة واحدة في الصفحة)
+Handouts (2 slides per page)	نشرات (شريحتان في الصفحة)
+Handouts (3 slides per page)	نشرات (3 شرائح في الصفحة)
+Handouts (4 slides per page)	نشرات (4 شرائح في الصفحة)
+Handouts (6 slides per page)	نشرات (6 شرائح في الصفحة)
+Handouts (9 slides per page)	نشرات (9 شرائح في الصفحة)
+Harbor	المرفأ
+Hard-to-read text contrast ({})	تباين النص صعب القراءة ({})
+Header	الرأس
+Header & Footer	الرأس والتذييل
+Header &\nFooter	الرأس\nوالتذييل
+Header Row	صف الرأس
+Header and Footer	الرأس والتذييل
+Header and Footer…	الرأس والتذييل…
+Heart	قلب
+Height	الارتفاع
+Height (in):	الارتفاع (بوصة):
+Height:	الارتفاع:
+Help	مساعدة
+Heptagon	سباعي الأضلاع
+Hexagon	سداسي الأضلاع
+Hexagons From Bottom	سداسيات من الأسفل
+Hexagons From Left	سداسيات من اليسار
+Hexagons From Right	سداسيات من اليمين
+Hexagons From Top	سداسيات من الأعلى
+Hidden slides	الشرائح المخفية
+Hide	إخفاء
+Hide All	إخفاء الكل
+Hide Background Graphics	إخفاء رسومات الخلفية
+Hide During Show	إخفاء أثناء العرض
+Hide Slide	إخفاء الشريحة
+Hide background graphics	إخفاء رسومات الخلفية
+Hide\nSlide	إخفاء\nالشريحة
+Hierarchy	تسلسل هرمي
+High	عالية
+Highlighter	قلم التمييز
+Histogram	مخطط تكراري
+Home	الرئيسية
+Honeycomb	خلية نحل
+Horizontal	أفقي
+Horizontal In	أفقي للداخل
+Horizontal Out	أفقي للخارج
+Horz In	أفقي للداخل
+Horz Out	أفقي للخارج
+How would you describe this object and its context to someone who is blind or has low vision?	كيف تصف هذا الكائن وسياقه لشخص كفيف أو ضعيف البصر؟
+Humanist	إنساني
+Hyperlink	ارتباط تشعبي
+Icons	أيقونات
+In	للداخل
+In Bounce	ارتداد للداخل
+In with Bounce	للداخل مع ارتداد
+Include hidden slides	تضمين الشرائح المخفية
+Increase Font Size	تكبير حجم الخط
+Increase List Level	زيادة مستوى القائمة
+Info	معلومات
+Ink to Math	حبر إلى رياضيات
+Ink to Math (coming soon)	حبر إلى رياضيات (قريبًا)
+Ink to Shape	حبر إلى شكل
+Ink to Shape (coming soon)	حبر إلى شكل (قريبًا)
+Ink to Text	حبر إلى نص
+Ink to Text (coming soon)	حبر إلى نص (قريبًا)
+Ink to\nMath	حبر إلى\nرياضيات
+Ink to\nShape	حبر إلى\nشكل
+Ink to\nText	حبر إلى\nنص
+Inner	داخلي
+Insert	إدراج
+Insert Above	إدراج لأعلى
+Insert Below	إدراج لأسفل
+Insert Hyperlink	إدراج ارتباط تشعبي
+Insert Layout	إدراج تخطيط
+Insert Left	إدراج لليسار
+Insert Placeholder	إدراج عنصر نائب
+Insert Right	إدراج لليمين
+Insert Table	إدراج جدول
+Insert Table…	إدراج جدول…
+Insert picture from file…	إدراج صورة من ملف…
+Insert\nAbove	إدراج\nلأعلى
+Insert\nBelow	إدراج\nلأسفل
+Insert\nLayout	إدراج\nتخطيط
+Insert\nLeft	إدراج\nلليسار
+Insert\nPlaceholder	إدراج\nعنصر نائب
+Insert\nRight	إدراج\nلليمين
+Inspect Presentation	فحص العرض التقديمي
+Inspect Shape	فحص الشكل
+Inspect Slide	فحص الشريحة
+Interface Language	لغة الواجهة
+Interface language:	لغة الواجهة:
+Interface size	حجم الواجهة
+Isosceles Triangle	مثلث متساوي الساقين
+Italiano	Italiano
+Italic	مائل
+JPEG Picture (*.jpg)	صورة JPEG (*.jpg)
+JPEG image (current slide)	صورة JPEG (الشريحة الحالية)
+Join our community on Discord	انضم إلى مجتمعنا على Discord
+Join the ArtCraft community on Discord	انضم إلى مجتمع ArtCraft على Discord
+Justify	ضبط
+Keeps the layout, fonts and pictures	يحافظ على التخطيط والخطوط والصور
+L-Shape	شكل L
+Language	اللغة
+Last	الأخير
+Last Column	العمود الأخير
+Last Slide	الشريحة الأخيرة
+Last commit	آخر إيداع
+Layout	تخطيط
+Learn More	اعرف المزيد
+Learn\nMore	اعرف\nالمزيد
+Ledger Paper (11x17 in)	ورق Ledger (11×17 بوصة)
+Left	يسار
+Left Brace	قوس أيسر معقوف
+Left Bracket	قوس أيسر مربع
+Letter Paper (8.5x11 in)	ورق Letter (8.5×11 بوصة)
+Liberation Serif	Liberation Serif
+Light	فاتح
+Light Blue	أزرق فاتح
+Light Green	أخضر فاتح
+Light/Dark appearance	المظهر الفاتح/الداكن
+Lighten	تفتيح
+Lightning	برق
+Lightning Bolt	صاعقة
+Line	خط
+Line Color	لون الإطار
+Line Spacing	تباعد الأسطر
+Line Spacing Options…	خيارات تباعد الأسطر…
+Line delta	فرق الأسطر
+Line spacing (lines):	تباعد الأسطر (أسطر):
+Line with Markers	خطي مع علامات
+Line: Rising	خط: صاعد
+Linear	خطي
+Lines	خطوط
+Lines +/−	الأسطر +/−
+Lines added	الأسطر المضافة
+Lines deleted	الأسطر المحذوفة
+Link	ارتباط
+Link…	ارتباط…
+List Commands	سرد الأوامر
+Location	الموقع
+Lock	قفل
+Long Dash	شرطة طويلة
+Long Dash Dot	شرطة طويلة ونقطة
+Loop continuously until 'Esc'	تكرار متواصل حتى الضغط على Esc
+Loop until Stopped	تكرار حتى الإيقاف
+Loops	حلقات
+Loose	فضفاض
+Low	منخفضة
+MIT OR Apache-2.0 · © 2026 ArtCraft Team and the DeckCraft contributors	MIT OR Apache-2.0 · © 2026 فريق ArtCraft والمساهمون في DeckCraft
+Manage Presentation	إدارة العرض التقديمي
+Margins (pt)	الهوامش (نقطة)
+Mark as decorative	وضع علامة كعنصر زخرفي
+Mark selected text as:	تعليم النص المحدد كـ:
+Math	رياضيات
+Matrix	مصفوفة
+Maximize content (else ensure fit)	تكبير المحتوى (وإلا فالملاءمة)
+Meadow	المرج
+Media	الوسائط
+Media Info	معلومات الوسائط
+Medium	متوسطة
+Medium Style 2	نمط متوسط 2
+Medium Style 2 - Accent 1	نمط متوسط 2 - تمييز 1
+Medium Style 2 - Accent 2	نمط متوسط 2 - تمييز 2
+Medium Style 2 - Accent 3	نمط متوسط 2 - تمييز 3
+Medium Style 2 - Accent 4	نمط متوسط 2 - تمييز 4
+Medium Style 2 - Accent 5	نمط متوسط 2 - تمييز 5
+Merge Cells	دمج الخلايا
+Merge Shapes	دمج الأشكال
+Merge\nCells	دمج\nالخلايا
+Merge\nShapes	دمج\nالأشكال
+Merged PRs	طلبات السحب المدموجة
+Middle	وسط
+Minus Sign	علامة الطرح
+Missing alternative text	نص بديل مفقود
+Missing slide title	عنوان الشريحة مفقود
+Model	النموذج
+Models	النماذج
+Moon	قمر
+More Colors… #	مزيد من الألوان… #
+More presentations	مزيد من العروض التقديمية
+More themes	مزيد من النسق
+Morph	تحويل تدريجي
+Motion	حركة
+Motion Paths	مسارات الحركة
+Move	نقل
+Move Down	نقل لأسفل
+Move Insertion Point	نقل نقطة الإدراج
+Move Section	نقل القسم
+Move Section Down	نقل القسم لأسفل
+Move Section Up	نقل القسم لأعلى
+Move Slide	نقل الشريحة
+Move Up	نقل لأعلى
+Multiplication Sign	علامة الضرب
+Multiply	ضرب
+Mute	كتم الصوت
+Name	الاسم
+Name (A–Z)	الاسم (أ–ي)
+Name:	الاسم:
+Neutral	محايد
+New	جديد
+New Comment	تعليق جديد
+New Presentation	عرض تقديمي جديد
+New Slide	شريحة جديدة
+New Slide (⇧⌘N)	شريحة جديدة (⇧⌘N)
+New presentation	عرض تقديمي جديد
+New show name:	اسم العرض الجديد:
+New\nComment	تعليق\nجديد
+New\nSlide	شريحة\nجديدة
+Next	التالي
+Next Page	الصفحة التالية
+Next Slide	الشريحة التالية
+Next Window	النافذة التالية
+Next ▶	التالي ◀
+No Color	بلا لون
+No Fill	بلا تعبئة
+No Glow	بلا توهج
+No Outline	بلا مخطط
+No Reflection	بلا انعكاس
+No Shadow	بلا ظل
+No Soft Edges	بلا حواف ناعمة
+No Style, No Grid	بلا نمط وبلا شبكة
+No Style, Table Grid	بلا نمط، شبكة الجدول
+No accessibility issues found. People with disabilities should not have difficulty reading this document.	لم تُعثر على مشكلات في إمكانية الوصول. لا ينبغي أن يجد ذوو الإعاقة صعوبة في قراءة هذا المستند.
+No comments on this slide.	لا توجد تعليقات على هذه الشريحة.
+No contributor data was built into this copy.	لم تُضمَّن بيانات المساهمين في هذه النسخة.
+No fill	بلا تعبئة
+No line	بلا خط
+No model credits were built into this copy.	لم يُضمَّن ذكر النماذج في هذه النسخة.
+No notes.	لا توجد ملاحظات.
+No presentation is open.	لا يوجد عرض تقديمي مفتوح.
+No recent presentations match “{}”.	لا توجد عروض تقديمية حديثة مطابقة لـ «{}».
+No sound: {err}	لا يوجد صوت: {err}
+No themes match “{}”.	لا توجد نُسُق مطابقة لـ «{}».
+Nocturne	ليلية
+None	لا شيء
+Normal	عادي
+Not Equal	لا يساوي
+Not allowed	غير مسموح
+Not saved yet	لم يُحفظ بعد
+Notes	الملاحظات
+Notes Master	الملاحظات الرئيسية
+Notes Master (coming soon)	الملاحظات الرئيسية (قريبًا)
+Notes Page	صفحة الملاحظات
+Notes Pages	صفحات الملاحظات
+Notes\nMaster	الملاحظات\nالرئيسية
+Notes\nPage	صفحة\nالملاحظات
+Nothing to print: every slide in the range is hidden.	لا شيء للطباعة: كل الشرائح في النطاق مخفية.
+Nudge	إزاحة
+Number of columns:	عدد الأعمدة:
+Number of rows:	عدد الصفوف:
+Numbering	ترقيم
+OK	موافق
+Object Color	لون الكائن
+Objects	الكائنات
+Ocean	المحيط
+Octagon	ثماني الأضلاع
+Office Compatible	متوافق مع Office
+On Click	عند النقر
+On Click of {name}	عند النقر على {name}
+On Click of… (none)	عند النقر على… (لا شيء)
+On Mouse Click	عند نقر الفأرة
+On-screen Show (16:10)	عرض على الشاشة (16:10)
+Open	فتح
+Open Data	فتح البيانات
+Open Dialog	فتح مربع الحوار
+Open Recovered Presentations	فتح العروض التقديمية المستردة
+Open a presentation from a folder (Ctrl+O)	فتح عرض تقديمي من مجلد (Ctrl+O)
+Open file location	فتح موقع الملف
+Open source under MIT OR Apache-2.0. Not affiliated with Microsoft.	مفتوح المصدر بترخيص MIT OR Apache-2.0. لا ينتمي إلى Microsoft.
+Open the sample deck	فتح العرض التجريبي
+Opened the presentation as a PDF to print	فُتح العرض التقديمي بصيغة PDF للطباعة
+Opens in PowerPoint and other presentation apps	يُفتح في PowerPoint وتطبيقات العروض التقديمية الأخرى
+Opens on any device with a PDF viewer	يُفتح على أي جهاز فيه عارض PDF
+Open…	فتح…
+Options	خيارات
+Orange	برتقالي
+Orbit	مدار
+Order Objects	ترتيب الكائنات
+Origami	أوريجامي
+Out	للخارج
+Out Bounce	ارتداد للخارج
+Out with Bounce	للخارج مع ارتداد
+Outer	خارجي
+Outline	مخطط تفصيلي
+Outline (*.txt)	مخطط تفصيلي (*.txt)
+Outline (.txt)	مخطط تفصيلي (.txt)
+Outline View	عرض المخطط التفصيلي
+Outline\nView	عرض المخطط\nالتفصيلي
+Oval	شكل بيضاوي
+Oval ends	أطراف بيضاوية
+Overhead	جهاز عرض علوي
+PDF (*.pdf)	PDF (*.pdf)
+PDF document (.pdf)	مستند PDF (.pdf)
+PNG Picture (*.png)	صورة PNG (*.png)
+PNG images (all slides)	صور PNG (كل الشرائح)
+PNG images (current slide)	صور PNG (الشريحة الحالية)
+PRs	طلبات السحب
+Page Curl	انثناء الصفحة
+Page Setup…	إعداد الصفحة…
+PageDown	PageDown
+PageUp	PageUp
+Pan	تحريك
+Pane	جزء
+Paper	الورق
+Paragraph	الفقرة
+Paragraph…	الفقرة…
+Parallelogram	متوازي أضلاع
+Pareto	باريتو
+Partial Circle	جزء من دائرة
+Particles	جسيمات
+Particles In	جسيمات للداخل
+Particles Out	جسيمات للخارج
+Paste	لصق
+Paste (⌘V)	لصق (⌘V)
+Paste Formatting	لصق التنسيق
+Paste and Match Formatting	لصق ومطابقة التنسيق
+Paste or type an outline. Unindented lines become slide titles; tab-indented lines become bullets.	الصق مخططًا تفصيليًا أو اكتبه. الأسطر بلا مسافة بادئة تصبح عناوين شرائح، والأسطر المزاحة بمفتاح Tab تصبح نقاطًا.
+Pasted image.png	صورة ملصوقة.png
+Path	مسار
+Pattern fill	تعبئة بنقش
+Pause	إيقاف مؤقت
+Peek In	إطلالة للداخل
+Peel Off	نزع
+Pencil	قلم رصاص
+Pentagon	خماسي الأضلاع
+Perspective	منظور
+Pick a graphic; type one item per line.	اختر رسمًا؛ اكتب عنصرًا واحدًا في كل سطر.
+Pick a look for your slides. Ideas are generated on your device.	اختر مظهرًا لشرائحك. تُنشأ الأفكار على جهازك.
+Picture	صورة
+Picture Format	تنسيق الصورة
+Picture Styles	أنماط الصور
+Picture from File…	صورة من ملف…
+Picture or texture fill	تعبئة بصورة أو نسيج
+Picture\nStyles	أنماط\nالصور
+Pictures	صور
+Pie	دائري
+Pin	تثبيت
+Placeholder colour	لون العنصر النائب
+Plan\nBuild\nLaunch	خطّط\nابنِ\nأطلق
+Plaque	لوحة
+Play	تشغيل
+Play Across Slides	تشغيل عبر الشرائح
+Play Full Screen	تشغيل بملء الشاشة
+Play Narrations	تشغيل التعليق الصوتي
+Play from Current Slide	تشغيل من الشريحة الحالية
+Play from Start	تشغيل من البداية
+Play from Start (F5)	تشغيل من البداية (F5)
+Play from\nCurrent Slide	تشغيل من\nالشريحة الحالية
+Play from\nStart	تشغيل من\nالبداية
+Play/Pause	تشغيل/إيقاف مؤقت
+Play/Pause GIF	تشغيل/إيقاف GIF مؤقتًا
+Playback	التشغيل
+Plus	زائد
+Plus In	زائد للداخل
+Plus Out	زائد للخارج
+Plus Sign	علامة الجمع
+Portrait (9:16)	طولي (9:16)
+Português	Português
+Position	الموضع
+Position Objects	موضع الكائنات
+Position and Size	الموضع والحجم
+Post	إرسال
+Poster Frame	إطار الملصق
+PowerPoint Presentation (*.pptx)	عرض تقديمي بصيغة PowerPoint (*.pptx)
+PowerPoint Presentation (.pptx)	عرض تقديمي بصيغة PowerPoint (.pptx)
+Preferences	التفضيلات
+Preferences…	التفضيلات…
+Presentation	العرض التقديمي
+Presentations	العروض التقديمية
+Presentations and slide shows, rebuilt from scratch in pure Rust.	عروض تقديمية وعروض شرائح، أُعيد بناؤها من الصفر بلغة Rust.
+Presentations you open show up here. Use Open to browse for one.	تظهر هنا العروض التقديمية التي تفتحها. استخدم «فتح» لاستعراض عرض.
+Presented by a speaker (full screen)	يقدّمه متحدث (ملء الشاشة)
+Presenter View	عرض مقدّم العرض
+Presenter View — DeckCraft	عرض مقدّم العرض — DeckCraft
+Presenter\nView	عرض مقدّم\nالعرض
+Preset gradients	تدرجات جاهزة
+Prestige	مرموق
+Preview	معاينة
+Previous Page	الصفحة السابقة
+Previous Slide	الشريحة السابقة
+Print	طباعة
+Print All Slides	طباعة كل الشرائح
+Print Current Slide	طباعة الشريحة الحالية
+Print Hidden Slides	طباعة الشرائح المخفية
+Print layout:	تخطيط الطباعة:
+Print them for your audience	اطبعها لجمهورك
+Print…	طباعة…
+Product Information	معلومات المنتج
+Properties	الخصائص
+Pulse	نبض
+Punctuation	علامات الترقيم
+Purple	أرجواني
+Push	دفع
+Pyramid	هرم
+Quarter Wedge	ربع قطاع
+Quick Styles	أنماط سريعة
+Quick\nStyles	أنماط\nسريعة
+Radar	رادار
+Radial	شعاعي
+Random	عشوائي
+Random Bars	أشرطة عشوائية
+Reading View	عرض القراءة
+Reading\nView	عرض\nالقراءة
+Real name	الاسم الحقيقي
+Recent	الأخيرة
+Record	تسجيل
+Recording narration needs audio capture (coming soon)	يحتاج تسجيل التعليق الصوتي إلى التقاط الصوت (قريبًا)
+Recover Unsaved Presentations	استرداد العروض التقديمية غير المحفوظة
+Recovered Presentations	العروض التقديمية المستردة
+Recovered {} from the last session	تمت استعادة {} من الجلسة الأخيرة
+Rectangle	مستطيل
+Rectangle: Diagonal Corners Rounded	مستطيل: زاويتان قطريتان مستديرتان
+Rectangle: Diagonal Corners Snipped	مستطيل: زاويتان قطريتان مقصوصتان
+Rectangle: Rounded Corners	مستطيل: زوايا مستديرة
+Rectangle: Single Corner Rounded	مستطيل: زاوية واحدة مستديرة
+Rectangle: Single Corner Snipped	مستطيل: زاوية واحدة مقصوصة
+Rectangle: Top Corners One Rounded and One Snipped	مستطيل: زاويتان عليّتان إحداهما مستديرة والأخرى مقصوصة
+Rectangle: Top Corners Rounded	مستطيل: زاويتان عليّتان مستديرتان
+Rectangle: Top Corners Snipped	مستطيل: زاويتان عليّتان مقصوصتان
+Rectangles	مستطيلات
+Rectangular	مستطيل
+Red	أحمر
+Red Pen	قلم أحمر
+Redo	إعادة
+Redo (⌘Y)	إعادة (⌘Y)
+Reflected Rounded Rectangle	مستطيل مستدير مع انعكاس
+Reflection	انعكاس
+Regroup	إعادة التجميع
+Regular Pentagon	خماسي منتظم
+Rehearse Timings	التمرن على التوقيت
+Rehearse\nTimings	التمرن على\nالتوقيت
+Remove	إزالة
+Remove All Animations	إزالة كل الحركات
+Remove All Sections	إزالة كل الأقسام
+Remove Animation	إزالة الحركة
+Remove Background	إزالة الخلفية
+Remove Background (coming soon)	إزالة الخلفية (قريبًا)
+Remove Section	إزالة القسم
+Remove Section & Slides	إزالة القسم والشرائح
+Remove stop	إزالة النقطة
+Remove\nBackground	إزالة\nالخلفية
+Rename	إعادة تسمية
+Rename Layout	إعادة تسمية التخطيط
+Rename Section	إعادة تسمية القسم
+Rename Section…	إعادة تسمية القسم…
+Rename Slide	إعادة تسمية الشريحة
+Rename…	إعادة تسمية…
+Render Slide	رسم الشريحة
+Reopen	إعادة فتح
+Reorder Animation	إعادة ترتيب الحركات
+Reorder Objects	إعادة ترتيب الكائنات
+Replace straight quotes with smart quotes	استبدال علامات الاقتباس المستقيمة بعلامات ذكية
+Reply	رد
+Reply…	رد…
+Reset	إعادة تعيين
+Reset Background	إعادة تعيين الخلفية
+Reset Crop	إعادة تعيين الاقتصاص
+Reset Effects	إعادة تعيين التأثيرات
+Reset Picture	إعادة تعيين الصورة
+Reset Slide	إعادة تعيين الشريحة
+Reset Slide Background	إعادة تعيين خلفية الشريحة
+Resize shape to fit text	تغيير حجم الشكل ليلائم النص
+Resolve	وضع علامة كمحلول
+Resolve Thread	إنهاء المحادثة
+Return	Return
+Reveal	كشف
+Reverse the order	عكس الترتيب
+Revert	استعادة المحفوظ
+Review	مراجعة
+Rewind after Playing	إرجاع إلى البداية بعد التشغيل
+Ribbon Tab	تبويب الشريط
+Ribbon: Curved and Tilted Down	شريط: منحنٍ ومائل لأسفل
+Ribbon: Curved and Tilted Up	شريط: منحنٍ ومائل لأعلى
+Ribbon: Left-Right Fold	شريط: طية يمين ويسار
+Ribbon: Tilted Down	شريط: مائل لأسفل
+Ribbon: Tilted Up	شريط: مائل لأعلى
+Right	يمين
+Right Brace	قوس أيمن معقوف
+Right Bracket	قوس أيمن مربع
+Right Triangle	مثلث قائم
+Right-to-Left Text Direction	اتجاه النص من اليمين إلى اليسار
+Ring	حلقة
+Ripple	تموّج
+Rise Up	صعود
+Rotate	تدوير
+Rotate Left 90°	تدوير لليسار 90°
+Rotate Right 90°	تدوير لليمين 90°
+Rotate all text 270°	تدوير كل النص 270°
+Rotate all text 90°	تدوير كل النص 90°
+Rotate with shape	تدوير مع الشكل
+Rotation	التدوير
+Round Dot	نقطة مستديرة
+Rounded Diagonal Corner	زاوية قطرية مستديرة
+Ruler	المسطرة
+Sample deck: Northern Lights	العرض التجريبي: الأضواء الشمالية
+Saturation	التشبع
+Saturation {}%	التشبع {}%
+Save	حفظ
+Save (⌘S)	حفظ (⌘S)
+Save As	حفظ باسم
+Save As…	حفظ باسم…
+Save AutoRecover Information	حفظ معلومات الاسترداد التلقائي
+Save as Template…	حفظ كقالب…
+Save to Data	حفظ في البيانات
+Saved	تم الحفظ
+Saved {path}	تم الحفظ: {path}
+Saving a copy needs a file picker, which this window doesn't have.	يحتاج حفظ نسخة إلى منتقي ملفات، وهذه النافذة لا تملك واحدًا.
+Scatter	مبعثر
+ScreenTip:	تلميح الشاشة:
+Screenshot	لقطة شاشة
+Screenshot (not available yet)	لقطة شاشة (غير متاحة بعد)
+Scroll: Horizontal	لفافة: أفقية
+Scroll: Vertical	لفافة: عمودية
+Search commands (⇧⌘P)	بحث في الأوامر (⇧⌘P)
+Search commands…	بحث في الأوامر…
+Search for a file	البحث عن ملف
+Search for themes	البحث عن نسق
+Section	قسم
+Seek	انتقال إلى موضع
+Select	تحديد
+Select All	تحديد الكل
+Select All Text	تحديد كل النص
+Select Cells	تحديد الخلايا
+Select Objects	تحديد الكائنات
+Select Paragraph	تحديد فقرة
+Select Slides	تحديد الشرائح
+Select Text	تحديد نص
+Select Word	تحديد كلمة
+Select a chart first.	حدّد مخططًا أولًا.
+Select a shape to format it.	حدّد شكلًا لتنسيقه.
+Select an object on the slide and add an animation from the Animations tab.	حدّد كائنًا على الشريحة وأضف حركة من تبويب الحركات.
+Selection	التحديد
+Selection Pane	جزء التحديد
+Selection Pane…	جزء التحديد…
+Selection\nPane	جزء\nالتحديد
+Send Backward	إرسال للخلف
+Send to Back	إرسال إلى الخلف
+Send\nBackward	إرسال\nللخلف
+Sentence case.	حالة الجملة.
+Set Text	تعيين النص
+Set Up Show…	إعداد العرض…
+Set Up Slide Show	إعداد عرض الشرائح
+Set Up Slide Show…	إعداد عرض الشرائح…
+Set Up\nSlide Show	إعداد\nعرض الشرائح
+Set as Default Shape	تعيين كشكل افتراضي
+Settings	الإعدادات
+Several slides on each page of a PDF	عدة شرائح في كل صفحة من PDF
+Shading	التظليل
+Shadow	ظل
+Shape	شكل
+Shape Effects	تأثيرات الشكل
+Shape Fill	تعبئة الشكل
+Shape Format	تنسيق الشكل
+Shape Gallery	معرض الأشكال
+Shape Outline	إطار الشكل
+Shape Styles	أنماط الأشكال
+Shape {}	شكل {}
+Shape\nStyles	أنماط\nالأشكال
+Shapes	أشكال
+Shift+	Shift+
+Shift+F9	Shift+F9
+Show	إظهار
+Show All	إظهار الكل
+Show Comments	إظهار التعليقات
+Show Media Controls	إظهار عناصر التحكم في الوسائط
+Show Slide	إظهار الشريحة
+Show smart guides	إظهار الأدلة الذكية
+Show type	نوع العرض
+Show without animation	عرض بلا حركات
+Show without narration	عرض بلا تعليق صوتي
+Show/Hide	إظهار/إخفاء
+Show\nComments	إظهار\nالتعليقات
+Shred	تمزيق
+Shrink & Turn	تصغير ودوران
+Shrink text on overflow	تصغير النص عند الفيض
+Simple Frame, White	إطار بسيط، أبيض
+Single Left	مفرد لليسار
+Single Right	مفرد لليمين
+Size	الحجم
+Size & Properties	الحجم والخصائص
+Slate	الأردواز
+Slide Master	الشريحة الرئيسية
+Slide Number	رقم الشريحة
+Slide Show	عرض الشرائح
+Slide Size	حجم الشريحة
+Slide Sorter	فارز الشرائح
+Slide number	رقم الشريحة
+Slide timings recorded.	تم تسجيل توقيت الشرائح.
+Slide {:02}:{:04.1}   Total {:02}:{:02}	الشريحة {:02}:{:04.1}   الإجمالي {:02}:{:02}
+Slide {} of {}	الشريحة {} من {}
+Slide {}: {}{}	الشريحة {}: {}{}
+Slide {}: “{w}”	الشريحة {}: «{w}»
+Slide\nMaster	الشريحة\nالرئيسية
+Slide\nNumber	رقم\nالشريحة
+Slide\nSize	حجم\nالشريحة
+Slide\nSorter	فارز\nالشرائح
+Slides	الشرائح
+Slides (e.g. 1,3,5):	الشرائح (مثل 1,3,5):
+Slides from Outline	شرائح من مخطط تفصيلي
+Slides from Outline…	شرائح من مخطط تفصيلي…
+Slides sized for:	حجم الشرائح مناسب لـ:
+Slides:	الشرائح:
+SmartArt	SmartArt
+Smile	ابتسامة
+Smiley Face	وجه مبتسم
+Smoothly	بسلاسة
+Smoothly From Left	بسلاسة من اليسار
+Smoothly From Right	بسلاسة من اليمين
+Smoothly Left	بسلاسة لليسار
+Smoothly Right	بسلاسة لليمين
+Snap objects to grid	محاذاة الكائنات إلى الشبكة
+Soft Edge Rectangle	مستطيل بحواف ناعمة
+Soft Edges	حواف ناعمة
+Solid	متصل
+Solid fill	تعبئة صلبة
+Solid line	خط متصل
+Sort	فرز
+Source on GitHub	الشيفرة المصدرية على GitHub
+Space	مسافة
+Spacing after (pt):	التباعد بعد (نقطة):
+Spacing before (pt):	التباعد قبل (نقطة):
+Special — hanging (in):	خاص — معلّق (بوصة):
+Specify the company	حدّد الشركة
+Specify the subject	حدّد الموضوع
+Speech	الكلام
+Speech Bubble: Oval	فقاعة كلام: بيضاوية
+Speech Bubble: Rectangle	فقاعة كلام: مستطيلة
+Speech Bubble: Rectangle with Corners Rounded	فقاعة كلام: مستطيل بزوايا مستديرة
+Spelling	الإملاء
+Spin	دوران
+Spinner	دوّامة
+Split	تقسيم
+Split Cells	تقسيم الخلايا
+Split\nCells	تقسيم\nالخلايا
+Square	مربع
+Square (1:1)	مربع (1:1)
+Square Dot	نقطة مربعة
+Stacked	متراص
+Stacked Area	مساحات مكدّسة
+Stacked Bar	أشرطة مكدّسة
+Stacked Column	أعمدة مكدّسة
+Stacked Line	خطوط مكدّسة
+Standard (4:3)	قياسي (4:3)
+Standard Colors	ألوان قياسية
+Star	نجمة
+Star: 10 Points	نجمة: 10 رؤوس
+Star: 12 Points	نجمة: 12 رأسًا
+Star: 16 Points	نجمة: 16 رأسًا
+Star: 24 Points	نجمة: 24 رأسًا
+Star: 32 Points	نجمة: 32 رأسًا
+Star: 4 Points	نجمة: 4 رؤوس
+Star: 5 Points	نجمة: 5 رؤوس
+Star: 6 Points	نجمة: 6 رؤوس
+Star: 7 Points	نجمة: 7 رؤوس
+Star: 8 Points	نجمة: 8 رؤوس
+Stars and Banners	نجوم ولافتات
+Start After Previous	البدء بعد السابق
+Start Automatically	البدء تلقائيًا
+Start On Click	البدء عند النقر
+Start With Previous	البدء مع السابق
+Start a conversation	ابدأ محادثة
+Start time (s):	وقت البدء (ث):
+Start:	البداية:
+Stealth end	نهاية خفية
+Stock	أسهم
+Stop	إيقاف
+Stop Editing Text	إيقاف تحرير النص
+Strikethrough	شطب
+Strips	شرائط
+Strips In	شرائط للداخل
+Strips Out	شرائط للخارج
+Style {i}	النمط {i}
+Subject	الموضوع
+Subscript	منخفض
+Subtle	هادئ
+Sun	شمس
+Sunburst	أشعة الشمس
+Sunset	الغروب
+Superscript	مرتفع
+Surface	سطحي
+Switch	تبديل
+Swivel	دوران محوري
+Symbol	رمز
+System language	لغة النظام
+Tab	Tab
+Table	جدول
+Table Design	تصميم الجدول
+Table Style Options	خيارات نمط الجدول
+Table Styles	أنماط الجداول
+Table…	جدول…
+Tags	الوسوم
+Task Pane	جزء المهام
+Teardrop	دمعة
+Teeter	تأرجح
+Text	نص
+Text Box	مربع نص
+Text Box Margins	هوامش مربع النص
+Text Direction	اتجاه النص
+Text Effects	تأثيرات النص
+Text Fill	تعبئة النص
+Text Highlight Color	لون تمييز النص
+Text Options	خيارات النص
+Text Outline	مخطط النص
+Text Shadow	ظل النص
+Text/Background - Dark 1	نص/خلفية - داكن 1
+Text/Background - Dark 2	نص/خلفية - داكن 2
+Text/Background - Light 1	نص/خلفية - فاتح 1
+Text/Background - Light 2	نص/خلفية - فاتح 2
+Text\nBox	مربع\nنص
+The current slide as a compressed picture	الشريحة الحالية كصورة مضغوطة
+The current slide as a picture	الشريحة الحالية كصورة
+The presentation keeps its own file	يبقى العرض التقديمي في ملفه الخاص
+The slide titles and bullet text as plain text	عناوين الشرائح ونص النقاط كنص عادي
+The spelling check is complete. No issues found.	اكتمل التدقيق الإملائي. لم تُعثر على مشكلات.
+The version, the people and models who built it, and where to find us.	الإصدار، والأشخاص والنماذج الذين بنوه، وأين تجدنا.
+Theme Colors	ألوان النسق
+Theme Gallery	معرض النسق
+Themes	نُسُق
+There are no unsaved changes.	لا توجد تغييرات غير محفوظة.
+There are no unsaved presentations to recover	لا توجد عروض تقديمية غير محفوظة لاستردادها
+Thesaurus	قاموس المرادفات
+Thesaurus (coming soon)	قاموس المرادفات (قريبًا)
+This Document	هذا المستند
+This presentation has never been saved.	لم يُحفظ هذا العرض التقديمي من قبل.
+This presentation has unsaved changes. Revert goes back to the saved file.	في هذا العرض التقديمي تغييرات غير محفوظة. تعيد «استعادة المحفوظ» الملف المحفوظ.
+Thought	تفكير
+Thought Bubble: Cloud	فقاعة تفكير: سحابة
+Three a page leaves lines for notes	ثلاث شرائح في الصفحة تترك سطورًا للملاحظات
+Through Black	عبر الأسود
+Through Black From Left	عبر الأسود من اليسار
+Through Black From Right	عبر الأسود من اليمين
+Tight	ضيق
+Timing	التوقيت
+Title	العنوان
+Top	أعلى
+Total Row	صف الإجمالي
+Transition	الانتقال
+Transition Gallery	معرض الانتقالات
+Transitions	الانتقالات
+Translate	ترجمة
+Translation needs a language model (not bundled)	تحتاج الترجمة إلى نموذج لغوي (غير مرفق)
+Transparency	الشفافية
+Trapezoid	شبه منحرف
+Trapezoid: Uneven Sides	شبه منحرف: أضلاع غير متساوية
+Treemap	خريطة شجرية
+Triangle	مثلث
+Trigger	المشغّل
+Trim	قص
+Trim Media	قص الوسائط
+Turns	دورات
+Type	النوع
+Type Text	كتابة نص
+Type an equation in linear form (e.g. a^2+b^2=c^2, x=(-b±√(b^2-4ac))/2a).	اكتب معادلة بصيغة خطية (مثل a^2+b^2=c^2 أو x=(-b±√(b^2-4ac))/2a).
+Uncover	كشف
+Underline	تسطير
+Undo	تراجع
+Undo (⌘Z)	تراجع (⌘Z)
+Ungroup	فك التجميع
+Unlock	فك القفل
+Up	لأعلى
+Use Timings	استخدام التوقيت
+Use timings, if present	استخدام التوقيت إن وُجد
+User Information	معلومات المستخدم
+Username	اسم المستخدم
+Version	الإصدار
+Version {}	الإصدار {}
+Vert In	عمودي للداخل
+Vert Out	عمودي للخارج
+Vertical	عمودي
+Vertical In	عمودي للداخل
+Vertical Out	عمودي للخارج
+Vertical alignment	المحاذاة العمودية
+Very Loose	فضفاض جدًا
+Very Tight	ضيق جدًا
+Video	فيديو
+Video from File…	فيديو من ملف…
+View	عرض
+Volume	مستوى الصوت
+Vortex	دوامة
+Waterfall	شلال
+Wave	موجة
+Web Page or File	صفحة ويب أو ملف
+Wedge	إسفين
+Weight	السُّمك
+Wheel	عجلة
+Widescreen (13.333x7.5 in)	شاشة عريضة (13.333×7.5 بوصة)
+Widescreen (16:9)	شاشة عريضة (16:9)
+Width	العرض
+Width (in):	العرض (بوصة):
+Width:	العرض:
+Width: 	العرض:
+Wind	ريح
+Window	نافذة
+Wipe	مسح
+With Previous	مع السابق
+WordArt	WordArt
+WordArt style {}	نمط WordArt {}
+Words	الكلمات
+Wrap Text in Shape	التفاف النص في الشكل
+Wrap text in shape	التفاف النص في الشكل
+Yellow	أصفر
+Your changes will be lost if you don't save them.	ستفقد تغييراتك إن لم تحفظها.
+Your name (comments):	اسمك (للتعليقات):
+Zoom	التكبير
+Zoom In	تكبير
+Zoom Out	تصغير
+Zoom and Rotate	تكبير ودوران
+Zoom…	التكبير…
+a) b) c)	a) b) c)
+a. b. c.	a. b. c.
+circle	دائرة
+diamond	معيّن
+dropped file	ملف مُسقَط
+e.g. 1-3, 5	مثل 1-3, 5
+i. ii. iii.	i. ii. iii.
+no presentation open	لا يوجد عرض تقديمي مفتوح
+no slides	لا توجد شرائح
+no text insertion point	لا توجد نقطة إدراج نص
+nothing selected	لا شيء محدد
+nothing to redo	لا شيء لإعادته
+nothing to undo	لا شيء للتراجع عنه
+plus	زائد
+select text or a shape	حدّد نصًا أو شكلًا
+select two or more objects	حدّد كائنين أو أكثر
+size (pt)	الحجم (نقطة)
+tOGGLE cASE	عكس حالة الأحرف
+unknown interface language	لغة واجهة غير معروفة
+unsaved presentations	عروض تقديمية غير محفوظة
+{ch}  Bullet	{ch}  نقطة
+{f} (Body)	{f} (النص الأساسي)
+{f} (Headings)	{f} (العناوين)
+{name}: DeckCraft can't open this kind of file	{name}: لا يستطيع DeckCraft فتح هذا النوع من الملفات
+{n} Column{}	الأعمدة: {n}{}
+{r} pt	{r} نقطة
+{r} pt glow	توهج {r} نقطة
+{w} pt	{w} نقطة
+{} ({} slides)	{} (عدد الشرائح: {})
+{} Slide Master	الشريحة الرئيسية {}
+{} and {}	{} و{}
+{} aren't installed on this computer. Text that uses them is shown in a similar font.	{} غير مثبّتة على هذا الحاسوب. يظهر النص الذي يستخدمها بخط مشابه.
+{} bytes	{} بايت
+{} contributors · {} commits	المساهمون: {} · الإيداعات: {}
+{} isn't installed on this computer. Text that uses it is shown in a similar font.	{} غير مثبّت على هذا الحاسوب. يظهر النص الذي يستخدمه بخط مشابه.
+{} of {}	{} من {}
+{} presentations	العروض التقديمية: {}
+{} slides per page	عدد الشرائح في الصفحة: {}
+{}, {} and {}	{} و{} و{}
+{}, {}, {} and {} more	{} و{} و{} و{} آخر
+{}x{} Table	جدول {}×{}
+“{}” is not available yet.	«{}» غير متاح بعد.
+−Bin	− فئة
+▶ Play All	▶ تشغيل الكل
+◀ Previous	▶ السابق
+✏ on	✏ مفعّل

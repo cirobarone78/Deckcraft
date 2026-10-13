@@ -38,12 +38,22 @@ pub fn title_bar(app: &mut SlideApp, ui: &mut Ui) {
             let max = ui.input(|i| i.viewport().maximized.unwrap_or(false));
             ui.ctx().send_viewport_cmd(egui::ViewportCommand::Maximized(!max));
         }
+        // The window buttons stay on the left of an integrated title bar in any language. The
+        // quick-access buttons start the row on the side reading starts from; the actions end it.
         let left = if app.integrated_titlebar { 84.0 } else { 10.0 };
-        let mut child = ui.new_child(
-            egui::UiBuilder::new()
-                .max_rect(Rect::from_min_max(pos2(rect.min.x + left, rect.min.y), pos2(rect.min.x + 420.0, rect.max.y)))
-                .layout(egui::Layout::left_to_right(egui::Align::Center)),
-        );
+        let rtl = crate::rtl::on();
+        let (quick_rect, quick_layout) = if rtl {
+            (
+                Rect::from_min_max(pos2(rect.max.x - 420.0, rect.min.y), pos2(rect.max.x - 10.0, rect.max.y)),
+                egui::Layout::right_to_left(egui::Align::Center),
+            )
+        } else {
+            (
+                Rect::from_min_max(pos2(rect.min.x + left, rect.min.y), pos2(rect.min.x + 420.0, rect.max.y)),
+                egui::Layout::left_to_right(egui::Align::Center),
+            )
+        };
+        let mut child = ui.new_child(egui::UiBuilder::new().max_rect(quick_rect).layout(quick_layout));
         child.spacing_mut().item_spacing.x = 2.0;
         let has_doc = app.session.active().is_some();
         let dirty = app.session.active().is_some_and(|d| d.is_dirty());
@@ -65,15 +75,30 @@ pub fn title_bar(app: &mut SlideApp, ui: &mut Ui) {
         let title = app
             .session
             .active()
-            .map(|d| format!("{}{}", d.title(), if dirty { crate::i18n::tr(" — Edited") } else { "" }))
+            .map(|d| {
+                let edited = if dirty { crate::i18n::tr(" — Edited") } else { "" };
+                if rtl {
+                    // The name leads (on the right); the catalog's note is already in display order.
+                    format!("{}{}{}", edited.trim_start(), if dirty { " " } else { "" }, crate::bidi::visual(&d.title()))
+                } else {
+                    format!("{}{}", d.title(), edited)
+                }
+            })
             .unwrap_or_else(|| "DeckCraft".into());
         ui.painter().text(rect.center(), Align2::CENTER_CENTER, title, theme::font(13.0), t.text);
-        // Right side.
-        let mut right = ui.new_child(
-            egui::UiBuilder::new()
-                .max_rect(Rect::from_min_max(pos2(rect.max.x - 320.0, rect.min.y), pos2(rect.max.x - 10.0, rect.max.y)))
-                .layout(egui::Layout::right_to_left(egui::Align::Center)),
-        );
+        // The actions end the row.
+        let (action_rect, action_layout) = if rtl {
+            (
+                Rect::from_min_max(pos2(rect.min.x + left, rect.min.y), pos2(rect.min.x + left + 310.0, rect.max.y)),
+                egui::Layout::left_to_right(egui::Align::Center),
+            )
+        } else {
+            (
+                Rect::from_min_max(pos2(rect.max.x - 320.0, rect.min.y), pos2(rect.max.x - 10.0, rect.max.y)),
+                egui::Layout::right_to_left(egui::Align::Center),
+            )
+        };
+        let mut right = ui.new_child(egui::UiBuilder::new().max_rect(action_rect).layout(action_layout));
         right.spacing_mut().item_spacing.x = 6.0;
         if icon_toggle(&mut right, Icon::Search, "Search commands (⇧⌘P)", true, false).clicked() {
             app.palette = Some((String::new(), 0));
@@ -134,7 +159,7 @@ fn contextual(app: &SlideApp) -> Vec<&'static str> {
     v
 }
 
-const TABS: [&str; 10] = ["Home", "Insert", "Draw", "Design", "Transitions", "Animations", "Slide Show", "Record", "Review", "View"];
+pub(crate) const TABS: [&str; 10] = ["Home", "Insert", "Draw", "Design", "Transitions", "Animations", "Slide Show", "Record", "Review", "View"];
 
 /// Tab row and the ribbon card.
 pub fn show(app: &mut SlideApp, ui: &mut Ui) {
@@ -148,21 +173,27 @@ pub fn show(app: &mut SlideApp, ui: &mut Ui) {
         let rect = ui.max_rect();
         // Tabs. File comes first and opens the File tab's full-window view (Backstage), as in
         // PowerPoint.
-        let mut x = rect.min.x + 12.0;
+        // The tabs start on the side reading starts from: the left, or the right when mirrored.
+        let rtl = crate::rtl::on();
+        let mut x = if rtl { rect.max.x - 12.0 } else { rect.min.x + 12.0 };
         let y = rect.min.y + 2.0;
+        let tab_rect =
+            |x: f32, w: f32| if rtl { Rect::from_min_size(pos2(x - w, y), vec2(w, 24.0)) } else { Rect::from_min_size(pos2(x, y), vec2(w, 24.0)) };
+        let advance = |x: f32, w: f32| if rtl { x - w - 2.0 } else { x + w + 2.0 };
         {
-            let w = ui.fonts_mut(|f| f.layout_no_wrap("File".to_string(), theme::font(13.0), t.text).size().x) + 18.0;
-            let r = Rect::from_min_size(pos2(x, y), vec2(w, 24.0));
+            let file = crate::i18n::tr("File");
+            let w = ui.fonts_mut(|f| f.layout_no_wrap(file.to_string(), theme::font(13.0), t.text).size().x) + 18.0;
+            let r = tab_rect(x, w);
             let resp = ui.interact(r, ui.id().with("tab_file"), Sense::click());
-            resp.widget_info(|| egui::WidgetInfo::labeled(egui::WidgetType::Button, true, "File"));
+            resp.widget_info(|| egui::WidgetInfo::labeled(egui::WidgetType::Button, true, file));
             if resp.hovered() {
                 ui.painter().rect_filled(r.shrink2(vec2(2.0, 2.0)), CornerRadius::same(4), t.hover);
             }
-            ui.painter().text(r.center(), Align2::CENTER_CENTER, "File", theme::font(13.0), t.text);
-            if resp.on_hover_text("File (Alt+F)").clicked() {
+            ui.painter().text(r.center(), Align2::CENTER_CENTER, file, theme::font(13.0), t.text);
+            if resp.on_hover_text(crate::i18n::tr("File (Alt+F)")).clicked() {
                 app.open_backstage(crate::backstage::Page::Home);
             }
-            x += w + 2.0;
+            x = advance(x, w);
         }
         let all: Vec<(&str, bool)> = TABS.iter().map(|s| (*s, false)).chain(ctx_tabs.iter().map(|s| (*s, true))).collect();
         for (name, contextual) in all {
@@ -173,7 +204,7 @@ pub fn show(app: &mut SlideApp, ui: &mut Ui) {
             };
             let font = theme::font(13.0);
             let w = ui.fonts_mut(|f| f.layout_no_wrap(label.to_string(), font.clone(), t.text).size().x) + 18.0;
-            let r = Rect::from_min_size(pos2(x, y), vec2(w, 24.0));
+            let r = tab_rect(x, w);
             let resp = ui.interact(r, ui.id().with(("tab", name)), Sense::click());
             let active = app.ui.tab == name;
             if resp.hovered() && !active {
@@ -197,7 +228,7 @@ pub fn show(app: &mut SlideApp, ui: &mut Ui) {
             if resp.double_clicked() {
                 app.ui.ribbon_collapsed = !app.ui.ribbon_collapsed;
             }
-            x += w + 2.0;
+            x = advance(x, w);
         }
         if app.ui.ribbon_collapsed {
             return;
@@ -207,7 +238,8 @@ pub fn show(app: &mut SlideApp, ui: &mut Ui) {
         ui.painter().rect_filled(card.translate(vec2(0.0, 1.0)), CornerRadius::same(10), t.card_border);
         ui.painter().rect_filled(card, CornerRadius::same(10), t.card);
         let inner = Rect::from_min_size(pos2(card.min.x + 10.0, card.min.y + 5.0), vec2(card.width() - 20.0, RIBBON_H));
-        let mut cui = ui.new_child(egui::UiBuilder::new().max_rect(inner).layout(egui::Layout::left_to_right(egui::Align::Min)));
+        let card_layout = if rtl { egui::Layout::right_to_left(egui::Align::Min) } else { egui::Layout::left_to_right(egui::Align::Min) };
+        let mut cui = ui.new_child(egui::UiBuilder::new().max_rect(inner).layout(card_layout));
         cui.set_clip_rect(inner.expand2(vec2(0.0, 3.0)));
         cui.spacing_mut().item_spacing.x = 1.0;
         let ui = &mut cui;
@@ -257,11 +289,10 @@ fn toggle(app: &mut SlideApp, ui: &mut Ui, icon: Icon, label: &str, id: &str, on
 }
 
 fn tip(id: &str, label: &str) -> String {
-    let label = crate::i18n::tr(label);
     let sc = deckcraft_engine::find_command(id).and_then(|c| c.shortcut).or_else(|| crate::UI_COMMANDS.iter().find(|c| c.0 == id).and_then(|c| c.2));
     match sc {
-        Some(s) => format!("{label} ({})", pretty_shortcut(s)),
-        None => label.to_string(),
+        Some(s) => crate::i18n::with_shortcut(label, &pretty_shortcut(s)),
+        None => crate::i18n::tr(label).to_string(),
     }
 }
 
@@ -294,7 +325,7 @@ fn clipboard_group(app: &mut SlideApp, ui: &mut Ui) {
             run(app, "edit.paste", json!({}));
         }
         if let Some(a) = arrow {
-            egui::Popup::menu(&a).show(|ui| {
+            crate::rtl::menu(&a).show(|ui| {
                 if ui.button(crate::i18n::tr("Paste")).clicked() {
                     run(app, "edit.paste", json!({}));
                 }
@@ -332,7 +363,7 @@ fn layout_menu(app: &mut SlideApp, ui: &mut Ui, cmd: &str) {
         .active()
         .and_then(|d| d.doc.masters.first().map(|m| m.layouts.iter().map(|l| (l.name.clone(), l.id)).collect()))
         .unwrap_or_default();
-    egui::Grid::new(("layouts", cmd)).spacing(vec2(6.0, 6.0)).show(ui, |ui| {
+    crate::rtl::grid(ui, egui::Grid::new(("layouts", cmd)).spacing(vec2(6.0, 6.0)), |ui| {
         for (k, (name, id)) in layouts.iter().enumerate() {
             let idx = app.session.active().and_then(|d| d.doc.masters.first().and_then(|m| m.layouts.iter().position(|l| l.id == *id)));
             let resp = ui.vertical(|ui| {
@@ -381,7 +412,7 @@ fn slides_group(app: &mut SlideApp, ui: &mut Ui) {
             run(app, "slide.new", json!({}));
         }
         if let Some(a) = arrow {
-            egui::Popup::menu(&a).width(420.0).show(|ui| {
+            crate::rtl::menu(&a).width(420.0).show(|ui| {
                 layout_menu(app, ui, "slide.new");
                 ui.separator();
                 if ui.button(crate::i18n::tr("Duplicate Selected Slides")).clicked() {
@@ -394,10 +425,10 @@ fn slides_group(app: &mut SlideApp, ui: &mut Ui) {
         }
         rows(ui, |ui| {
             let (r, _) = small_button_ex(ui, Icon::Layout, "Layout", enabled(app, "slide.layout"), false, true);
-            egui::Popup::menu(&r).width(420.0).show(|ui| layout_menu(app, ui, "slide.layout"));
+            crate::rtl::menu(&r).width(420.0).show(|ui| layout_menu(app, ui, "slide.layout"));
             small(app, ui, Icon::ResetSlide, "Reset", "slide.reset", json!({}));
             let (r, _) = small_button_ex(ui, Icon::Section, "Section", enabled(app, "section.add"), false, true);
-            egui::Popup::menu(&r).show(|ui| {
+            crate::rtl::menu(&r).show(|ui| {
                 if ui.button(crate::i18n::tr("Add Section")).clicked() {
                     run(app, "section.add", json!({}));
                 }
@@ -472,7 +503,7 @@ fn font_group(app: &mut SlideApp, ui: &mut Ui, st: &Value) {
                 toggle(app, ui, Icon::Superscript, "Superscript", "format.superscript", b("superscript"));
                 toggle(app, ui, Icon::Subscript, "Subscript", "format.subscript", b("subscript"));
                 let r = icon_toggle(ui, Icon::CharSpacing, "Character Spacing", en, false);
-                egui::Popup::menu(&r).show(|ui| {
+                crate::rtl::menu(&r).show(|ui| {
                     for (label, pt) in [("Very Tight", -3.0), ("Tight", -1.5), ("Normal", 0.0), ("Loose", 3.0), ("Very Loose", 6.0)] {
                         if ui.button(crate::i18n::tr(label)).clicked() {
                             run(app, "format.spacing", json!({"pt": pt}));
@@ -480,7 +511,7 @@ fn font_group(app: &mut SlideApp, ui: &mut Ui, st: &Value) {
                     }
                 });
                 let r = icon_toggle(ui, Icon::ChangeCase, "Change Case", en, false);
-                egui::Popup::menu(&r).show(|ui| {
+                crate::rtl::menu(&r).show(|ui| {
                     for (label, mode) in [
                         ("Sentence case.", "sentence"),
                         ("lowercase", "lower"),
@@ -557,7 +588,7 @@ fn paragraph_group(app: &mut SlideApp, ui: &mut Ui, st: &Value) {
                     run(app, "format.bullets", json!({}));
                 }
                 if let Some(a) = a {
-                    egui::Popup::menu(&a).show(|ui| {
+                    crate::rtl::menu(&a).show(|ui| {
                         if ui.button(crate::i18n::tr("None")).clicked() {
                             run(app, "format.bullets", json!({"on": false}));
                         }
@@ -573,7 +604,7 @@ fn paragraph_group(app: &mut SlideApp, ui: &mut Ui, st: &Value) {
                     run(app, "format.numbering", json!({}));
                 }
                 if let Some(a) = a {
-                    egui::Popup::menu(&a).show(|ui| {
+                    crate::rtl::menu(&a).show(|ui| {
                         if ui.button(crate::i18n::tr("None")).clicked() {
                             run(app, "format.numbering", json!({"on": false}));
                         }
@@ -595,7 +626,7 @@ fn paragraph_group(app: &mut SlideApp, ui: &mut Ui, st: &Value) {
                 toggle(app, ui, Icon::DecreaseIndent, "Decrease List Level", "format.outdent", false);
                 toggle(app, ui, Icon::IncreaseIndent, "Increase List Level", "format.indent", false);
                 let r = icon_toggle(ui, Icon::LineSpacing, "Line Spacing", en, false);
-                egui::Popup::menu(&r).show(|ui| {
+                crate::rtl::menu(&r).show(|ui| {
                     for v in [1.0, 1.5, 2.0, 2.5, 3.0] {
                         if ui.button(format!("{v:.1}")).clicked() {
                             run(app, "format.lineSpacing", json!({"lines": v}));
@@ -606,7 +637,7 @@ fn paragraph_group(app: &mut SlideApp, ui: &mut Ui, st: &Value) {
                     }
                 });
                 let r = icon_toggle(ui, Icon::Columns, "Columns", en, false);
-                egui::Popup::menu(&r).show(|ui| {
+                crate::rtl::menu(&r).show(|ui| {
                     for n in 1..=3 {
                         if ui.button(crate::i18n::count(n, if n == 1 { "Column" } else { "Columns" }, "стовпець", "стовпці", "стовпців")).clicked()
                         {
@@ -624,7 +655,7 @@ fn paragraph_group(app: &mut SlideApp, ui: &mut Ui, st: &Value) {
                 toggle(app, ui, Icon::AlignRight, "Align Right", "format.alignRight", al == "r");
                 toggle(app, ui, Icon::Justify, "Justify", "format.justify", al == "just");
                 let r = icon_toggle(ui, Icon::TextDirection, "Text Direction", en, false);
-                egui::Popup::menu(&r).show(|ui| {
+                crate::rtl::menu(&r).show(|ui| {
                     for (l, d) in [
                         ("Horizontal", "horizontal"),
                         ("Rotate all text 90°", "rotate90"),
@@ -637,7 +668,7 @@ fn paragraph_group(app: &mut SlideApp, ui: &mut Ui, st: &Value) {
                     }
                 });
                 let r = icon_toggle(ui, Icon::AlignText, "Align Text", en, false);
-                egui::Popup::menu(&r).show(|ui| {
+                crate::rtl::menu(&r).show(|ui| {
                     for (l, a) in [("Top", "top"), ("Middle", "middle"), ("Bottom", "bottom")] {
                         if ui.button(crate::i18n::tr(l)).clicked() {
                             run(app, "format.anchor", json!({"anchor": a}));
@@ -751,7 +782,7 @@ fn drawing_group(app: &mut SlideApp, ui: &mut Ui) {
     group(ui, |ui| {
         let en = enabled(app, "shape.insert");
         let r = big_button(ui, Icon::Shapes, "Shapes", en).on_hover_text(crate::i18n::tr("Shapes"));
-        egui::Popup::menu(&r).show(|ui| {
+        crate::rtl::menu(&r).show(|ui| {
             if let Some(p) = shapes_gallery(ui) {
                 app.session.set_tool(deckcraft_engine::ToolKind::Shape { preset: p.to_string() });
             }
@@ -759,9 +790,9 @@ fn drawing_group(app: &mut SlideApp, ui: &mut Ui) {
         big(app, ui, Icon::TextBox, "Text Box", "insert.textBox", json!({}));
         let sel = enabled(app, "shape.fill");
         let r = big_button(ui, Icon::Arrange, "Arrange", sel);
-        egui::Popup::menu(&r).show(|ui| arrange_menu(app, ui));
+        crate::rtl::menu(&r).show(|ui| arrange_menu(app, ui));
         let r = big_button(ui, Icon::QuickStyles, "Quick\nStyles", sel);
-        egui::Popup::menu(&r).width(330.0).show(|ui| quick_styles(app, ui));
+        crate::rtl::menu(&r).width(330.0).show(|ui| quick_styles(app, ui));
         rows(ui, |ui| {
             let sc = scheme(app);
             let (m, a) = small_button_ex(ui, Icon::ShapeFill, "Shape Fill", sel, false, true);
@@ -787,7 +818,7 @@ fn drawing_group(app: &mut SlideApp, ui: &mut Ui) {
             }
             let (_, a) = small_button_ex(ui, Icon::ShapeEffects, "Shape Effects", sel, false, true);
             if let Some(a) = a {
-                egui::Popup::menu(&a).show(|ui| effects_menu(app, ui));
+                crate::rtl::menu(&a).show(|ui| effects_menu(app, ui));
             }
         });
     });
@@ -875,7 +906,10 @@ pub fn effects_menu(app: &mut SlideApp, ui: &mut Ui) {
     });
     ui.menu_button(crate::i18n::tr("Soft Edges"), |ui| {
         for r in [0.0, 1.0, 2.5, 5.0, 10.0, 25.0] {
-            if ui.button(if r == 0.0 { "No Soft Edges".to_string() } else { crate::i18n::format("{r} pt", &[(r).to_string()]) }).clicked() {
+            if ui
+                .button(if r == 0.0 { crate::i18n::tr("No Soft Edges").to_string() } else { crate::i18n::format("{r} pt", &[(r).to_string()]) })
+                .clicked()
+            {
                 run(app, "shape.effects", json!({"softEdges": r}));
             }
         }
@@ -917,7 +951,7 @@ fn quick_styles(app: &mut SlideApp, ui: &mut Ui) {
         deckcraft_color::SchemeSlot::Accent5,
         deckcraft_color::SchemeSlot::Accent6,
     ];
-    egui::Grid::new("quickstyles").spacing(vec2(4.0, 4.0)).show(ui, |ui| {
+    crate::rtl::grid(ui, egui::Grid::new("quickstyles").spacing(vec2(4.0, 4.0)), |ui| {
         for row in 0..6 {
             for (k, slot) in slots.iter().enumerate() {
                 let c = theme::to_color32(sc.get(*slot));
@@ -1023,12 +1057,12 @@ fn insert(app: &mut SlideApp, ui: &mut Ui) {
             run(app, "slide.new", json!({}));
         }
         if let Some(a) = arrow {
-            egui::Popup::menu(&a).width(420.0).show(|ui| layout_menu(app, ui, "slide.new"));
+            crate::rtl::menu(&a).width(420.0).show(|ui| layout_menu(app, ui, "slide.new"));
         }
     });
     group(ui, |ui| {
         let r = big_button(ui, Icon::Table, "Table", enabled(app, "insert.table"));
-        egui::Popup::menu(&r).show(|ui| {
+        crate::rtl::menu(&r).show(|ui| {
             if let Some((rr, cc)) = table_grid_picker(ui) {
                 run(app, "insert.table", json!({"rows": rr, "cols": cc}));
                 ui.close();
@@ -1047,16 +1081,16 @@ fn insert(app: &mut SlideApp, ui: &mut Ui) {
     });
     group(ui, |ui| {
         let r = big_button(ui, Icon::Shapes, "Shapes", enabled(app, "shape.insert"));
-        egui::Popup::menu(&r).show(|ui| {
+        crate::rtl::menu(&r).show(|ui| {
             if let Some(p) = shapes_gallery(ui) {
                 app.session.set_tool(deckcraft_engine::ToolKind::Shape { preset: p.to_string() });
             }
         });
         let r = big_button(ui, Icon::Icons, "Icons", enabled(app, "shape.insert"));
-        egui::Popup::menu(&r).width(260.0).show(|ui| icon_library(app, ui));
+        crate::rtl::menu(&r).width(260.0).show(|ui| icon_library(app, ui));
         big(app, ui, Icon::SmartArt, "SmartArt", "app.dialog", json!({"id": "smartart"}));
         let r = big_button(ui, Icon::Chart, "Chart", enabled(app, "insert.chart"));
-        egui::Popup::menu(&r).show(|ui| {
+        crate::rtl::menu(&r).show(|ui| {
             for k in deckcraft_model::chart::ChartType::MAIN {
                 if ui.button(crate::i18n::tr(k.label())).clicked() {
                     run(app, "insert.chart", json!({"type": format!("{k:?}")}));
@@ -1067,9 +1101,22 @@ fn insert(app: &mut SlideApp, ui: &mut Ui) {
     group(ui, |ui| {
         big(app, ui, Icon::Link, "Link", "app.dialog", json!({"id": "hyperlink"}));
         let r = big_button(ui, Icon::Action, "Action", enabled(app, "insert.actionButton"));
-        egui::Popup::menu(&r).show(|ui| {
-            for k in ["back", "forward", "beginning", "end", "home", "information", "return", "movie", "document", "sound", "help", "custom"] {
-                if ui.button(crate::i18n::format("Action Button: {k}", &[(k).to_string()])).clicked() {
+        crate::rtl::menu(&r).show(|ui| {
+            for (k, label) in [
+                ("back", "Action Button: Go Back"),
+                ("forward", "Action Button: Go Forward or Next"),
+                ("beginning", "Action Button: Go to Beginning"),
+                ("end", "Action Button: Go to End"),
+                ("home", "Action Button: Go Home"),
+                ("information", "Action Button: Get Information"),
+                ("return", "Action Button: Return"),
+                ("movie", "Action Button: Video"),
+                ("document", "Action Button: Document"),
+                ("sound", "Action Button: Sound"),
+                ("help", "Action Button: Help"),
+                ("custom", "Action Button: Custom"),
+            ] {
+                if ui.button(crate::i18n::tr(label)).clicked() {
                     run(app, "insert.actionButton", json!({"kind": k}));
                 }
             }
@@ -1082,7 +1129,7 @@ fn insert(app: &mut SlideApp, ui: &mut Ui) {
         big(app, ui, Icon::TextBox, "Text\nBox", "insert.textBox", json!({}));
         big(app, ui, Icon::HeaderFooter, "Header &\nFooter", "app.dialog", json!({"id": "headerFooter"}));
         let r = big_button(ui, Icon::WordArt, "WordArt", enabled(app, "insert.wordArt"));
-        egui::Popup::menu(&r).show(|ui| {
+        crate::rtl::menu(&r).show(|ui| {
             for i in 0..6 {
                 if ui.button(crate::i18n::format("WordArt style {}", &[(i + 1).to_string()])).clicked() {
                     run(app, "insert.wordArt", json!({"style": i}));
@@ -1246,19 +1293,24 @@ fn design(app: &mut SlideApp, ui: &mut Ui) {
     });
     group(ui, |ui| {
         let r = big_button(ui, Icon::Colors, "Colors", true);
-        egui::Popup::menu(&r).width(240.0).show(|ui| {
+        crate::rtl::menu(&r).width(240.0).show(|ui| {
             for cs in deckcraft_model::theme::builtin_color_schemes() {
                 ui.horizontal(|ui| {
                     let (rect, resp) = ui.allocate_exact_size(vec2(220.0, 20.0), Sense::click());
+                    let rtl = crate::rtl::on();
                     let p = ui.painter();
+                    // The swatches lead and the name follows them.
                     for (k, c) in cs.colors.iter().take(10).skip(2).enumerate() {
-                        p.rect_filled(
-                            Rect::from_min_size(rect.min + vec2(k as f32 * 12.0, 3.0), vec2(11.0, 14.0)),
-                            CornerRadius::ZERO,
-                            theme::to_color32(*c),
-                        );
+                        let x = if rtl { rect.max.x - k as f32 * 12.0 - 11.0 } else { rect.min.x + k as f32 * 12.0 };
+                        p.rect_filled(Rect::from_min_size(pos2(x, rect.min.y + 3.0), vec2(11.0, 14.0)), CornerRadius::ZERO, theme::to_color32(*c));
                     }
-                    p.text(rect.min + vec2(104.0, 10.0), Align2::LEFT_CENTER, &cs.name, theme::font(12.0), Tokens::get(ui.ctx()).text);
+                    p.text(
+                        pos2(crate::rtl::lead_x(rtl, rect, 104.0), rect.center().y),
+                        crate::rtl::lead_center(rtl),
+                        crate::i18n::tr(&cs.name),
+                        theme::font(12.0),
+                        Tokens::get(ui.ctx()).text,
+                    );
                     if resp.clicked() {
                         run(app, "design.colors", json!({"name": cs.name}));
                         ui.close();
@@ -1267,16 +1319,16 @@ fn design(app: &mut SlideApp, ui: &mut Ui) {
             }
         });
         let r = big_button(ui, Icon::Fonts, "Fonts", true);
-        egui::Popup::menu(&r).width(220.0).show(|ui| {
+        crate::rtl::menu(&r).width(220.0).show(|ui| {
             for fs in deckcraft_model::theme::builtin_font_schemes() {
-                if ui.button(format!("{}\n   {} / {}", fs.name, fs.major.latin, fs.minor.latin)).clicked() {
+                if ui.button(format!("{}\n   {} / {}", crate::i18n::tr(&fs.name), fs.major.latin, fs.minor.latin)).clicked() {
                     run(app, "design.fonts", json!({"name": fs.name}));
                 }
             }
         });
         let r = big_button(ui, Icon::BackgroundStyles, "Background\nStyles", true);
-        egui::Popup::menu(&r).show(|ui| {
-            egui::Grid::new("bgstyles").show(ui, |ui| {
+        crate::rtl::menu(&r).show(|ui| {
+            crate::rtl::grid(ui, egui::Grid::new("bgstyles"), |ui| {
                 let sc = scheme(app);
                 for i in 1..=12 {
                     let slots = [
@@ -1309,7 +1361,7 @@ fn design(app: &mut SlideApp, ui: &mut Ui) {
     });
     group(ui, |ui| {
         let r = big_button(ui, Icon::SlideSize, "Slide\nSize", true);
-        egui::Popup::menu(&r).show(|ui| {
+        crate::rtl::menu(&r).show(|ui| {
             if ui.button(crate::i18n::tr("Standard (4:3)")).clicked() {
                 run(app, "design.slideSize", json!({"preset": "standard"}));
             }
@@ -1369,7 +1421,7 @@ fn transitions(app: &mut SlideApp, ui: &mut Ui) {
             run(app, "transition.set", json!({"kind": x.0}));
         }
         let more = widgets::drop_button(ui, "", vec2(14.0, 52.0), true);
-        egui::Popup::menu(&more).width(480.0).show(|ui| {
+        crate::rtl::menu(&more).width(480.0).show(|ui| {
             for cat in ["Subtle", "Exciting", "Dynamic Content"] {
                 ui.label(egui::RichText::new(crate::i18n::tr(cat)).font(theme::bold(12.0)));
                 ui.horizontal_wrapped(|ui| {
@@ -1391,7 +1443,7 @@ fn transitions(app: &mut SlideApp, ui: &mut Ui) {
     group(ui, |ui| {
         let opts: &[&str] = deckcraft_model::anim::TRANSITIONS.iter().find(|x| x.0 == kind).map(|x| x.4).unwrap_or(&[]);
         let r = big_button(ui, Icon::EffectOptions, "Effect\nOptions", !opts.is_empty());
-        egui::Popup::menu(&r).show(|ui| {
+        crate::rtl::menu(&r).show(|ui| {
             for o in opts {
                 if ui.button(crate::i18n::tr(&deckcraft_model::anim::transition_option_label(&kind, o))).clicked() {
                     run(app, "transition.options", json!({"option": o}));
@@ -1410,14 +1462,14 @@ fn transitions(app: &mut SlideApp, ui: &mut Ui) {
             });
             ui.horizontal(|ui| {
                 let mut click = cur.as_ref().is_none_or(|t| t.advance_on_click);
-                if ui.checkbox(&mut click, crate::i18n::tr("On Mouse Click")).changed() {
+                if crate::rtl::checkbox(ui, &mut click, crate::i18n::tr("On Mouse Click")).changed() {
                     run(app, "transition.timing", json!({"onClick": click}));
                 }
             });
             ui.horizontal(|ui| {
                 let after = cur.as_ref().and_then(|t| t.advance_after_ms);
                 let mut on = after.is_some();
-                if ui.checkbox(&mut on, crate::i18n::tr("After:")).changed() {
+                if crate::rtl::checkbox(ui, &mut on, crate::i18n::tr("After:")).changed() {
                     run(app, "transition.timing", json!({"after": if on { json!(after.unwrap_or(0)) } else { Value::Null }}));
                 }
                 if let Some(v) = widgets::spinner(ui, "tafter", after.unwrap_or(0) as f64 / 1000.0, 1.0, "", 46.0) {
@@ -1587,7 +1639,7 @@ fn animations(app: &mut SlideApp, ui: &mut Ui) {
             run(app, "animation.set", json!({"effect": a.0, "class": a.2.xml()}));
         }
         let more = widgets::drop_button(ui, "", vec2(14.0, 52.0), has_sel);
-        egui::Popup::menu(&more).width(420.0).show(|ui| {
+        crate::rtl::menu(&more).width(420.0).show(|ui| {
             for (cls, label) in
                 [(AnimClass::Entrance, "Entrance"), (AnimClass::Emphasis, "Emphasis"), (AnimClass::Exit, "Exit"), (AnimClass::Path, "Motion Paths")]
             {
@@ -1609,7 +1661,7 @@ fn animations(app: &mut SlideApp, ui: &mut Ui) {
         });
         let opts: &[&str] = cur.as_ref().and_then(|c| deckcraft_model::anim::animation_info(&c.effect, c.class)).map(|x| x.5).unwrap_or(&[]);
         let r = big_button(ui, Icon::EffectOptions, "Effect\nOptions", !opts.is_empty());
-        egui::Popup::menu(&r).show(|ui| {
+        crate::rtl::menu(&r).show(|ui| {
             for o in opts {
                 if ui.button(crate::i18n::tr(&option_label(o))).clicked() {
                     run(app, "animation.options", json!({"option": o}));
@@ -1625,7 +1677,7 @@ fn animations(app: &mut SlideApp, ui: &mut Ui) {
     });
     group(ui, |ui| {
         let r = big_button(ui, Icon::AddAnimation, "Add\nAnimation", has_sel);
-        egui::Popup::menu(&r).width(260.0).show(|ui| {
+        crate::rtl::menu(&r).width(260.0).show(|ui| {
             for a in deckcraft_model::anim::ANIMATIONS.iter().filter(|a| a.2 != AnimClass::Media) {
                 if ui
                     .button(format!(
@@ -1646,7 +1698,7 @@ fn animations(app: &mut SlideApp, ui: &mut Ui) {
         });
         big(app, ui, Icon::AnimationPane, "Animation\nPane", "view.pane", json!({"pane": "animation"}));
         let r = big_button(ui, Icon::Trigger, "Trigger", cur.is_some());
-        egui::Popup::menu(&r).show(|ui| {
+        crate::rtl::menu(&r).show(|ui| {
             if ui.button(crate::i18n::tr("On Click of… (none)")).clicked() {
                 run(app, "animation.timing", json!({"trigger": null}));
             }
@@ -1661,7 +1713,7 @@ fn animations(app: &mut SlideApp, ui: &mut Ui) {
         let on = app.session.anim_painter.is_some();
         let en = enabled(app, "animation.painter");
         let (r, _) = big_button_ex(ui, Icon::AnimationPainter, "Animation\nPainter", en, false, on);
-        let r = r.on_hover_text("Animation Painter (double-click to keep it on)");
+        let r = r.on_hover_text(crate::i18n::tr("Animation Painter (double-click to keep it on)"));
         if r.double_clicked() {
             run(app, "animation.painter", json!({"sticky": true}));
         } else if r.clicked() {
@@ -1761,15 +1813,15 @@ fn slide_show(app: &mut SlideApp, ui: &mut Ui) {
     group(ui, |ui| {
         rows(ui, |ui| {
             let mut use_t = app.session.active().is_none_or(|d| d.doc.show.use_timings);
-            if ui.checkbox(&mut use_t, crate::i18n::tr("Use Timings")).changed() {
+            if crate::rtl::checkbox(ui, &mut use_t, crate::i18n::tr("Use Timings")).changed() {
                 run(app, "show.setup", json!({"useTimings": use_t}));
             }
             let mut narr = app.session.active().is_none_or(|d| !d.doc.show.without_narration);
-            if ui.checkbox(&mut narr, crate::i18n::tr("Play Narrations")).changed() {
+            if crate::rtl::checkbox(ui, &mut narr, crate::i18n::tr("Play Narrations")).changed() {
                 run(app, "show.setup", json!({"noNarration": !narr}));
             }
             let mut mc = app.session.active().is_none_or(|d| d.doc.show.show_media_controls);
-            let _ = ui.checkbox(&mut mc, crate::i18n::tr("Show Media Controls"));
+            let _ = crate::rtl::checkbox(ui, &mut mc, crate::i18n::tr("Show Media Controls"));
         });
     });
 }
@@ -1852,15 +1904,15 @@ fn view(app: &mut SlideApp, ui: &mut Ui) {
     group(ui, |ui| {
         rows(ui, |ui| {
             let mut r = app.ui.ruler;
-            if ui.checkbox(&mut r, crate::i18n::tr("Ruler")).changed() {
+            if crate::rtl::checkbox(ui, &mut r, crate::i18n::tr("Ruler")).changed() {
                 app.ui.ruler = r;
             }
             let mut g = app.ui.gridlines;
-            if ui.checkbox(&mut g, crate::i18n::tr("Gridlines")).changed() {
+            if crate::rtl::checkbox(ui, &mut g, crate::i18n::tr("Gridlines")).changed() {
                 app.ui.gridlines = g;
             }
             let mut gd = app.ui.guides;
-            if ui.checkbox(&mut gd, crate::i18n::tr("Guides")).changed() {
+            if crate::rtl::checkbox(ui, &mut gd, crate::i18n::tr("Guides")).changed() {
                 app.ui.guides = gd;
             }
         });
@@ -1871,7 +1923,7 @@ fn view(app: &mut SlideApp, ui: &mut Ui) {
     });
     group(ui, |ui| {
         let r = big_button(ui, Icon::ZoomGlass, "Zoom", true);
-        egui::Popup::menu(&r).show(|ui| {
+        crate::rtl::menu(&r).show(|ui| {
             for pct in [400, 200, 150, 100, 75, 66, 50, 33] {
                 if ui.button(format!("{pct}%")).clicked() {
                     let _ = app.run("view.zoom", json!({"percent": pct}));
@@ -1901,14 +1953,14 @@ fn shape_format(app: &mut SlideApp, ui: &mut Ui) {
     let sel = enabled(app, "shape.fill");
     group(ui, |ui| {
         let r = big_button(ui, Icon::Shapes, "Shapes", true);
-        egui::Popup::menu(&r).show(|ui| {
+        crate::rtl::menu(&r).show(|ui| {
             if let Some(p) = shapes_gallery(ui) {
                 app.session.set_tool(deckcraft_engine::ToolKind::Shape { preset: p.to_string() });
             }
         });
         big(app, ui, Icon::TextBox, "Text\nBox", "insert.textBox", json!({}));
         let r = big_button(ui, Icon::EditShape, "Edit\nShape", sel);
-        egui::Popup::menu(&r).show(|ui| {
+        crate::rtl::menu(&r).show(|ui| {
             ui.label(crate::i18n::tr("Change Shape"));
             if let Some(p) = shapes_gallery(ui) {
                 run(app, "shape.change", json!({"preset": p}));
@@ -1916,7 +1968,7 @@ fn shape_format(app: &mut SlideApp, ui: &mut Ui) {
         });
         let can_merge = enabled(app, "shape.merge");
         let r = big_button(ui, Icon::MergeShapes, "Merge\nShapes", can_merge).on_hover_text(crate::i18n::tr("Merge Shapes"));
-        egui::Popup::menu(&r).show(|ui| {
+        crate::rtl::menu(&r).show(|ui| {
             for (op, label) in deckcraft_engine::cmd::merge::OPS {
                 if ui.button(crate::i18n::tr(label)).clicked() {
                     run(app, "shape.merge", json!({"op": op}));
@@ -1927,7 +1979,7 @@ fn shape_format(app: &mut SlideApp, ui: &mut Ui) {
     });
     group(ui, |ui| {
         let r = big_button(ui, Icon::QuickStyles, "Shape\nStyles", sel);
-        egui::Popup::menu(&r).width(330.0).show(|ui| quick_styles(app, ui));
+        crate::rtl::menu(&r).width(330.0).show(|ui| quick_styles(app, ui));
         rows(ui, |ui| {
             let (m, a) = small_button_ex(ui, Icon::ShapeFill, "Shape Fill", sel, false, true);
             if m.clicked() {
@@ -1953,7 +2005,7 @@ fn shape_format(app: &mut SlideApp, ui: &mut Ui) {
             }
             let (_, a) = small_button_ex(ui, Icon::ShapeEffects, "Shape Effects", sel, false, true);
             if let Some(a) = a {
-                egui::Popup::menu(&a).show(|ui| effects_menu(app, ui));
+                crate::rtl::menu(&a).show(|ui| effects_menu(app, ui));
             }
         });
     });
@@ -1976,7 +2028,7 @@ fn shape_format(app: &mut SlideApp, ui: &mut Ui) {
                 });
             }
             let r = small_button(ui, Icon::TextEffects, "Text Effects", sel, false);
-            egui::Popup::menu(&r).show(|ui| {
+            crate::rtl::menu(&r).show(|ui| {
                 if ui.button(crate::i18n::tr("Shadow")).clicked() {
                     run(app, "format.textShadow", json!({}));
                 }
@@ -2001,7 +2053,7 @@ fn arrange_group(app: &mut SlideApp, ui: &mut Ui) {
             run(app, "arrange.bringForward", json!({}));
         }
         if let Some(a) = a {
-            egui::Popup::menu(&a).show(|ui| {
+            crate::rtl::menu(&a).show(|ui| {
                 menu_item(app, ui, Icon::BringForward, "Bring Forward", "arrange.bringForward", json!({}));
                 menu_item(app, ui, Icon::BringToFront, "Bring to Front", "arrange.bringToFront", json!({}));
             });
@@ -2011,18 +2063,18 @@ fn arrange_group(app: &mut SlideApp, ui: &mut Ui) {
             run(app, "arrange.sendBackward", json!({}));
         }
         if let Some(a) = a {
-            egui::Popup::menu(&a).show(|ui| {
+            crate::rtl::menu(&a).show(|ui| {
                 menu_item(app, ui, Icon::SendBackward, "Send Backward", "arrange.sendBackward", json!({}));
                 menu_item(app, ui, Icon::SendToBack, "Send to Back", "arrange.sendToBack", json!({}));
             });
         }
         big(app, ui, Icon::SelectionPane, "Selection\nPane", "view.pane", json!({"pane": "selection"}));
         let r = big_button(ui, Icon::AlignObjects, "Align", sel);
-        egui::Popup::menu(&r).show(|ui| align_menu(app, ui));
+        crate::rtl::menu(&r).show(|ui| align_menu(app, ui));
         rows(ui, |ui| {
             let (_, a) = small_button_ex(ui, Icon::Group, "Group", sel, false, true);
             if let Some(a) = a {
-                egui::Popup::menu(&a).show(|ui| {
+                crate::rtl::menu(&a).show(|ui| {
                     menu_item(app, ui, Icon::Group, "Group", "arrange.group", json!({}));
                     menu_item(app, ui, Icon::Ungroup, "Ungroup", "arrange.ungroup", json!({}));
                     menu_item(app, ui, Icon::Group, "Regroup", "arrange.regroup", json!({}));
@@ -2030,7 +2082,7 @@ fn arrange_group(app: &mut SlideApp, ui: &mut Ui) {
             }
             let (_, a) = small_button_ex(ui, Icon::Rotate, "Rotate", sel, false, true);
             if let Some(a) = a {
-                egui::Popup::menu(&a).show(|ui| {
+                crate::rtl::menu(&a).show(|ui| {
                     menu_item(app, ui, Icon::RotateRight, "Rotate Right 90°", "arrange.rotateRight", json!({}));
                     menu_item(app, ui, Icon::RotateLeft, "Rotate Left 90°", "arrange.rotateLeft", json!({}));
                     menu_item(app, ui, Icon::FlipV, "Flip Vertical", "arrange.flipVertical", json!({}));
@@ -2074,7 +2126,7 @@ fn picture_format(app: &mut SlideApp, ui: &mut Ui) {
         let r = big_button(ui, Icon::RemoveBackground, "Remove\nBackground", false);
         let _ = r.on_hover_text(crate::i18n::tr("Remove Background (coming soon)"));
         let r = big_button(ui, Icon::Corrections, "Corrections", true);
-        egui::Popup::menu(&r).show(|ui| {
+        crate::rtl::menu(&r).show(|ui| {
             for b in [-0.4, -0.2, 0.0, 0.2, 0.4] {
                 if ui.button(crate::i18n::format("Brightness {:+}%", &[format!("{:+}", (b * 100.0) as i32)])).clicked() {
                     run(app, "picture.adjust", json!({"brightness": b}));
@@ -2088,7 +2140,7 @@ fn picture_format(app: &mut SlideApp, ui: &mut Ui) {
             }
         });
         let r = big_button(ui, Icon::ColorAdjust, "Color", true);
-        egui::Popup::menu(&r).show(|ui| {
+        crate::rtl::menu(&r).show(|ui| {
             for s in [0.0, 0.33, 0.66, 1.0, 1.5, 2.0, 3.0] {
                 if ui.button(crate::i18n::format("Saturation {}%", &[((s * 100.0) as i32).to_string()])).clicked() {
                     run(app, "picture.adjust", json!({"saturation": s}));
@@ -2099,7 +2151,7 @@ fn picture_format(app: &mut SlideApp, ui: &mut Ui) {
             }
         });
         let r = big_button(ui, Icon::Transparency, "Transparency", true);
-        egui::Popup::menu(&r).show(|ui| {
+        crate::rtl::menu(&r).show(|ui| {
             for tr in [0.0, 0.15, 0.3, 0.5, 0.65, 0.8, 0.95] {
                 if ui.button(format!("{}%", (tr * 100.0) as i32)).clicked() {
                     run(app, "picture.adjust", json!({"transparency": tr}));
@@ -2113,7 +2165,7 @@ fn picture_format(app: &mut SlideApp, ui: &mut Ui) {
     });
     group(ui, |ui| {
         let r = big_button(ui, Icon::QuickStyles, "Picture\nStyles", true);
-        egui::Popup::menu(&r).show(|ui| {
+        crate::rtl::menu(&r).show(|ui| {
             if ui.button(crate::i18n::tr("Simple Frame, White")).clicked() {
                 run(app, "shape.line", json!({"color": "#FFFFFF", "width": 6}));
                 run(app, "shape.effects", json!({"shadow": "outer"}));
@@ -2140,7 +2192,7 @@ fn picture_format(app: &mut SlideApp, ui: &mut Ui) {
     arrange_group(app, ui);
     group(ui, |ui| {
         let r = big_button(ui, Icon::Crop, "Crop", true);
-        egui::Popup::menu(&r).show(|ui| {
+        crate::rtl::menu(&r).show(|ui| {
             ui.label(crate::i18n::tr("Crop to Shape"));
             if let Some(p) = shapes_gallery(ui) {
                 run(app, "shape.change", json!({"preset": p}));
@@ -2166,31 +2218,31 @@ fn table_design(app: &mut SlideApp, ui: &mut Ui) {
             let flags = tbl.as_ref().map(|t| (t.first_row, t.last_row, t.band_row, t.first_col, t.last_col, t.band_col)).unwrap_or_default();
             ui.horizontal(|ui| {
                 let mut a = flags.0;
-                if ui.checkbox(&mut a, crate::i18n::tr("Header Row")).changed() {
+                if crate::rtl::checkbox(ui, &mut a, crate::i18n::tr("Header Row")).changed() {
                     run(app, "table.options", json!({"headerRow": a}));
                 }
                 let mut d = flags.3;
-                if ui.checkbox(&mut d, crate::i18n::tr("First Column")).changed() {
+                if crate::rtl::checkbox(ui, &mut d, crate::i18n::tr("First Column")).changed() {
                     run(app, "table.options", json!({"firstColumn": d}));
                 }
             });
             ui.horizontal(|ui| {
                 let mut b = flags.1;
-                if ui.checkbox(&mut b, crate::i18n::tr("Total Row")).changed() {
+                if crate::rtl::checkbox(ui, &mut b, crate::i18n::tr("Total Row")).changed() {
                     run(app, "table.options", json!({"totalRow": b}));
                 }
                 let mut e = flags.4;
-                if ui.checkbox(&mut e, crate::i18n::tr("Last Column")).changed() {
+                if crate::rtl::checkbox(ui, &mut e, crate::i18n::tr("Last Column")).changed() {
                     run(app, "table.options", json!({"lastColumn": e}));
                 }
             });
             ui.horizontal(|ui| {
                 let mut c = flags.2;
-                if ui.checkbox(&mut c, crate::i18n::tr("Banded Rows")).changed() {
+                if crate::rtl::checkbox(ui, &mut c, crate::i18n::tr("Banded Rows")).changed() {
                     run(app, "table.options", json!({"bandedRows": c}));
                 }
                 let mut f = flags.5;
-                if ui.checkbox(&mut f, crate::i18n::tr("Banded Columns")).changed() {
+                if crate::rtl::checkbox(ui, &mut f, crate::i18n::tr("Banded Columns")).changed() {
                     run(app, "table.options", json!({"bandedColumns": f}));
                 }
             });
@@ -2218,7 +2270,7 @@ fn table_design(app: &mut SlideApp, ui: &mut Ui) {
             run(app, "table.style", json!({"style": id}));
         }
         let more = widgets::drop_button(ui, "", vec2(14.0, 40.0), true);
-        egui::Popup::menu(&more).width(360.0).show(|ui| {
+        crate::rtl::menu(&more).width(360.0).show(|ui| {
             ui.horizontal_wrapped(|ui| {
                 for (id, label) in &styles {
                     let (r, resp) = ui.allocate_exact_size(vec2(48.0, 36.0), Sense::click());
@@ -2283,7 +2335,7 @@ pub fn paint_table_style(p: &egui::Painter, r: Rect, id: &str, sc: &deckcraft_co
 fn table_layout(app: &mut SlideApp, ui: &mut Ui) {
     group(ui, |ui| {
         let r = big_button(ui, Icon::DeleteTable, "Delete", true);
-        egui::Popup::menu(&r).show(|ui| {
+        crate::rtl::menu(&r).show(|ui| {
             menu_item(app, ui, Icon::DeleteTable, "Delete Columns", "table.deleteColumn", json!({}));
             menu_item(app, ui, Icon::DeleteTable, "Delete Rows", "table.deleteRow", json!({}));
             menu_item(app, ui, Icon::DeleteTable, "Delete Table", "edit.delete", json!({}));
@@ -2325,7 +2377,7 @@ fn table_layout(app: &mut SlideApp, ui: &mut Ui) {
 fn chart_design(app: &mut SlideApp, ui: &mut Ui) {
     group(ui, |ui| {
         let r = big_button(ui, Icon::ChangeChartType, "Change\nChart Type", true);
-        egui::Popup::menu(&r).show(|ui| {
+        crate::rtl::menu(&r).show(|ui| {
             for k in deckcraft_model::chart::ChartType::MAIN {
                 if ui.button(crate::i18n::tr(k.label())).clicked() {
                     // Replace the chart's type keeping its data.
@@ -2355,36 +2407,36 @@ fn playback(app: &mut SlideApp, ui: &mut Ui) {
     group(ui, |ui| {
         rows(ui, |ui| {
             let mut auto = m.as_ref().is_some_and(|x| x.autoplay);
-            if ui.checkbox(&mut auto, crate::i18n::tr("Start Automatically")).changed() {
+            if crate::rtl::checkbox(ui, &mut auto, crate::i18n::tr("Start Automatically")).changed() {
                 run(app, "media.options", json!({"autoplay": auto}));
             }
             let mut across = m.as_ref().is_some_and(|x| x.play_across_slides);
-            if ui.checkbox(&mut across, crate::i18n::tr("Play Across Slides")).changed() {
+            if crate::rtl::checkbox(ui, &mut across, crate::i18n::tr("Play Across Slides")).changed() {
                 run(app, "media.options", json!({"acrossSlides": across}));
             }
             let mut lp = m.as_ref().is_some_and(|x| x.loop_play);
-            if ui.checkbox(&mut lp, crate::i18n::tr("Loop until Stopped")).changed() {
+            if crate::rtl::checkbox(ui, &mut lp, crate::i18n::tr("Loop until Stopped")).changed() {
                 run(app, "media.options", json!({"loop": lp}));
             }
         });
         rows(ui, |ui| {
             let mut hide = m.as_ref().is_some_and(|x| x.hide_while_not_playing);
-            if ui.checkbox(&mut hide, crate::i18n::tr("Hide During Show")).changed() {
+            if crate::rtl::checkbox(ui, &mut hide, crate::i18n::tr("Hide During Show")).changed() {
                 run(app, "media.options", json!({"hide": hide}));
             }
             let mut rw = m.as_ref().is_some_and(|x| x.rewind);
-            if ui.checkbox(&mut rw, crate::i18n::tr("Rewind after Playing")).changed() {
+            if crate::rtl::checkbox(ui, &mut rw, crate::i18n::tr("Rewind after Playing")).changed() {
                 run(app, "media.options", json!({"rewind": rw}));
             }
             let mut fs = m.as_ref().is_some_and(|x| x.full_screen);
-            if ui.checkbox(&mut fs, crate::i18n::tr("Play Full Screen")).changed() {
+            if crate::rtl::checkbox(ui, &mut fs, crate::i18n::tr("Play Full Screen")).changed() {
                 run(app, "media.options", json!({"fullScreen": fs}));
             }
         });
     });
     group(ui, |ui| {
         let r = big_button(ui, Icon::Volume, "Volume", m.is_some());
-        egui::Popup::menu(&r).show(|ui| {
+        crate::rtl::menu(&r).show(|ui| {
             for (l, v) in [("Low", 0.25), ("Medium", 0.5), ("High", 1.0), ("Mute", 0.0)] {
                 if ui.button(crate::i18n::tr(l)).clicked() {
                     run(app, "media.options", json!({"volume": v}));
@@ -2402,7 +2454,7 @@ fn slide_master(app: &mut SlideApp, ui: &mut Ui) {
     });
     group(ui, |ui| {
         let r = big_button(ui, Icon::Table, "Insert\nPlaceholder", true);
-        egui::Popup::menu(&r).show(|ui| {
+        crate::rtl::menu(&r).show(|ui| {
             for (l, k) in
                 [("Content", "content"), ("Text", "text"), ("Picture", "picture"), ("Chart", "chart"), ("Table", "table"), ("Media", "media")]
             {
@@ -2414,9 +2466,9 @@ fn slide_master(app: &mut SlideApp, ui: &mut Ui) {
     });
     group(ui, |ui| {
         let r = big_button(ui, Icon::Themes, "Themes", true);
-        egui::Popup::menu(&r).show(|ui| {
+        crate::rtl::menu(&r).show(|ui| {
             for th in deckcraft_model::theme::builtin_themes() {
-                if ui.button(&th.name).clicked() {
+                if ui.button(crate::i18n::tr(&th.name)).clicked() {
                     run(app, "design.theme", json!({"name": th.name}));
                 }
             }

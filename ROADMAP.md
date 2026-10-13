@@ -84,8 +84,9 @@ EMF/SVG pictures, the data-loss and startup-crash bugs (#60, #40, #59) and the b
 
 ## Languages
 
-English and Ukrainian: Preferences offers System language, English and Українська. Ukrainian
-OS/browser locales select Ukrainian automatically; explicit desktop choices persist in `ui.json`.
+English, Ukrainian and Arabic: Preferences offers System language, English, Українська and العربية.
+Ukrainian and Arabic (`ar`, `ar-*`) OS/browser locales select them automatically; Arabic mirrors the
+whole window right to left (ribbon, tabs, panes, status bar, File tab, dialogs, menus); explicit desktop choices persist in `ui.json`.
 Menus, ribbon, command palette, panels, dialogs and presenter controls use the interface catalog.
 Presentation content and command IDs retain their original values. Detail:
 [docs/localization-parity.md](docs/localization-parity.md).
@@ -105,7 +106,7 @@ Presentation content and command IDs retain their original values. Detail:
 | Korean | ko | 0% | none | 4–7 |
 | Vietnamese | vi | 0% | none | 3–5 |
 
-Other languages shipped: **Ukrainian (uk)**, with English fallback and bundled Cyrillic glyph
+Other languages shipped: **Ukrainian (uk)** and **Arabic (ar, mirrored right to left)**, with English fallback and bundled Cyrillic glyph
 coverage. PowerPoint for Mac ships 26 languages; additional catalogs and native review remain.
 
 ## Upcoming
@@ -131,6 +132,7 @@ app's JSON control channel (`deckcraft --control PORT`).
 
 | Date | What landed |
 |---|---|
+| 2026-10-13 | Arabic interface (`ar.tsv`, 1,420 entries, count-neutral wording, Western digits), mirrored right to left: `bidi.rs` puts catalog text into display order, `rtl.rs` mirrors panels, ribbon, menus, dialogs and every `Grid`; an audit test walks every tab, File page, dialog, pane and ribbon control in Arabic and fails on a panic or on English text |
 | 2026-10-10 | Ukrainian UI catalog, system-language detection and persisted language choice (#15, #30); translated placeholder prompts preserve presentation content |
 | 2026-10-13 | Slide transitions like PowerPoint: every transition and option measured frame by frame against PowerPoint's video export and retuned (curves, directions, soft edges, 3-D perspective, contents moving over backgrounds); PowerPoint's own XML elements and defaults read and written (diagonal Wipe, Zoom, Shape In/Out, Glitter Hexagons, Shred In/Out, Page Curl Single); `deckcraft-cli render-transition` renders frames headless |
 | 2026-10-13 | Wild text cases measured against PowerPoint (102 synthetic slides): bidi by run language, East Asian vertical text upright, mongolianVert/wordArtVert/wordArtVertRtl, underline styles and strikethrough at the font's metrics, centre/right/decimal tabs, East Asian, Thai, Hindi, Arabic and Hebrew numbering, small caps, all-caps "ß", transparent text, soft hyphens, kinsoku, rtlCol and just/dist anchoring, emoji presentation, fallback faces that no longer move the baseline |

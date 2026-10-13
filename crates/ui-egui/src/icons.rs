@@ -341,8 +341,16 @@ pub fn paint(painter: &egui::Painter, rect: egui::Rect, icon: Icon, ink: egui::C
         return;
     }
     let origin = rect.center() - vec2(size * 0.5, size * 0.5);
-    let pen = Pen { p: painter, o: origin, k: size / 24.0, sw: stroke_width(size), ink, dis: disabled };
+    let flip = crate::rtl::on() && mirrors_in_rtl(icon);
+    let pen = Pen { p: painter, o: origin, k: size / 24.0, sw: stroke_width(size), ink, dis: disabled, flip };
     draw(&pen, icon);
+}
+
+/// Icons that show a direction of reading or navigation (back, undo, indent…) and are drawn
+/// mirrored in a right-to-left interface. Shapes that are what they look like (alignment, flip,
+/// rotate, arrows between objects) are not.
+fn mirrors_in_rtl(icon: Icon) -> bool {
+    matches!(icon, Icon::BackCircle | Icon::ChevronLeft | Icon::ChevronRight | Icon::Undo | Icon::Redo | Icon::DecreaseIndent | Icon::IncreaseIndent)
 }
 
 // ---------------------------------------------------------------------------------------------
@@ -402,6 +410,8 @@ struct Pen<'a> {
     sw: f32,
     ink: Color32,
     dis: bool,
+    /// Draw mirrored left to right (24 design units wide).
+    flip: bool,
 }
 
 fn rad(deg: f32) -> f32 {
@@ -549,6 +559,7 @@ fn triangulate(pts: &[Pos2]) -> Vec<[u32; 3]> {
 
 impl Pen<'_> {
     fn pt(&self, (x, y): P2) -> Pos2 {
+        let x = if self.flip { 24.0 - x } else { x };
         pos2(self.o.x + x * self.k, self.o.y + y * self.k)
     }
 

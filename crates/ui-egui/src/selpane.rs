@@ -6,7 +6,7 @@
 use std::collections::HashSet;
 
 use deckcraft_model::Shape;
-use egui::{Align2, CornerRadius, Id, Rect, Sense, Stroke, Ui, WidgetInfo, WidgetType, pos2, vec2};
+use egui::{CornerRadius, Id, Rect, Sense, Stroke, Ui, WidgetInfo, WidgetType, pos2, vec2};
 use serde_json::json;
 
 use crate::SlideApp;
@@ -102,7 +102,7 @@ fn small_icon_button(ui: &mut Ui, icon: Icon, label: &str, enabled: bool) -> egu
     }
     ui.painter().rect_stroke(rect, CornerRadius::same(4), Stroke::new(1.0, t.border), egui::StrokeKind::Inside);
     icons::paint(ui.painter(), rect.shrink(4.0), icon, t.text, !enabled);
-    resp.on_hover_text(label)
+    resp.on_hover_text(crate::i18n::tr(label))
 }
 
 pub fn show(app: &mut SlideApp, ui: &mut Ui) {
@@ -113,13 +113,13 @@ pub fn show(app: &mut SlideApp, ui: &mut Ui) {
     let has_sel = !selected.is_empty();
 
     ui.horizontal(|ui| {
-        if ui.add(egui::Button::new("Show All").stroke(Stroke::new(1.0, t.border))).clicked() {
+        if ui.add(egui::Button::new(crate::i18n::tr("Show All")).stroke(Stroke::new(1.0, t.border))).clicked() {
             run(app, "selection.showAll", json!({}));
         }
-        if ui.add(egui::Button::new("Hide All").stroke(Stroke::new(1.0, t.border))).clicked() {
+        if ui.add(egui::Button::new(crate::i18n::tr("Hide All")).stroke(Stroke::new(1.0, t.border))).clicked() {
             run(app, "selection.hideAll", json!({}));
         }
-        ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+        ui.with_layout(crate::rtl::far_side(ui, egui::Align::Center), |ui| {
             if small_icon_button(ui, Icon::ChevronDown, "Send Backward", has_sel).clicked() {
                 run(app, "arrange.sendBackward", json!({}));
             }
@@ -152,14 +152,18 @@ pub fn show(app: &mut SlideApp, ui: &mut Ui) {
         } else if resp.hovered() {
             painter.rect_filled(r, CornerRadius::same(3), t.hover);
         }
-        let x0 = r.min.x + 4.0 + INDENT * row.depth as f32;
+        // Names lead (from the right in a mirrored window); the eye and padlock end the row.
+        let rtl = crate::rtl::on();
+        let x0 = crate::rtl::lead_x(rtl, r, 4.0 + INDENT * row.depth as f32);
+        let step = |dx: f32| if rtl { x0 - dx } else { x0 + dx };
         // Group chevron.
         if row.group {
             let open = !app.selpane.collapsed.contains(&row.id);
-            let cr = Rect::from_center_size(pos2(x0 + 6.0, r.center().y), vec2(14.0, 14.0));
+            let cr = Rect::from_center_size(pos2(step(6.0), r.center().y), vec2(14.0, 14.0));
             let cresp = ui.interact(cr, ui.id().with(("fold", row.id)), Sense::click());
             let label = format!("{} {}", if open { "Collapse" } else { "Expand" }, row.name);
             cresp.widget_info(|| WidgetInfo::labeled(WidgetType::Button, true, &label));
+            // A folded group points the way the names read; the chevron mirrors itself.
             icons::paint(&painter, cr, if open { Icon::ChevronDown } else { Icon::ChevronRight }, t.text_dim, false);
             if cresp.clicked() {
                 if open {
@@ -169,10 +173,14 @@ pub fn show(app: &mut SlideApp, ui: &mut Ui) {
                 }
             }
         }
-        let name_x = x0 + 16.0;
-        let eye = Rect::from_center_size(pos2(r.max.x - 34.0, r.center().y), vec2(16.0, 16.0));
-        let lock = Rect::from_center_size(pos2(r.max.x - 12.0, r.center().y), vec2(16.0, 16.0));
-        let name_rect = Rect::from_min_max(pos2(name_x, r.min.y + 2.0), pos2(eye.min.x - 6.0, r.max.y - 2.0));
+        let name_x = step(16.0);
+        let eye = Rect::from_center_size(pos2(crate::rtl::trail_x(rtl, r, 34.0), r.center().y), vec2(16.0, 16.0));
+        let lock = Rect::from_center_size(pos2(crate::rtl::trail_x(rtl, r, 12.0), r.center().y), vec2(16.0, 16.0));
+        let name_rect = if rtl {
+            Rect::from_min_max(pos2(eye.max.x + 6.0, r.min.y + 2.0), pos2(name_x, r.max.y - 2.0))
+        } else {
+            Rect::from_min_max(pos2(name_x, r.min.y + 2.0), pos2(eye.min.x - 6.0, r.max.y - 2.0))
+        };
         let renaming = app.selpane.renaming.as_ref().filter(|(id, _)| *id == row.id).map(|(_, s)| s.clone());
         if let Some(mut buf) = renaming {
             let edit_id = ui.id().with(("rename", row.id));
@@ -199,7 +207,7 @@ pub fn show(app: &mut SlideApp, ui: &mut Ui) {
             }
         } else {
             let color = if row.dimmed { t.text_faint } else { t.text };
-            painter.text(pos2(name_x, r.center().y), Align2::LEFT_CENTER, &row.name, theme::font(12.5), color);
+            painter.text(pos2(name_x, r.center().y), crate::rtl::lead_center(rtl), crate::bidi::visual(&row.name), theme::font(12.5), color);
         }
         // Eye and padlock.
         let ink = if row.dimmed { t.text_faint } else { t.text_dim };
@@ -355,29 +363,29 @@ fn keys(app: &mut SlideApp, ui: &Ui, rows: &[Row], selected: &[u32], focused: u3
 }
 
 fn context_menu(app: &mut SlideApp, resp: &egui::Response, row: &Row) {
-    resp.context_menu(|ui| {
+    crate::rtl::context_menu(resp, |ui| {
         for (label, cmd) in [
             ("Bring to Front", "arrange.bringToFront"),
             ("Bring Forward", "arrange.bringForward"),
             ("Send Backward", "arrange.sendBackward"),
             ("Send to Back", "arrange.sendToBack"),
         ] {
-            if ui.button(label).clicked() {
+            if ui.button(crate::i18n::tr(label)).clicked() {
                 run(app, cmd, json!({"ids": [row.id]}));
                 ui.close();
             }
         }
         ui.separator();
-        if ui.button("Rename").clicked() {
+        if ui.button(crate::i18n::tr("Rename")).clicked() {
             app.selpane.renaming = Some((row.id, row.name.clone()));
             app.selpane.rename_started = false;
             ui.close();
         }
-        if ui.button(if row.hidden { "Show" } else { "Hide" }).clicked() {
+        if ui.button(crate::i18n::tr(if row.hidden { "Show" } else { "Hide" })).clicked() {
             run(app, "shape.visible", json!({"id": row.id, "visible": row.hidden}));
             ui.close();
         }
-        if ui.button(if row.locked { "Unlock" } else { "Lock" }).clicked() {
+        if ui.button(crate::i18n::tr(if row.locked { "Unlock" } else { "Lock" })).clicked() {
             run(app, "shape.lock", json!({"id": row.id}));
             ui.close();
         }

@@ -271,7 +271,7 @@ pub fn contributors_ui(ui: &mut egui::Ui) {
 }
 
 fn table(ui: &mut egui::Ui, list: &[&Contributor], v: &mut View) {
-    egui::Grid::new("credits_table").striped(true).num_columns(SortKey::ALL.len()).show(ui, |ui| {
+    crate::rtl::grid(ui, egui::Grid::new("credits_table").striped(true).num_columns(SortKey::ALL.len()), |ui| {
         for k in SortKey::ALL {
             let arrow = if v.key == k { if v.ascending { " ▲" } else { " ▼" } } else { "" };
             if ui
@@ -312,7 +312,7 @@ pub fn models_ui(ui: &mut egui::Ui) {
     }
     let assisted: u64 = MODELS.iter().map(|m| m.commits).max().unwrap_or(0).max(1);
     egui::ScrollArea::both().auto_shrink([false, false]).show(ui, |ui| {
-        egui::Grid::new("credits_models").striped(true).num_columns(6).show(ui, |ui| {
+        crate::rtl::grid(ui, egui::Grid::new("credits_models").striped(true).num_columns(6), |ui| {
             for h in ["Company", "Model", "Version", "Commits", "% of all commits", "Lines +/−"] {
                 ui.label(RichText::new(crate::i18n::tr(h)).strong());
             }

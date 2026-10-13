@@ -621,7 +621,7 @@ fn draw_preview(app: &SlideApp, p: &egui::Painter, xf: Xf, x: Xfrm, t: &Tokens) 
 }
 
 fn context_menu(app: &mut SlideApp, resp: &egui::Response) {
-    resp.context_menu(|ui| {
+    crate::rtl::context_menu(resp, |ui| {
         let has_sel = app.session.active().is_some_and(|d| !d.selection.shapes.is_empty());
         for (l, id) in [("Cut", "edit.cut"), ("Copy", "edit.copy"), ("Paste", "edit.paste")] {
             if ui.add_enabled(crate::ribbon::enabled(app, id), egui::Button::new(crate::i18n::tr(l))).clicked() {
@@ -676,7 +676,7 @@ fn context_menu(app: &mut SlideApp, resp: &egui::Response) {
                     .and_then(|d| d.doc.masters.first().map(|m| m.layouts.iter().map(|l| (l.name.clone(), l.id.0)).collect()))
                     .unwrap_or_default();
                 for (n, id) in layouts {
-                    if ui.button(n).clicked() {
+                    if ui.button(crate::bidi::visual(&n)).clicked() {
                         let _ = app.run("slide.layout", json!({"layout": id}));
                         ui.close();
                     }
