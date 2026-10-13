@@ -1,6 +1,6 @@
 # UI parity with PowerPoint
 
-> **Last reviewed:** 2026-10-10 · **Last updated:** 2026-10-10 · **Change:** major (created; ribbon, menus, panes, dialogs and interaction compared with PowerPoint 16.113 observations in `plan/powerpoint/`) · **Target:** Microsoft PowerPoint for Mac 16.113 (Microsoft 365)
+> **Last reviewed:** 2026-10-12 · **Last updated:** 2026-10-12 · **Change:** minor (shortcut audit against PowerPoint's Windows and Mac lists) · **Target:** Microsoft PowerPoint for Mac 16.113 (Microsoft 365)
 
 How DeckCraft looks and feels next to PowerPoint: the shell, the ribbon, menus, panes, dialogs,
 direct manipulation, keyboard and precision. Observations of PowerPoint are kept locally in
@@ -58,10 +58,80 @@ AGENTS.md §2). Dimension score: **~60% ready** (estimated), **30–50 h** to pa
 
 ## Keyboard shortcuts
 
-Every common PowerPoint for Mac shortcut is bound (checklist row done): new slide, duplicate,
-group/ungroup, bold/italic/underline, alignment, font size, list levels, Format Painter, show from
-start/current, view switching. Not yet: Cmd+F Find opening a find bar on the slide, Option+drag
-precision without snapping, F6 pane cycling, ribbon KeyTips (Windows).
+PowerPoint's Windows and Mac shortcuts both work wherever they don't collide; where they do,
+DeckCraft follows the platform it runs on (`Session::mac_keys`). F6 / Shift+F6 cycle the slide,
+the notes and the thumbnails. Not yet: Find and Replace (Cmd+F opens command search), the Font
+dialog, Print, Paste Special, ribbon KeyTips (Windows), the outline-level keys. The audit below
+lists every row.
+
+### Shortcut audit
+
+Checked against Microsoft's published "Keyboard shortcuts in PowerPoint" (Windows and Mac tables)
+and "Use keyboard shortcuts to deliver PowerPoint presentations", 2026-10-12. Bindings live in
+`crates/engine/src/keys.rs` (`Session::key`: editing, objects, slides and the `EXTRA_SHORTCUTS`
+table of platform keys), each command's own `shortcut` in `crates/engine/src/cmd/*`,
+`menus::ui_shortcut` (views, panes, dialogs, the show, file dialogs) and `show.rs` (keys during a
+show). "Ctrl" means Cmd on a Mac unless the Mac column says otherwise; a shifted symbol matches the
+key it's typed on (Ctrl+Shift+] wherever `}` is). Coverage of the 192 listed shortcuts (Windows 87,
+Mac 70, slide show 35): **68 before this audit, 150 after** (plus 3 partial). Several "present"
+punctuation keys (Ctrl+], Ctrl+Shift+>, Ctrl+Shift+=…) never fired from the keyboard before: egui
+names the key `CloseBracket` and the registry `]`.
+
+| Shortcut (Windows) | Mac | Action | Status |
+|---|---|---|---|
+| Ctrl+N, Ctrl+O, Ctrl+S, Ctrl+W, Ctrl+Z / Y, Ctrl+X / C / V, Ctrl+A, Ctrl+K | Cmd | file, clipboard, undo/redo, select all, hyperlink | present |
+| Ctrl+B / I / U, Ctrl+L / E / R / J, Ctrl+Shift+C / V, Shift+F3, Ctrl+Space | Cmd; Control+Space | character and paragraph format, Format Painter, Change Case, clear formatting | present |
+| F5, Shift+F5, Shift+F9, Alt+F9, Ctrl+F1 | Cmd+Shift+Return, Cmd+Return, Shift+F9 | show from start / current, gridlines, guides, ribbon | present |
+| Tab / Shift+Tab, Esc, arrows, Alt+Shift+C / V, Alt+P | same; Cmd+Option+G / Shift+G / J | cycle objects, deselect, nudge, Animation Painter, play media, group | present |
+| Ctrl+M (Windows), Ctrl+Shift+D | Cmd+Shift+N, Cmd+Shift+D | new slide, duplicate slide | **added** (Cmd+M stays Minimize on a Mac) |
+| Ctrl+G / Ctrl+Shift+G / Ctrl+Shift+J | Cmd+Option+G / Shift+G / J | group, ungroup, regroup | **added** (Windows keys) |
+| Ctrl+Shift+[ / ], Ctrl+[ / ] | Cmd+Shift+B / F, Cmd+Option+Shift+B / F | send to back / bring to front, backward / forward | **added**; Windows Ctrl+Shift+[ / ] keep back / front (Microsoft's table says one step) |
+| Ctrl+= / Ctrl+Shift+=, Ctrl+Shift+> / < | Cmd+Control+= / Cmd+Control+Shift+=, Cmd+Shift+> / < | subscript / superscript, font size | **fixed** (Ctrl+= was Zoom In; Ctrl+Plus and Mac Cmd+= still zoom) |
+| Ctrl+Shift+Z | Cmd+Shift+Z is Redo | clear character formatting | **added** |
+| — | Cmd+Option+Shift+C / V | Animation Painter | **added** |
+| Alt+Left / Right, Ctrl+arrows | Option+Left / Right, Cmd+arrows, Shift+arrows | rotate 15°, nudge 1 pt, resize | **added** |
+| Ctrl+Alt+5 | — | select the first object | **added** |
+| Ctrl+Space | Space | play / pause the selected media | **added** |
+| Ctrl+Left / Right, Ctrl+Up / Down, Ctrl+Home / End, Ctrl+Backspace / Delete | Cmd+Left / Right (line), Cmd+Up / Down (text), Cmd+Delete | word, paragraph, text start/end, delete a word | **added** |
+| Ctrl+Enter | — | next title or body placeholder (a new slide after the last) | **added** |
+| Alt+Shift+Left / Right | Cmd+[ / ] | promote / demote a paragraph | **added** |
+| Ctrl+Tab | Option+Shift+Tab | tab character in a table cell | **added** |
+| Ctrl+Up / Down, Ctrl+Shift+Up / Down | Cmd+Up / Down | move the slide one place / to the start or end | **added** |
+| Alt+F5 | Option+Return | Presenter View | **added** |
+| Ctrl+Shift+Tab | Control+Shift+Tab | thumbnails / outline | **added** |
+| F6 / Shift+F6 | same | slide → notes → thumbnails (arrows change slides there) | **added** |
+| Alt+F10 | Cmd+Shift+1, Cmd+Shift+2 | Selection pane; Format pane, Format Background | **added** |
+| Ctrl+Alt+O | Cmd+Option+O, Cmd+Shift+O | fit to window; recent presentations (start screen) | **added** |
+| — | Cmd+1 / 2 / 3 / 4, Cmd+Option+1, Cmd+Option+Control+G | Normal, Slide Sorter, Notes Page, Outline; Slide Master; guides | **added** |
+| Ctrl+Alt+M, F7, Alt+= | Cmd+Shift+M, Cmd+Option+M | New Comment, Spelling, Equation (placeholder dialog); Paragraph dialog | **added** (they ran without a dialog or errored before) |
+| Ctrl+Q | Cmd+Q (system) | quit, asking about unsaved changes | **added** |
+| Ctrl+F, Ctrl+H, Shift+F4 | Cmd+F, Cmd+Shift+H | Find, Replace, Find Next | missing: no find in slides yet (Ctrl+F opens command search) |
+| Ctrl+T, Ctrl+Shift+F | Cmd+T | Font dialog | missing: no Font dialog |
+| Ctrl+P | Cmd+P | Print | missing: no print |
+| Ctrl+Alt+V | Cmd+Control+V | Paste Special | missing: no Paste Special dialog |
+| F1, Shift+F10, Alt / F10 KeyTips, Shift+F8 | thesaurus, Cmd+Control+Z | help, context menu from the keyboard, KeyTips, Copilot; thesaurus, drawing mode | missing |
+| Alt+Shift+Up / Down, Alt+Shift+1 / + / - | — | move a paragraph, outline levels and collapse | missing |
+| — | Cmd+Shift+P, Cmd+Option+2 / 3, Cmd+Control+F | template gallery (Cmd+Shift+P is command search), handout / notes masters, full screen | missing |
+
+During a slide show:
+
+| Shortcut (Windows) | Mac | Action | Status |
+|---|---|---|---|
+| N, Enter, Page Down, Right, Down, Space / P, Page Up, Left, Up, Backspace, number+Enter, Home, End | same; Fn+Left / Right | move between slides | present |
+| B or . / W or , / Esc or - | Shift+B / Shift+W | black and white screens, end | present |
+| Ctrl+P, Ctrl+A, E | Cmd+P, Cmd+A, Shift+E | pen, arrow, erase the ink | present |
+| H | same | the next slide when it's hidden | **added** |
+| — | Cmd+. | end the show | **added** |
+| Ctrl+H, Ctrl+A | Cmd+I, Control+H, Cmd+A, Cmd+U | hide / show the pointer; hide it when idle | **added** |
+| Alt+P, Ctrl+Space, Alt+Q | same | play/pause, stop the slide's media | **added** |
+| Alt+Shift+Page Down / Up, Alt+Shift+Right / Left | same | seek 3 s; 0.25 s and pause | **added** |
+| Ctrl+L, Ctrl+E, Ctrl+M | Cmd+L | laser, eraser, show/hide ink | missing (open PR #161) |
+| Ctrl+S, Ctrl+T, Shift+F10, F1, Tab | same | all slides, taskbar, menu, help, hotspots | missing |
+| Alt+Up / Down, Alt+U, Alt+Home / End, Alt+J, Alt+X | same | volume, mute, bookmarks, captions, cameo | missing: no volume or bookmark API |
+| T, O, M, R; Presenter View F6, Ctrl+arrows | same | rehearse timings; presenter regions | missing |
+
+Off the Mac, AltGr can arrive as Ctrl+Alt: a Ctrl+Alt key that also types a character is treated
+as text, so AltGr symbols never trigger a shortcut, and Ctrl+Alt+5 never fires while editing.
 
 ## Visual fidelity
 
@@ -87,4 +157,5 @@ imitate Microsoft's. No pixel comparison against PowerPoint screenshots has been
 
 | Date | Change | Summary |
 |---|---|---|
+| 2026-10-12 | minor | Shortcut audit: 150 of 192 PowerPoint shortcuts (68 before); F6 pane cycling; platform keys |
 | 2026-10-10 | major | Created: shell, panes and dialogs, direct manipulation, shortcuts and visual fidelity against PowerPoint 16.113 |

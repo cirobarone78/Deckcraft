@@ -29,6 +29,9 @@ pub struct Show {
     next_tex: Option<(usize, TextureHandle)>,
     blank: Option<Color32>,
     pen: bool,
+    /// The pointer: `None` hides it after a moment without movement, `Some(true)` keeps it hidden
+    /// (Ctrl+H, Cmd+I), `Some(false)` keeps the arrow showing (Ctrl+A / Cmd+A).
+    pointer_hidden: Option<bool>,
     strokes: Vec<Vec<Pos2>>,
     goto: String,
     started: bool,
@@ -85,6 +88,7 @@ impl Show {
             next_tex: None,
             blank: None,
             pen: false,
+            pointer_hidden: None,
             strokes: vec![],
             goto: String::new(),
             started: false,
@@ -255,7 +259,53 @@ pub fn ui(app: &mut SlideApp, ui: &mut Ui) {
     let mut actions: Vec<ShowAction> = vec![];
     for (k, m) in keys {
         use egui::Key::*;
+        let ctrl = m.command || m.ctrl;
+        // Media on the slide: the one playing, else the first (Alt+P, Alt+Q, Alt+Shift+arrows…).
+        let media = if m.alt || ctrl { show_media_target(&doc, show.state.slide, &app.media) } else { None };
+        let seek = |app: &mut SlideApp, by: f64, pause: bool| {
+            if let Some((id, clip)) = &media {
+                let t = app.media.status(*id).map(|s| s.position).unwrap_or(0.0);
+                app.media.seek(&doc, *id, clip, (t + by).max(0.0), crate::media::Owner::Show);
+                if pause {
+                    app.media.pause(*id);
+                }
+            }
+        };
         match k {
+            // Media: Alt+P or Ctrl+Space play/pause, Alt+Q stop, Alt+Shift+Page Down/Up ±3 s,
+            // Alt+Shift+Right/Left ±0.25 s and pause.
+            P if m.alt && !ctrl => {
+                if let Some((id, clip)) = &media {
+                    app.media.toggle(&doc, *id, clip, crate::media::Owner::Show);
+                }
+            }
+            Space if ctrl => {
+                if let Some((id, clip)) = &media {
+                    app.media.toggle(&doc, *id, clip, crate::media::Owner::Show);
+                }
+            }
+            Q if m.alt && !ctrl => {
+                if let Some((id, _)) = &media {
+                    app.media.stop(*id);
+                }
+            }
+            PageDown if m.alt && m.shift => seek(app, 3.0, false),
+            PageUp if m.alt && m.shift => seek(app, -3.0, false),
+            ArrowRight if m.alt && m.shift => seek(app, 0.25, true),
+            ArrowLeft if m.alt && m.shift => seek(app, -0.25, true),
+            // The pointer: Ctrl+H / Cmd+I hide it, Cmd+U hides it again when idle, Ctrl+A shows the arrow.
+            H if ctrl => show.pointer_hidden = Some(true),
+            I if ctrl => show.pointer_hidden = Some(true),
+            U if ctrl => show.pointer_hidden = None,
+            // Cmd+. (Mac) ends the show; . alone is the black screen.
+            Period if ctrl => keep = false,
+            // H: the next slide when it is hidden.
+            H => {
+                let next = show.state.slide + 1;
+                if doc.slides.get(next).is_some_and(|s| s.hidden) {
+                    actions.push(show.state.goto(&doc, next));
+                }
+            }
             Escape | Minus => keep = false,
             ArrowRight | ArrowDown | Space | PageDown | N => {
                 if show.ended {
@@ -279,7 +329,10 @@ pub fn ui(app: &mut SlideApp, ui: &mut Ui) {
                 actions.push(show.state.prev(&doc));
             }
             P if m.command => show.pen = !show.pen,
-            A if m.command => show.pen = false,
+            A if m.command => {
+                show.pen = false;
+                show.pointer_hidden = Some(false);
+            }
             Home => actions.push(show.state.goto(&doc, 0)),
             End => actions.push(show.state.goto(&doc, doc.slides.len().saturating_sub(1))),
             B | Period => show.blank = if show.blank == Some(Color32::BLACK) { None } else { Some(Color32::BLACK) },
@@ -539,7 +592,7 @@ pub fn ui(app: &mut SlideApp, ui: &mut Ui) {
         ctx.set_cursor_icon(egui::CursorIcon::Crosshair);
     } else if link.is_some() {
         ctx.set_cursor_icon(egui::CursorIcon::PointingHand);
-    } else if now - show.last_move > 2.5 && !show.reading {
+    } else if show.pointer_hidden == Some(true) || (show.pointer_hidden.is_none() && now - show.last_move > 2.5 && !show.reading) {
         ctx.set_cursor_icon(egui::CursorIcon::None);
         ctx.request_repaint_after(std::time::Duration::from_millis(500));
     }
@@ -646,6 +699,14 @@ pub fn ui(app: &mut SlideApp, ui: &mut Ui) {
 
 /// Start the media of a newly shown slide: media from the previous slide stops unless it plays
 /// across slides; media set to start automatically plays. Everything stops at the end.
+/// The audio or video the show's media keys act on: the one playing on slide `index`, else the
+/// first.
+fn show_media_target(doc: &Presentation, index: usize, host: &crate::media::MediaHost) -> Option<(ShapeId, deckcraft_model::MediaClip)> {
+    let all = crate::media::slide_media(doc, index);
+    let i = all.iter().position(|(id, ..)| host.is_playing(*id)).unwrap_or(0);
+    all.into_iter().nth(i).map(|(id, _, clip)| (id, clip))
+}
+
 fn show_media(app: &mut SlideApp, show: &mut Show, doc: &Presentation) {
     let cur = if show.ended { None } else { Some(show.state.slide) };
     if show.media_slide == cur {
@@ -842,5 +903,56 @@ mod tests {
         assert_eq!(tr.old.as_ref().map(TextureHandle::id), Some(red.id()));
         assert_eq!(tr.from, Some(0));
         assert!(show.tex.is_none(), "the new slide gets a texture of its own instead of overwriting the old one");
+    }
+
+    fn running_show(hidden: usize) -> egui_kittest::Harness<'static, SlideApp> {
+        let mut s = deckcraft_engine::Session::with_new();
+        for _ in 0..3 {
+            s.execute("slide.new", &json!({"layout": "blank"})).unwrap();
+        }
+        s.execute("slide.hide", &json!({"index": hidden})).unwrap();
+        let mut app = SlideApp::new(s, crate::Services::default());
+        app.ui.presenter_view = false;
+        app.start_show(0, false);
+        let mut h = egui_kittest::Harness::builder().with_size(egui::vec2(800.0, 600.0)).build_ui_state(
+            |ui, app: &mut SlideApp| {
+                app.logic(ui.ctx());
+                app.ui(ui);
+            },
+            app,
+        );
+        h.run_steps(2);
+        h
+    }
+
+    fn key(h: &mut egui_kittest::Harness<'static, SlideApp>, key: egui::Key, modifiers: egui::Modifiers) {
+        h.event(egui::Event::Key { key, physical_key: None, pressed: true, repeat: false, modifiers });
+        h.run_steps(2);
+    }
+
+    fn slide(h: &egui_kittest::Harness<'static, SlideApp>) -> Option<usize> {
+        h.state().show.as_ref().map(|s| s.state.slide)
+    }
+
+    /// H shows the next slide when it is hidden; arrows skip it. Ctrl+H hides the pointer and
+    /// Ctrl+A brings the arrow back; Cmd+. ends the show while . alone blanks it.
+    #[test]
+    fn show_keys_for_hidden_slides_pointer_and_end() {
+        let mut h = running_show(1);
+        key(&mut h, egui::Key::H, egui::Modifiers::NONE);
+        assert_eq!(slide(&h), Some(1), "H: the hidden next slide");
+        key(&mut h, egui::Key::H, egui::Modifiers::NONE);
+        assert_eq!(slide(&h), Some(1), "H does nothing when the next slide isn't hidden");
+        key(&mut h, egui::Key::ArrowLeft, egui::Modifiers::NONE);
+        key(&mut h, egui::Key::ArrowRight, egui::Modifiers::NONE);
+        assert_eq!(slide(&h), Some(2), "arrows skip the hidden slide");
+        key(&mut h, egui::Key::H, egui::Modifiers::COMMAND);
+        assert_eq!(h.state().show.as_ref().and_then(|s| s.pointer_hidden), Some(true));
+        key(&mut h, egui::Key::A, egui::Modifiers::COMMAND);
+        assert_eq!(h.state().show.as_ref().and_then(|s| s.pointer_hidden), Some(false));
+        key(&mut h, egui::Key::Period, egui::Modifiers::NONE);
+        assert!(h.state().show.as_ref().is_some_and(|s| s.blank == Some(Color32::BLACK)));
+        key(&mut h, egui::Key::Period, egui::Modifiers::COMMAND);
+        assert!(h.state().show.is_none(), "Cmd+.: end the show");
     }
 }

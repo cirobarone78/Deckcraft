@@ -129,19 +129,19 @@ impl Default for UiState {
 
 /// UI-only commands (id, label, shortcut, params).
 pub const UI_COMMANDS: &[(&str, &str, Option<&str>, &str)] = &[
-    ("view.normal", "Normal", None, "{}"),
-    ("view.outline", "Outline View", None, "{}"),
-    ("view.sorter", "Slide Sorter", None, "{}"),
-    ("view.notesPage", "Notes Page", None, "{}"),
+    ("view.normal", "Normal", Some("Cmd+1"), "{}"),
+    ("view.outline", "Outline View", Some("Cmd+4"), "{}"),
+    ("view.sorter", "Slide Sorter", Some("Cmd+2"), "{}"),
+    ("view.notesPage", "Notes Page", Some("Cmd+3"), "{}"),
     ("view.reading", "Reading View", None, "{}"),
     ("view.notes", "Notes", None, "{on?: bool}"),
     ("view.ruler", "Ruler", None, "{on?: bool}"),
     ("view.gridlines", "Gridlines", Some("Shift+F9"), "{on?: bool}"),
     ("view.guides", "Guides", Some("Alt+F9"), "{on?: bool}"),
-    ("view.zoomIn", "Zoom In", Some("Cmd+="), "{}"),
+    ("view.zoomIn", "Zoom In", Some("Cmd+Plus"), "{}"),
     ("view.zoomOut", "Zoom Out", Some("Cmd+-"), "{}"),
     ("view.zoom", "Zoom…", None, "{percent}"),
-    ("view.fit", "Fit to Window", None, "{}"),
+    ("view.fit", "Fit to Window", Some("Cmd+Alt+O"), "{}"),
     ("view.pane", "Task Pane", None, "{pane: format|animation|selection|comments|designer|background|null}"),
     ("view.tab", "Ribbon Tab", None, "{tab}"),
     ("view.collapseRibbon", "Collapse the Ribbon", Some("Cmd+F1"), "{}"),
@@ -209,6 +209,8 @@ pub struct SlideApp {
     pub(crate) notes_buf: (u64, usize, String),
     /// Thumbnail pane drag (slide index, current drop index).
     pub(crate) thumb_drag: Option<(usize, usize)>,
+    /// F6 moved the keyboard to the thumbnail pane (arrows change slides; it shows a focus ring).
+    pub(crate) thumbs_focused: bool,
 }
 
 impl SlideApp {
@@ -244,6 +246,7 @@ impl SlideApp {
             quit_confirmed: false,
             notes_buf: (0, usize::MAX, String::new()),
             thumb_drag: None,
+            thumbs_focused: false,
         }
     }
 
@@ -363,6 +366,63 @@ impl SlideApp {
             _ => return Err(format!("unknown UI command `{id}`")),
         }
         Ok(Value::Null)
+    }
+
+    /// Alt+F5 / Option+Return: the show from the current slide, in Presenter View.
+    pub fn start_presenter(&mut self) {
+        self.media.stop_owned(media::Owner::Editor);
+        if let Some(d) = self.session.active() {
+            self.show = Some(show::Show::new(&d.doc, d.selection.slide, false, true));
+        }
+    }
+
+    /// F6 / Shift+F6 (Normal view): move the keyboard between the slide, the notes and the
+    /// thumbnails, in that order.
+    pub(crate) fn cycle_pane(&mut self, ctx: &egui::Context, back: bool) {
+        #[derive(Clone, Copy, PartialEq)]
+        enum Pane {
+            Slide,
+            Notes,
+            Thumbs,
+        }
+        let notes_id = egui::Id::new("notes_edit");
+        let slides = self.session.active().is_some_and(|d| d.selection.target == deckcraft_engine::Target::Slides);
+        let normal = matches!(self.ui.view, ViewMode::Normal | ViewMode::Outline);
+        if !normal {
+            return;
+        }
+        let mut order = vec![Pane::Slide];
+        if self.ui.notes && slides {
+            order.push(Pane::Notes);
+        }
+        order.push(Pane::Thumbs);
+        let cur = if ctx.memory(|m| m.has_focus(notes_id)) {
+            Pane::Notes
+        } else if self.thumbs_focused {
+            Pane::Thumbs
+        } else {
+            Pane::Slide
+        };
+        let n = order.len();
+        let i = order.iter().position(|p| *p == cur).unwrap_or(0);
+        let next = order.get(if back { (i + n - 1) % n } else { (i + 1) % n }).copied().unwrap_or(Pane::Slide);
+        ctx.memory_mut(|m| {
+            if let Some(f) = m.focused() {
+                m.surrender_focus(f);
+            }
+        });
+        self.thumbs_focused = false;
+        match next {
+            Pane::Notes => ctx.memory_mut(|m| m.request_focus(notes_id)),
+            Pane::Thumbs => {
+                // The thumbnail pane works on whole slides: arrows change slides, Ctrl/Cmd+Up/Down move them.
+                self.thumbs_focused = true;
+                if self.session.active().is_some() {
+                    let _ = self.session.execute("edit.deselect", &json!({}));
+                }
+            }
+            Pane::Slide => {}
+        }
     }
 
     pub fn start_show(&mut self, from: usize, reading: bool) {
@@ -607,31 +667,51 @@ impl SlideApp {
 
     /// Keyboard and clipboard for the slide (when no text field has focus).
     fn keyboard(&mut self, ctx: &egui::Context) {
-        if ctx.memory(|m| m.focused().is_some()) || self.dialog.as_ref().is_some_and(|d| d.modal()) || self.palette.is_some() {
+        let mac = ctx.os() == egui::os::OperatingSystem::Mac;
+        self.session.mac_keys = mac;
+        if self.dialog.as_ref().is_some_and(|d| d.modal()) || self.palette.is_some() {
             return;
         }
         let events = ctx.input(|i| i.events.clone());
+        if ctx.input(|i| i.pointer.any_pressed()) || self.session.active().is_some_and(|d| !d.selection.shapes.is_empty()) {
+            self.thumbs_focused = false;
+        }
+        // F6 cycles the panes even from the notes field.
+        let f6 = events.iter().find_map(|e| match e {
+            egui::Event::Key { key: egui::Key::F6, pressed: true, modifiers, .. } => Some(modifiers.shift),
+            _ => None,
+        });
+        if let Some(back) = f6
+            && !self.home_open()
+            && self.session.active().is_some()
+        {
+            self.cycle_pane(ctx, back);
+            return;
+        }
+        if ctx.memory(|m| m.focused().is_some()) {
+            return;
+        }
         if self.home_open() {
             // Only app shortcuts (Open, Command Palette…) and Escape, which goes back to the
             // presentation: typing, pasting or deleting would edit the hidden presentation.
             for e in events {
-                if let egui::Event::Key { key, pressed: true, modifiers, .. } = e {
-                    let mods = Mods { shift: modifiers.shift, alt: modifiers.alt, cmd: modifiers.command || modifiers.ctrl };
+                if let egui::Event::Key { key, physical_key, pressed: true, modifiers, .. } = e {
+                    let mods = mods_of(modifiers, mac);
                     if key == egui::Key::Escape {
                         self.home = None;
                     } else if mods.cmd || mods.alt {
-                        menus::ui_shortcut(self, key, mods);
+                        menus::ui_shortcut(self, ctx, shortcut_key(key, physical_key, modifiers.shift), mods);
                     }
                 }
             }
             self.drain_requests();
             return;
         }
-        for e in events {
+        for (i, e) in events.iter().enumerate() {
             match e {
                 egui::Event::Text(t) => {
                     if self.session.active().is_some_and(|d| d.selection.text.is_some() || d.selection.shapes.len() == 1)
-                        && let Err(e) = self.session.type_text(&t)
+                        && let Err(e) = self.session.type_text(t)
                     {
                         self.set_status(e.to_string());
                     }
@@ -663,9 +743,16 @@ impl SlideApp {
                         self.set_status(e.to_string());
                     }
                 }
-                egui::Event::Key { key, pressed: true, modifiers, .. } => {
-                    let mods = Mods { shift: modifiers.shift, alt: modifiers.alt, cmd: modifiers.command || modifiers.ctrl };
-                    if !self.session.tool.drawing_freeform() && menus::ui_shortcut(self, key, mods) {
+                egui::Event::Key { key, physical_key, pressed: true, modifiers, .. } => {
+                    // AltGr: winit strips Ctrl+Alt from the right Alt key on AltGr layouts, but
+                    // a backend that reports AltGr as Ctrl+Alt sends the character too. A Ctrl+Alt
+                    // key that also types one (µ, [ on some layouts) is text, not a shortcut.
+                    if !mac && modifiers.ctrl && modifiers.alt && matches!(events.get(i + 1), Some(egui::Event::Text(_))) {
+                        continue;
+                    }
+                    let key = shortcut_key(*key, *physical_key, modifiers.shift);
+                    let mods = mods_of(*modifiers, mac);
+                    if !self.session.tool.drawing_freeform() && menus::ui_shortcut(self, ctx, key, mods) {
                         continue;
                     }
                     let name = key_name(key);
@@ -835,6 +922,33 @@ impl SlideApp {
     }
 }
 
+/// Engine modifiers for egui's: Ctrl or Command is `cmd`; on a Mac, Control is also `control`
+/// (PowerPoint for Mac's Command+Control shortcuts).
+pub fn mods_of(m: egui::Modifiers, mac: bool) -> Mods {
+    Mods { shift: m.shift, alt: m.alt, cmd: m.command || m.ctrl, control: mac && m.ctrl }
+}
+
+/// The key a shortcut names. A shifted symbol is the key it's typed on (US layout), so Cmd+Shift+[
+/// and Cmd+Shift+1 match although the key reports `{` or `!`.
+pub fn shortcut_key(key: egui::Key, physical: Option<egui::Key>, shift: bool) -> egui::Key {
+    use egui::Key::*;
+    if !shift {
+        return key;
+    }
+    match key {
+        Exclamationmark | OpenCurlyBracket | CloseCurlyBracket | Questionmark | Colon | Pipe | Plus => physical.unwrap_or(match key {
+            Exclamationmark => Num1,
+            OpenCurlyBracket => OpenBracket,
+            CloseCurlyBracket => CloseBracket,
+            Questionmark => Slash,
+            Colon => Semicolon,
+            Pipe => Backslash,
+            _ => Equals,
+        }),
+        _ => key,
+    }
+}
+
 /// Engine key name for an egui key.
 pub fn key_name(key: egui::Key) -> &'static str {
     use egui::Key::*;
@@ -937,5 +1051,155 @@ mod tests {
         let mut app = SlideApp::new(Session::new(), Services::default());
         app.run("app.home", json!({})).unwrap();
         assert!(!app.home_open() && app.home.is_none(), "with nothing open the start screen shows anyway");
+    }
+
+    type Os = egui::os::OperatingSystem;
+
+    fn harness(os: Os) -> egui_kittest::Harness<'static, SlideApp> {
+        let mut h = egui_kittest::Harness::builder().with_size(egui::vec2(1200.0, 800.0)).build_ui_state(
+            |ui, app: &mut SlideApp| {
+                app.logic(ui.ctx());
+                app.ui(ui);
+            },
+            SlideApp::new(Session::with_new(), Services::default()),
+        );
+        h.ctx.set_os(os);
+        h.run_steps(2);
+        h
+    }
+
+    /// A key press as egui-winit reports it (`physical` is the key's US-layout position).
+    fn press(h: &mut egui_kittest::Harness<'static, SlideApp>, key: egui::Key, physical: Option<egui::Key>, modifiers: egui::Modifiers) {
+        h.event(egui::Event::Key { key, physical_key: physical, pressed: true, repeat: false, modifiers });
+        h.event(egui::Event::Key { key, physical_key: physical, pressed: false, repeat: false, modifiers });
+        h.run_steps(2);
+    }
+
+    fn mods(ctrl: bool, shift: bool, alt: bool, mac_cmd: bool) -> egui::Modifiers {
+        egui::Modifiers { alt, ctrl, shift, mac_cmd, command: mac_cmd || ctrl }
+    }
+
+    fn n_slides(h: &egui_kittest::Harness<'static, SlideApp>) -> usize {
+        h.state().session.active().unwrap().doc.slides.len()
+    }
+
+    fn dialog(h: &mut egui_kittest::Harness<'static, SlideApp>) -> Option<String> {
+        h.state_mut().dialog.take().map(|d| d.id)
+    }
+
+    /// Type a title and select its shape (formatting keys then apply to all its text).
+    fn select_title(h: &mut egui_kittest::Harness<'static, SlideApp>) {
+        let id = h.state().session.active().unwrap().current_slide().unwrap().shapes[0].id.0;
+        let s = &mut h.state_mut().session;
+        s.execute("edit.select", &json!({"ids": [id]})).unwrap();
+        s.execute("text.edit", &json!({})).unwrap();
+        s.execute("text.insert", &json!({"text": "H2O"})).unwrap();
+        s.execute("edit.select", &json!({"ids": [id]})).unwrap();
+    }
+
+    fn subscript(h: &mut egui_kittest::Harness<'static, SlideApp>) -> bool {
+        h.state_mut().session.execute("format.state", &json!({})).unwrap()["subscript"] == true
+    }
+
+    /// PowerPoint for Windows keys through the real key path: egui events → `menus::ui_shortcut`
+    /// → `Session::key`.
+    #[test]
+    fn windows_shortcuts_through_the_ui() {
+        use egui::Key::*;
+        let mut h = harness(Os::Windows);
+        let ctrl = mods(true, false, false, false);
+        press(&mut h, M, None, ctrl);
+        assert_eq!(n_slides(&h), 2, "Ctrl+M: new slide");
+        press(&mut h, Num2, None, ctrl);
+        assert_eq!(h.state().ui.view, ViewMode::Sorter);
+        press(&mut h, Num1, None, ctrl);
+        assert_eq!(h.state().ui.view, ViewMode::Normal);
+
+        // egui names punctuation keys (`CloseBracket`) and reports Shift+[ as `{`.
+        let a = h.state_mut().session.execute("shape.insert", &json!({"preset": "rect", "rect": [10, 10, 50, 50]})).unwrap()["id"].as_u64().unwrap();
+        h.state_mut().session.execute("shape.insert", &json!({"preset": "rect", "rect": [90, 10, 50, 50]})).unwrap();
+        h.state_mut().session.execute("edit.select", &json!({"ids": [a]})).unwrap();
+        let order = |h: &egui_kittest::Harness<'static, SlideApp>| {
+            h.state().session.active().unwrap().current_slide().unwrap().shapes.iter().map(|s| s.id.0 as u64).collect::<Vec<_>>()
+        };
+        press(&mut h, CloseBracket, Some(CloseBracket), ctrl);
+        assert_eq!(order(&h).last(), Some(&a), "Ctrl+]: Bring Forward");
+        press(&mut h, OpenCurlyBracket, Some(OpenBracket), mods(true, true, false, false));
+        assert_eq!(order(&h).first(), Some(&a), "Ctrl+Shift+[: Send to Back");
+        press(&mut h, ArrowRight, None, mods(false, false, true, false));
+        assert_eq!(
+            h.state().session.active().unwrap().shape(deckcraft_model::ShapeId(a as u32)).unwrap().xfrm.unwrap().rot,
+            15.0,
+            "Alt+Right rotates"
+        );
+
+        press(&mut h, F7, None, egui::Modifiers::NONE);
+        assert_eq!(dialog(&mut h).as_deref(), Some("spelling"));
+        // AltGr arrives as Ctrl+Alt: AltGr+M types µ on some layouts and isn't New Comment. The
+        // key and its text come in the same frame.
+        let altgr = mods(true, false, true, false);
+        h.input_mut().events.extend([
+            egui::Event::Key { key: M, physical_key: Some(M), pressed: true, repeat: false, modifiers: altgr },
+            egui::Event::Text("µ".into()),
+        ]);
+        h.run_steps(2);
+        assert_eq!(dialog(&mut h), None);
+        press(&mut h, M, Some(M), mods(true, false, true, false));
+        assert_eq!(dialog(&mut h).as_deref(), Some("comment"), "Ctrl+Alt+M: New Comment");
+
+        // Ctrl+= is Subscript, not zoom, and Ctrl+Shift+= (reported as `+`) Superscript.
+        select_title(&mut h);
+        press(&mut h, Equals, Some(Equals), ctrl);
+        assert!(subscript(&mut h));
+        assert_eq!(h.state().ui.zoom, None);
+        press(&mut h, Plus, Some(Equals), mods(true, true, false, false));
+        assert_eq!(h.state_mut().session.execute("format.state", &json!({})).unwrap()["superscript"], true);
+
+        press(&mut h, F5, None, mods(false, false, true, false));
+        assert!(h.state().show.as_ref().is_some_and(|s| s.presenter), "Alt+F5: Presenter View");
+    }
+
+    /// PowerPoint for Mac keys where they differ from Windows.
+    #[test]
+    fn mac_shortcuts_through_the_ui() {
+        use egui::Key::*;
+        let mut h = harness(Os::Mac);
+        let cmd = mods(false, false, false, true);
+        press(&mut h, M, None, cmd);
+        assert_eq!(n_slides(&h), 1, "Cmd+M is the system's Minimize, not New Slide");
+        press(&mut h, N, None, mods(false, true, false, true));
+        assert_eq!(n_slides(&h), 2, "Cmd+Shift+N: new slide");
+        press(&mut h, M, None, mods(false, false, true, true));
+        assert_eq!(dialog(&mut h).as_deref(), Some("paragraph"), "Cmd+Option+M: Paragraph");
+        press(&mut h, M, None, mods(false, true, false, true));
+        assert_eq!(dialog(&mut h).as_deref(), Some("comment"), "Cmd+Shift+M: New Comment");
+        select_title(&mut h);
+        press(&mut h, Equals, None, cmd);
+        assert!(h.state().ui.zoom.is_some(), "Cmd+= zooms in");
+        assert!(!subscript(&mut h));
+        press(&mut h, Equals, None, mods(true, false, false, true));
+        assert!(subscript(&mut h), "Cmd+Control+=: Subscript");
+        press(&mut h, Num1, Some(Num1), mods(false, true, false, true));
+        assert_eq!(h.state().ui.pane.as_deref(), Some("format"), "Cmd+Shift+1: Format pane");
+    }
+
+    /// F6 / Shift+F6 move the keyboard between the slide, the notes and the thumbnails.
+    #[test]
+    fn f6_cycles_the_panes() {
+        let mut h = harness(Os::Windows);
+        h.state_mut().session.execute("slide.new", &json!({})).unwrap();
+        h.state_mut().session.execute("slide.go", &json!({"index": 0})).unwrap();
+        let notes = egui::Id::new("notes_edit");
+        press(&mut h, egui::Key::F6, None, egui::Modifiers::NONE);
+        assert!(h.ctx.memory(|m| m.has_focus(notes)), "slide → notes");
+        press(&mut h, egui::Key::F6, None, egui::Modifiers::NONE);
+        assert!(!h.ctx.memory(|m| m.has_focus(notes)));
+        assert!(h.state().thumbs_focused, "notes → thumbnails");
+        press(&mut h, egui::Key::ArrowDown, None, egui::Modifiers::NONE);
+        assert_eq!(h.state().session.active().unwrap().selection.slide, 1, "arrows change slides in the thumbnail pane");
+        press(&mut h, egui::Key::F6, None, egui::Modifiers::NONE);
+        assert!(!h.state().thumbs_focused, "thumbnails → slide");
+        press(&mut h, egui::Key::F6, None, mods(false, true, false, false));
+        assert!(h.state().thumbs_focused, "Shift+F6 goes back");
     }
 }

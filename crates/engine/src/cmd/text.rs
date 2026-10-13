@@ -17,7 +17,7 @@ pub fn specs() -> Vec<CommandSpec> {
         cmd!(noundo "text.exit", "Stop Editing Text", [], None, "{}", has_doc, exit),
         cmd!("text.insert", "Type Text", [], None, "{text} (\\n = new paragraph, \\u000b = line break)", has_text, insert),
         cmd!("text.delete", "Delete Text", [], Some("Backspace"), "{dir?: backward|forward|wordBackward|wordForward}", has_text, delete),
-        cmd!(noundo "text.move", "Move Insertion Point", [], None, "{to: left|right|up|down|wordLeft|wordRight|lineStart|lineEnd|paraStart|paraEnd|start|end, extend?: bool}", has_text, move_caret),
+        cmd!(noundo "text.move", "Move Insertion Point", [], None, "{to: left|right|up|down|wordLeft|wordRight|lineStart|lineEnd|paraStart|paraEnd|paraNext|start|end, extend?: bool} (paraStart at a paragraph start goes up one paragraph)", has_text, move_caret),
         cmd!(noundo "text.select", "Select Text", [], None, "{anchor: [p, c], caret: [p, c]}", has_text, select),
         cmd!(noundo "text.selectAll", "Select All Text", [], None, "{}", has_text, select_all),
         cmd!(noundo "text.selectWord", "Select Word", [], None, "{at?: [p, c]}", has_text, select_word),
@@ -399,7 +399,12 @@ fn move_caret(s: &mut Session, p: &Value) -> Result<Value> {
         "right" => ed::char_move(&body, caret, true),
         "wordLeft" => ed::word_move(&body, caret, false),
         "wordRight" => ed::word_move(&body, caret, true),
+        // At the start of a paragraph, up one paragraph (Option+Up / Ctrl+Up).
+        "paraStart" if caret.1 == 0 => (caret.0.saturating_sub(1), 0),
         "paraStart" => (caret.0, 0),
+        // Down one paragraph: the start of the next (Ctrl+Down), or the end of the text.
+        "paraNext" if caret.0 + 1 < body.paragraphs.len() => (caret.0 + 1, 0),
+        "paraNext" => ed::end(&body),
         "paraEnd" => (caret.0, body.paragraphs.get(caret.0).map(|x| x.char_len()).unwrap_or(0)),
         "start" => (0, 0),
         "end" => ed::end(&body),

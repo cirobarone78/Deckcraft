@@ -82,7 +82,7 @@ pub fn inspect(app: &SlideApp, ctx: &egui::Context) -> Value {
 }
 
 fn key_from(name: &str) -> Option<egui::Key> {
-    egui::Key::from_name(name).or(match name.to_ascii_lowercase().as_str() {
+    egui::Key::from_name(name).or_else(|| egui::Key::from_name(&name.to_ascii_uppercase())).or(match name.to_ascii_lowercase().as_str() {
         "enter" | "return" => Some(egui::Key::Enter),
         "esc" | "escape" => Some(egui::Key::Escape),
         "delete" => Some(egui::Key::Delete),
@@ -141,7 +141,14 @@ pub fn handle(app: &mut SlideApp, ctx: &egui::Context, req: &ControlRequest) -> 
                 app.synthetic.push(egui::Event::Key { key, physical_key: None, pressed: false, repeat: false, modifiers: egui::Modifiers::NONE });
                 return ok(json!({"show": true}));
             }
-            wrap(app.session.key(k, mods_from(p)).map_err(|e| e.to_string()))
+            // The UI's own shortcuts (views, the show, panes, dialogs) first, as from the keyboard.
+            let mods = mods_from(p);
+            if let Some(key) = key_from(k)
+                && crate::menus::ui_shortcut(app, ctx, key, mods)
+            {
+                return ok(json!({"handled": true, "ui": true}));
+            }
+            wrap(app.session.key(k, mods).map_err(|e| e.to_string()))
         }
         "ui.text" => {
             let Some(t) = s("text") else { return err("missing `text`") };
@@ -312,7 +319,7 @@ pub fn handle(app: &mut SlideApp, ctx: &egui::Context, req: &ControlRequest) -> 
 
 fn mods_from(p: &Value) -> Mods {
     let b = |n: &str| p.get(n).and_then(Value::as_bool).unwrap_or(false);
-    Mods { shift: b("shift"), alt: b("alt"), cmd: b("cmd") || b("ctrl") }
+    Mods { shift: b("shift"), alt: b("alt"), cmd: b("cmd") || b("ctrl"), control: b("control") }
 }
 
 fn deckcraft_mcp_kind(k: &str) -> Option<deckcraft_engine::PointerKind> {

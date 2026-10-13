@@ -28,7 +28,11 @@ pub enum PointerKind {
 pub struct Mods {
     pub shift: bool,
     pub alt: bool,
+    /// Command on macOS, Ctrl elsewhere (a Mac's Control key also sets it).
     pub cmd: bool,
+    /// The Control key on a Mac, for PowerPoint for Mac's Command+Control combinations
+    /// (Cmd+Control+= subscript). Always false elsewhere, where Ctrl is `cmd`.
+    pub control: bool,
 }
 
 #[derive(Clone, Copy, Debug, Default, Serialize, Deserialize)]

@@ -1,6 +1,6 @@
 # Slide show and presenter view: parity with PowerPoint
 
-> **Last reviewed:** 2026-10-10 · **Last updated:** 2026-10-10 · **Change:** major (created; measured from `crates/ui-egui/src/show.rs` and `crates/anim/src/show.rs` against PowerPoint 16.113's Slide Show tab and menu) · **Target:** Microsoft PowerPoint for Mac 16.113 (Microsoft 365)
+> **Last reviewed:** 2026-10-12 · **Last updated:** 2026-10-12 · **Change:** minor (show keys checked against PowerPoint's published slide-show shortcuts) · **Target:** Microsoft PowerPoint for Mac 16.113 (Microsoft 365)
 
 Presenting is the job PowerPoint is hired for. This doc covers the show window, presenter view,
 rehearsal and recording. Transition and animation playback are in
@@ -13,12 +13,14 @@ ready** (estimated), **10–16 h** to parity.
 | Feature | PowerPoint | DeckCraft | Notes |
 |---|---|---|---|
 | Play from Start / from Current Slide (F5, Shift+F5, Cmd+Enter) | yes | yes | |
+| Presenter View from the keyboard (Alt+F5, Option+Return) | yes | yes | |
+| Show keys from PowerPoint's published list (Windows and Mac) | yes | most | H shows a hidden next slide; Cmd+. ends; Ctrl+H / Cmd+I hide the pointer, Ctrl+A / Cmd+A show it, Cmd+U hides it when idle; Alt+P / Ctrl+Space, Alt+Q, Alt+Shift+Page Down/Up and Alt+Shift+arrows play, stop and seek the slide's media. Missing: volume and mute, bookmarks, captions, Ctrl+S All Slides, rehearsal keys (T/O/M/R), Presenter View region keys. Audit: [ui-parity.md](ui-parity.md#shortcut-audit) |
 | Next/previous by click, arrows, Space, Page Up/Down, Enter, Backspace | yes | yes | #17 reported arrows not working in v0.3.0 AppImage; recheck |
 | Go to slide (number + Enter), first/last | yes | yes | |
 | Black / white screen (B / W) | yes | yes | |
 | End screen, Esc to leave | yes | yes | |
 | Step clock: a click after a long pause plays its step (#11) | yes | yes | |
-| Hidden slides skipped | yes | yes | |
+| Hidden slides skipped | yes | yes | H shows the next one |
 | Hyperlinks and action settings followed (slides, web, mail, End Show, Last Viewed) | yes | yes | Only `http(s)` and `mailto` open outside the show, by design (`safe_url`) |
 | Media playback with controls, play across slides, full-screen video | yes | yes | WMA/WMV not decodable |
 | Animated GIFs play; pause from their corner button | yes | yes (#39) | |
@@ -73,4 +75,5 @@ Reading View in a window with navigation: present (checklist row done).
 
 | Date | Change | Summary |
 |---|---|---|
+| 2026-10-12 | minor | Show keys: H, Cmd+., pointer hide/show, media play/stop/seek, Presenter View keys |
 | 2026-10-10 | major | Created: show, presenter view, rehearse and record, compared with PowerPoint 16.113's Slide Show tab and menu |

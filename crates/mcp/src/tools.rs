@@ -47,7 +47,7 @@ fn boolean(desc: &str) -> Value {
     json!({"type": "boolean", "description": desc})
 }
 fn mods_schema() -> Value {
-    json!({"type": "object", "description": "Modifier keys (cmd = Command on macOS / Ctrl elsewhere; alt = Option)", "properties": {"shift": {"type": "boolean"}, "alt": {"type": "boolean"}, "cmd": {"type": "boolean"}}})
+    json!({"type": "object", "description": "Modifier keys (cmd = Command on macOS / Ctrl elsewhere; alt = Option; control = the Mac Control key, for Cmd+Control shortcuts)", "properties": {"shift": {"type": "boolean"}, "alt": {"type": "boolean"}, "cmd": {"type": "boolean"}, "control": {"type": "boolean"}}})
 }
 fn obj(props: Value, required: &[&str]) -> Value {
     let mut o = json!({"type": "object", "properties": props});
