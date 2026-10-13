@@ -163,6 +163,114 @@ pub fn format(code: &str, v: f64, lang: Option<&str>) -> String {
         return s.trim().to_string();
     };
     let percent = toks.contains(&Tok::Percent);
+    let lits = |ts: &[Tok]| -> String {
+        ts.iter()
+            .filter_map(|t| match t {
+                Tok::Lit(s) => Some(s.clone()),
+                Tok::Percent => Some("%".into()),
+                _ => None,
+            })
+            .collect()
+    };
+    // Scientific notation (`0.00E+00`, `0.00E-00`): the exponent's digit placeholders are
+    // not fractional digits, and the `E` is not a literal. Parse it explicitly; a quoted
+    // or stray `E` only counts when what follows is a sign and/or at least two exponent
+    // digits ending at the format's last digit placeholder, as in real format codes.
+    let sci = (first + 1..last).find_map(|i| {
+        let Tok::Lit(marker) = toks.get(i)? else { return None };
+        if marker.as_str() != "E" && marker.as_str() != "e" {
+            return None;
+        }
+        let rest = toks.get(i + 1..=last)?;
+        let (always_sign, exp_toks) = match rest.first() {
+            Some(Tok::Lit(s)) if s == "+" => (true, rest.get(1..)?),
+            Some(Tok::Lit(s)) if s == "-" => (false, rest.get(1..)?),
+            _ => (false, rest),
+        };
+        if exp_toks.is_empty() || !exp_toks.iter().all(|t| matches!(t, Tok::Digit(_))) {
+            return None;
+        }
+        let signed_or_wide = always_sign || matches!(rest.first(), Some(Tok::Lit(s)) if s == "-") || exp_toks.len() >= 2;
+        if !signed_or_wide || !toks.get(first..i)?.iter().any(|t| matches!(t, Tok::Digit(_))) {
+            return None;
+        }
+        let min_exp = exp_toks.iter().filter(|t| **t == Tok::Digit('0')).count();
+        Some((i, marker.clone(), always_sign, min_exp))
+    });
+    if let Some((idx, marker, always_sign, min_exp)) = sci {
+        let mant_toks = toks.get(first..idx).unwrap_or(&[]);
+        let dot = mant_toks.iter().position(|t| *t == Tok::Dot);
+        let (int_part, frac_part) = match dot {
+            Some(d) => (mant_toks.get(..d).unwrap_or(&[]), mant_toks.get(d + 1..).unwrap_or(&[])),
+            None => (mant_toks, &[][..]),
+        };
+        let min_int = int_part.iter().filter(|t| **t == Tok::Digit('0')).count();
+        let frac_digits: Vec<char> = frac_part.iter().filter_map(|t| if let Tok::Digit(c) = t { Some(*c) } else { None }).collect();
+        let max_frac = frac_digits.len();
+        let min_frac = frac_digits.iter().filter(|c| **c == '0').count();
+        let mut mant = v * if percent { 100.0 } else { 1.0 };
+        if !mant.is_finite() {
+            mant = 0.0;
+        }
+        let mut exponent: i32 = 0;
+        if mant != 0.0 {
+            exponent = mant.log10().floor() as i32;
+            mant /= 10f64.powi(exponent);
+            // Floating-point guard: division should land in [1, 10), but nudge on error.
+            for _ in 0..4 {
+                if mant >= 10.0 {
+                    mant /= 10.0;
+                    exponent += 1;
+                } else if mant < 1.0 {
+                    mant *= 10.0;
+                    exponent -= 1;
+                } else {
+                    break;
+                }
+            }
+        }
+        let mut s = format!("{mant:.max_frac$}");
+        // Rounding can push 9.99… up to 10.00…: renormalise to 1.00… with exponent + 1.
+        if s.split('.').next() == Some("10") {
+            exponent += 1;
+            s = format!("{:.max_frac$}", 1.0f64);
+        }
+        let (ip, fp) = s.split_once('.').unwrap_or((s.as_str(), ""));
+        let mut fp = fp.to_string();
+        while fp.len() > min_frac && fp.ends_with('0') {
+            fp.pop();
+        }
+        let ip = ip.trim_start_matches('0');
+        let ip = if ip.is_empty() && min_int == 0 {
+            String::new()
+        } else if ip.len() < min_int {
+            format!("{}{ip}", "0".repeat(min_int - ip.len()))
+        } else {
+            ip.to_string()
+        };
+        let mut num = ip;
+        if !fp.is_empty() {
+            num.push(dec);
+            num.push_str(&fp);
+        }
+        if num.is_empty() {
+            num.push('0');
+        }
+        let exp_sign = if exponent < 0 {
+            "-"
+        } else if always_sign {
+            "+"
+        } else {
+            ""
+        };
+        let exp_abs = exponent.unsigned_abs().to_string();
+        let exp_str = if exp_abs.len() < min_exp { format!("{}{exp_abs}", "0".repeat(min_exp - exp_abs.len())) } else { exp_abs };
+        let before = lits(toks.get(..first).unwrap_or(&[]));
+        let after = lits(toks.get(last + 1..).unwrap_or(&[]));
+        let out = format!("{before}{num}{marker}{exp_sign}{exp_str}{after}");
+        let out = out.trim();
+        return if minus && !out.is_empty() { format!("-{out}") } else { out.to_string() };
+    }
     let number = toks.get(first..=last).unwrap_or(&[]);
     let dot = number.iter().position(|t| *t == Tok::Dot);
     let (int_part, frac_part) = match dot {
@@ -243,6 +351,24 @@ mod tests {
         assert_eq!(format("0;0", -3.0, None), "3");
         assert_eq!(format("0", -3.0, None), "-3");
         assert_eq!(format("\"x\"0", 5.0, None), "x5");
+    }
+
+    #[test]
+    fn scientific_codes() {
+        // Regression for the audit issue: exponent placeholders were folded into
+        // fractional digits, so 1234 with `0.00E+00` came out as "1234.0000".
+        assert_eq!(format("0.00E+00", 1234.0, None), "1.23E+03");
+        assert_eq!(format("0.00E+00", 0.0, None), "0.00E+00");
+        assert_eq!(format("0.00E+00", -0.00123, None), "-1.23E-03");
+        assert_eq!(format("0.00E+00", 12_345.0, None), "1.23E+04");
+        assert_eq!(format("0E+00", 1234.0, None), "1E+03");
+        // `E-` shows a sign only for negative exponents; the width pads with zeros.
+        assert_eq!(format("0.00E-00", 1234.0, None), "1.23E03");
+        assert_eq!(format("0.00E+000", 1234.0, None), "1.23E+003");
+        // Rounding the mantissa up to 10 renormalises instead of printing "10.00".
+        assert_eq!(format("0.00E+00", 9999.0, None), "1.00E+04");
+        // Locale decimal mark applies to the mantissa, not the exponent.
+        assert_eq!(format("0.00E+00", 1234.0, Some("de-DE")), "1,23E+03");
     }
 
     #[test]
