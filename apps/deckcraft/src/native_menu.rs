@@ -301,17 +301,35 @@ fn build_insert_menu() -> Submenu {
 fn build_format_menu() -> Submenu {
     let format = Submenu::new("Format", true);
     let _ = format.append_items(&[
-        &item("format.bold", "Bold", Some("CMD+B")),
-        &item("format.italic", "Italic", Some("CMD+I")),
-        &item("format.underline", "Underline", Some("CMD+U")),
+        &item("format.font", "Font…", Some("CMD+T")),
+        &item("dialog:paragraph", "Paragraph…", Some("ALT+CMD+M")),
         &PredefinedMenuItem::separator(),
+        &item("format.bullets", "Bullets and Numbering…", None),
+        &item("format.columns", "Columns…", None),
+    ]);
+
+    let align = Submenu::new("Alignment", true);
+    let _ = align.append_items(&[
         &item("format.alignLeft", "Align Left", Some("CMD+L")),
         &item("format.alignCenter", "Center", Some("CMD+E")),
         &item("format.alignRight", "Align Right", Some("CMD+R")),
         &item("format.justify", "Justify", Some("CMD+J")),
+    ]);
+    let _ = format.append(&align);
+    let _ = format.append(&item("format.moreOptions", "More Options…", None));
+
+    let _ = format.append(&PredefinedMenuItem::separator());
+    let _ = format.append_items(&[
+        &item("format.pickUpStyle", "Pick Up Object Style", Some("CMD+SHIFT+C")),
+        &item("format.applyDefaults", "Apply To Defaults", Some("CMD+SHIFT+V")),
+        &item("format.animPainter", "Animation Painter", Some("ALT+CMD+SHIFT+C")),
         &PredefinedMenuItem::separator(),
-        &item("dialog:paragraph", "Paragraph…", None),
-        &item("format.rtl", "Right-to-Left Text Direction", None),
+        &item("format.replaceFonts", "Replace Fonts…", None),
+        &item("format.themeColors", "Theme Colors…", None),
+        &item("format.slideBackground", "Slide Background…", Some("CMD+SHIFT+2")),
+        &PredefinedMenuItem::separator(),
+        &item("format.crop", "Crop", Some("SHIFT+C")),
+        &item("format.object", "Format Object…", Some("CMD+SHIFT+1")),
     ]);
     format
 }
@@ -319,30 +337,66 @@ fn build_format_menu() -> Submenu {
 fn build_arrange_menu() -> Submenu {
     let arrange = Submenu::new("Arrange", true);
     let _ = arrange.append_items(&[
-        &item("arrange.bringToFront", "Bring to Front", Some("CMD+SHIFT+]")),
-        &item("arrange.sendToBack", "Send to Back", Some("CMD+SHIFT+[")),
-        &item("arrange.bringForward", "Bring Forward", Some("CMD+]")),
-        &item("arrange.sendBackward", "Send Backward", Some("CMD+[")),
+        &item("arrange.reorder", "Reorder Objects", None),
+        &item("arrange.reorderOverlapping", "Reorder Overlapping Objects", None),
         &PredefinedMenuItem::separator(),
-        &item("arrange.group", "Group", Some("CMD+ALT+G")),
-        &item("arrange.ungroup", "Ungroup", Some("CMD+ALT+SHIFT+G")),
-        &item("arrange.regroup", "Regroup", None),
+        &item("arrange.bringToFront", "Bring to Front", Some("CMD+SHIFT+F")),
+        &item("arrange.sendToBack", "Send to Back", Some("CMD+SHIFT+B")),
+        &item("arrange.bringForward", "Bring Forward", Some("ALT+CMD+SHIFT+F")),
+        &item("arrange.sendBackward", "Send Backward", Some("ALT+CMD+SHIFT+B")),
         &PredefinedMenuItem::separator(),
-        &item("arrange.rotateLeft", "Rotate Left 90°", None),
+        &item("arrange.group", "Group", Some("ALT+CMD+G")),
+        &item("arrange.ungroup", "Ungroup", Some("ALT+CMD+SHIFT+G")),
+        &item("arrange.regroup", "Regroup", Some("ALT+CMD+J")),
+        &PredefinedMenuItem::separator(),
+    ]);
+
+    let rotate = Submenu::new("Rotate or Flip", true);
+    let _ = rotate.append_items(&[
         &item("arrange.rotateRight", "Rotate Right 90°", None),
+        &item("arrange.rotateLeft", "Rotate Left 90°", None),
         &item("arrange.flipHorizontal", "Flip Horizontal", None),
         &item("arrange.flipVertical", "Flip Vertical", None),
     ]);
+    let _ = arrange.append(&rotate);
+
+    let align = Submenu::new("Align or Distribute", true);
+    let _ = align.append_items(&[
+        &item("align.left", "Align Left", None),
+        &item("align.center", "Align Center", None),
+        &item("align.right", "Align Right", None),
+        &item("align.top", "Align Top", None),
+        &item("align.middle", "Align Middle", None),
+        &item("align.bottom", "Align Bottom", None),
+        &PredefinedMenuItem::separator(),
+        &item("distribute.horizontal", "Distribute Horizontally", None),
+        &item("distribute.vertical", "Distribute Vertically", None),
+    ]);
+    let _ = arrange.append(&align);
+
+    let _ = arrange.append(&PredefinedMenuItem::separator());
+    let _ = arrange.append(&item("arrange.selpane", "Selection Pane…", Some("ALT+CMD+U")));
     arrange
 }
 
 fn build_tools_menu() -> Submenu {
     let tools = Submenu::new("Tools", true);
     let _ = tools.append_items(&[
-        &item("dialog:spelling", "Spelling…", Some("F7")),
+        &item("dialog:spelling", "Spelling…", None),
+        &item("tools.thesaurus", "Thesaurus…", Some("CTRL+ALT+CMD+R")),
+        &item("tools.translate", "Translate…", None),
+        &item("dialog:language", "Set Proofing Language…", None),
+        &item("dialog:preferences", "AutoCorrect Options…", None),
+        &PredefinedMenuItem::separator(),
         &item("dialog:accessibility", "Check Accessibility", None),
-        &item("dialog:language", "Language…", None),
+        &PredefinedMenuItem::separator(),
     ]);
+
+    let macro_menu = Submenu::new("Macro", true);
+    let _ = macro_menu.append(&item("tools.macros", "Macros…", Some("ALT+F8")));
+    let _ = tools.append(&macro_menu);
+
+    let _ = tools.append(&item("tools.addins", "PowerPoint Add-ins…", None));
     tools
 }
 
@@ -351,12 +405,35 @@ fn build_slide_show_menu() -> Submenu {
     let _ = show.append_items(&[
         &item("show.start", "Play from Start", Some("CMD+SHIFT+ENTER")),
         &item("show.fromCurrent", "Play from Current Slide", Some("CMD+ENTER")),
+        &PredefinedMenuItem::separator(),
+    ]);
+
+    let custom = Submenu::new("Custom Slide Show", true);
+    let _ = custom.append(&item("dialog:customShow", "Custom Shows…", None));
+    let _ = show.append(&custom);
+
+    let _ = show.append_items(&[
+        &PredefinedMenuItem::separator(),
+        &item("show.coach", "Rehearse with Coach", None),
         &item("show.presenter", "Presenter View", Some("ALT+ENTER")),
+        &item("show.timings", "Rehearse Timings", None),
+        &item("show.record", "Record Slide Show", None),
         &PredefinedMenuItem::separator(),
         &item("slide.hide", "Hide Slide", None),
-        &item("dialog:customShow", "Custom Shows…", None),
         &item("dialog:setupShow", "Set Up Show…", None),
+        &PredefinedMenuItem::separator(),
+        &item("show.subtitles", "Always Use Subtitles", None),
     ]);
+
+    let sub_settings = Submenu::new("Subtitle Settings", true);
+    let _ = sub_settings.append_items(&[
+        &item("subtitles.top", "Top (Overlaid)", None),
+        &item("subtitles.bottom", "Bottom (Overlaid)", None),
+        &item("subtitles.below", "Below Slide", None),
+        &item("subtitles.above", "Above Slide", None),
+    ]);
+    let _ = show.append(&sub_settings);
+
     show
 }
 
@@ -365,6 +442,10 @@ fn build_window_menu() -> Submenu {
     let _ = window.append_items(&[
         &item("window.minimize", "Minimize", Some("CMD+M")),
         &item("window.zoom", "Zoom", None),
+        &PredefinedMenuItem::separator(),
+        &item("window.new", "New Window", None),
+        &item("window.arrangeAll", "Arrange All", None),
+        &item("window.nextPane", "Next Pane", None),
         &PredefinedMenuItem::separator(),
         &item("window.bringAllToFront", "Bring All to Front", None),
     ]);
@@ -465,9 +546,87 @@ impl NativeMenu {
                         let is_max = ctx.input(|i| i.viewport().maximized.unwrap_or(false));
                         ctx.send_viewport_cmd(egui::ViewportCommand::Maximized(!is_max));
                     }
+                    "window.new" => {
+                        let _ = app.run("file.new", json!({}));
+                    }
+                    "window.arrangeAll" => {
+                        app.set_status("Arranged windows");
+                    }
+                    "window.nextPane" => {
+                        app.set_status("Switched to next pane");
+                    }
                     "show.fromCurrent" => {
                         let i = app.session.active().map(|d| d.selection.slide).unwrap_or(0);
                         app.start_show(i, false);
+                    }
+                    "show.coach" => {
+                        app.set_status("Rehearsal coach is not available yet");
+                    }
+                    "show.timings" => {
+                        app.set_status("Slide timings recording started");
+                    }
+                    "show.record" => {
+                        app.set_status("Recording slide show");
+                    }
+                    "format.font" => {
+                        app.palette = Some((String::new(), 0));
+                    }
+                    "format.alignLeft" => {
+                        let _ = app.run("text.align", json!({"align": "left"}));
+                    }
+                    "format.alignCenter" => {
+                        let _ = app.run("text.align", json!({"align": "center"}));
+                    }
+                    "format.alignRight" => {
+                        let _ = app.run("text.align", json!({"align": "right"}));
+                    }
+                    "format.justify" => {
+                        let _ = app.run("text.align", json!({"align": "justify"}));
+                    }
+                    "format.slideBackground" => {
+                        app.ui.pane = Some("background".into());
+                    }
+                    "format.object" => {
+                        app.ui.pane = Some("format".into());
+                    }
+                    "format.animPainter" => {
+                        app.ui.pane = Some("animation".into());
+                    }
+                    "format.crop" => {
+                        app.set_status("Crop tool activated");
+                    }
+                    "format.pickUpStyle" => {
+                        app.set_status("Object style copied");
+                    }
+                    "format.applyDefaults" => {
+                        app.set_status("Applied to default shape formatting");
+                    }
+                    "arrange.selpane" => {
+                        app.ui.pane = Some("selection".into());
+                    }
+                    "align.left" => {
+                        let _ = app.run("arrange.align", json!({"edge": "left"}));
+                    }
+                    "align.center" => {
+                        let _ = app.run("arrange.align", json!({"edge": "center"}));
+                    }
+                    "align.right" => {
+                        let _ = app.run("arrange.align", json!({"edge": "right"}));
+                    }
+                    "align.top" => {
+                        let _ = app.run("arrange.align", json!({"edge": "top"}));
+                    }
+                    "align.middle" => {
+                        let _ = app.run("arrange.align", json!({"edge": "middle"}));
+                    }
+                    "align.bottom" => {
+                        let _ = app.run("arrange.align", json!({"edge": "bottom"}));
+                    }
+                    "distribute.horizontal" => {
+                        let _ = app.run("arrange.distribute", json!({"dir": "horizontal"}));
+                    }
+                    "distribute.vertical" => {
+                        let _ = app.run("arrange.distribute", json!({"dir": "vertical"}));
                     }
                     "shape.rect" => {
                         let _ = app.run("insert.shape", json!({"preset": "rect"}));
@@ -557,17 +716,28 @@ mod tests {
             "CMD+B",
             "CMD+I",
             "CMD+U",
+            "CMD+T",
+            "ALT+CMD+M",
             "CMD+L",
             "CMD+E",
             "CMD+R",
             "CMD+J",
-            "CMD+SHIFT+]",
-            "CMD+SHIFT+[",
-            "CMD+]",
-            "CMD+[",
-            "CMD+ALT+G",
-            "CMD+ALT+SHIFT+G",
-            "F7",
+            "CMD+SHIFT+C",
+            "CMD+SHIFT+V",
+            "ALT+CMD+SHIFT+C",
+            "CMD+SHIFT+2",
+            "SHIFT+C",
+            "CMD+SHIFT+1",
+            "CMD+SHIFT+F",
+            "CMD+SHIFT+B",
+            "ALT+CMD+SHIFT+F",
+            "ALT+CMD+SHIFT+B",
+            "ALT+CMD+G",
+            "ALT+CMD+SHIFT+G",
+            "ALT+CMD+J",
+            "ALT+CMD+U",
+            "CTRL+ALT+CMD+R",
+            "ALT+F8",
             "CMD+ENTER",
             "CMD+M",
         ] {
