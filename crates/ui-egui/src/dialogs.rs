@@ -408,6 +408,7 @@ fn body(app: &mut SlideApp, ui: &mut Ui, d: &mut Dialog) -> bool {
                 ("JPEG image (current slide)", "jpeg"),
                 ("PowerPoint Presentation (.pptx)", "pptx"),
                 ("Outline (.txt)", "outline"),
+                ("Outline/RTF (.rtf)", "rtf"),
             ] {
                 if ui.radio(fmt == f, l).clicked() {
                     d.fields.insert("fmt".into(), f.into());

@@ -364,6 +364,7 @@ impl SlideApp {
             "jpeg" | "jpg" => ("jpg", "jpeg", false),
             "pptx" => ("pptx", "pptx", false),
             "outline" | "txt" => ("txt", "outline", false),
+            "rtf" => ("rtf", "rtf", false),
             "deckcraft" => ("deckcraft", "deckcraft", false),
             other => {
                 self.set_status(format!("DeckCraft can't export “{other}”"));
@@ -702,13 +703,17 @@ impl SlideApp {
             "insert.audio"
         } else if ct.starts_with("video/") {
             "insert.video"
-        } else if lower.ends_with(".txt") || lower.ends_with(".md") {
+        } else if lower.ends_with(".txt") || lower.ends_with(".md") || lower.ends_with(".rtf") {
             "slide.fromOutline"
         } else {
             self.set_status(format!("{name}: DeckCraft can't open this kind of file"));
             return;
         };
-        let p = if cmd == "slide.fromOutline" { json!({"text": String::from_utf8_lossy(bytes)}) } else { json!({"name": name, "data": data}) };
+        let p = if cmd == "slide.fromOutline" {
+            json!({"text": deckcraft_engine::cmd::file::outline_text(bytes)})
+        } else {
+            json!({"name": name, "data": data})
+        };
         if self.session.active().is_none() && cmd != "file.openBytes" {
             let _ = self.session.execute("file.new", &json!({}));
         }
