@@ -118,10 +118,10 @@ Detail in [file-format-parity.md](file-format-parity.md).
 ### No animated GIF export
 - **Evidence:** `file.export` writes MP4/MOV with transitions, in-slide animations on the
   slide-show timeline, video clips playing their pictures (decoded by `deckcraft-media`), and a
-  sound track (AAC or PCM in .mov). Animated GIF export is PR #177; there is no Export dialog
-  page for video yet.
+  sound track (AAC or PCM in .mov); File › Export › Create a Video sets the options and runs it
+  in the background with progress and Cancel. Animated GIF export is PR #177.
 - **Impact:** small; GIF is a niche export.
-- **Estimate:** 2–3 h (an Export dialog page; GIF in #177).
+- **Estimate:** GIF in #177.
 
 ### Embedded fonts aren't read or written
 - **Evidence:** no `p:embeddedFontLst` handling in `crates/pptx`.
