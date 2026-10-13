@@ -23,7 +23,7 @@ deck.
 | `new_presentation`, `open_presentation`, `save_presentation`, `export` | Files: native `.deckcraft`, PowerPoint `.pptx`, PDF (slides, notes pages, handouts), PNG/JPEG, outline |
 | `inspect_document`, `inspect_slide` | Structure of the deck / one slide (shapes, text, placeholders, animations) |
 | `render_slide` | A slide as an image the model can look at |
-| `add_slide`, `go_to_slide` | Slides by layout |
+| `add_slide`, `go_to_slide` | Slides by layout (`body`: a leading tab is a bullet level, as in `set_text`) |
 | `add_shape`, `add_text_box`, `set_text` | Shapes and text |
 | `insert_picture`, `insert_table`, `insert_chart` | Content |
 | `select`, `pointer`, `select_tool`, `key`, `type_text` | The same selection, mouse and keyboard paths as the UI |
