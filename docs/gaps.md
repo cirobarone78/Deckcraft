@@ -115,14 +115,13 @@ Detail in [file-format-parity.md](file-format-parity.md).
 - **Impact:** handouts and speaker notes are printed in many workplaces.
 - **Estimate:** 5–8 h (print through the PDF path and each OS's print dialog). **Beta blocker.**
 
-### No animated GIF export; video has no animations or audio
-- **Evidence:** `file.export` writes MP4/MOV: each slide's transition, then the slide held for its
-  "advance after" time (else a default), at 480p–4K, encoded by DeckCraft's own H.264 encoder
-  (`crates/h264/src/encoder.rs`). Animations inside a slide show in their final state, the video
-  has no audio track (narration, media sound), and animated GIF export is PR #177.
-- **Impact:** sharing a talk as a video is a common request; builds and narration are part of it.
-- **Estimate:** 4–8 h (animation timeline frames, an AAC track from the media and narration, an
-  Export dialog page).
+### No animated GIF export; video clips are stills in exported video
+- **Evidence:** `file.export` writes MP4/MOV with each transition, the in-slide animations played on
+  the slide-show timeline (`secondsPerClick` pause before each click), and a sound track (embedded
+  audio, narration clips, transition sounds) as AAC (`crates/aac`, ported from FilmCraft) or 16-bit
+  PCM in .mov. Video clips show only their poster frame, and animated GIF export is PR #177.
+- **Impact:** decks with embedded video lose that motion in the exported video.
+- **Estimate:** 3–5 h (decode clip frames into the render, an Export dialog page).
 
 ### Embedded fonts aren't read or written
 - **Evidence:** no `p:embeddedFontLst` handling in `crates/pptx`.
