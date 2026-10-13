@@ -196,6 +196,9 @@ pub struct SlideApp {
     pub palette: Option<(String, usize)>,
     /// Integrated title bar (macOS traffic lights over our chrome).
     pub integrated_titlebar: bool,
+    /// Linux/BSD: the window has no system frame; the title bar draws minimize, maximize and
+    /// close, and the window resizes from its edges (`ribbon::window_frame`).
+    pub window_controls: bool,
     /// The start screen is shown over the open presentations (Home), with the document count
     /// and active index when it was opened: opening or creating a presentation leaves it.
     pub home: Option<(usize, Option<usize>)>,
@@ -238,6 +241,7 @@ impl SlideApp {
             slide_rect: None,
             palette: None,
             integrated_titlebar: false,
+            window_controls: false,
             home: None,
             pending_urls: vec![],
             shot_token: 0,
@@ -741,6 +745,8 @@ impl SlideApp {
         toast::show(self, &ctx);
         dialogs::show(self, &ctx);
         menus::palette(self, &ctx);
+        // Last, so its resize cursors win over the widgets under the window edges.
+        ribbon::window_frame(self, &ctx);
         for url in std::mem::take(&mut self.pending_urls) {
             ctx.open_url(egui::OpenUrl::new_tab(url));
         }
