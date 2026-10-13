@@ -1,12 +1,12 @@
 # Slide show and presenter view: parity with PowerPoint
 
-> **Last reviewed:** 2026-10-10 · **Last updated:** 2026-10-10 · **Change:** major (created; measured from `crates/ui-egui/src/show.rs` and `crates/anim/src/show.rs` against PowerPoint 16.113's Slide Show tab and menu) · **Target:** Microsoft PowerPoint for Mac 16.113 (Microsoft 365)
+> **Last reviewed:** 2026-10-10 · **Last updated:** 2026-10-13 · **Change:** minor (show on the other display, presenter view on the primary; previous: major, created) · **Target:** Microsoft PowerPoint for Mac 16.113 (Microsoft 365)
 
 Presenting is the job PowerPoint is hired for. This doc covers the show window, presenter view,
 rehearsal and recording. Transition and animation playback are in
 [animation-parity.md](animation-parity.md); display hardware in
-[hardware-parity.md](hardware-parity.md). Area score: checklist breadth **66%** (measured), **~60%
-ready** (estimated), **10–16 h** to parity.
+[hardware-parity.md](hardware-parity.md). Area score: checklist breadth **71%** (measured), **~60%
+ready** (estimated), **8–14 h** to parity.
 
 ## Running the show
 
@@ -35,12 +35,12 @@ ready** (estimated), **10–16 h** to parity.
 
 | Feature | PowerPoint | DeckCraft | Notes |
 |---|---|---|---|
-| Separate presenter window with current slide, next slide, notes | yes | yes (an egui viewport, 1100×700) | |
+| Separate presenter window with current slide, next slide, notes | yes | yes. With a second display it fills the primary; otherwise a 1100×700 window | |
 | Elapsed timer | yes | yes | |
 | Pause / reset timer, clock | yes | no | |
 | Slide counter, previous/next/end buttons | yes | yes | |
 | Notes font size, scrolling | yes | scrolling only | |
-| Placed on the presenter's display automatically, show on the projector | yes | **no**: opens wherever the OS puts it | Beta blocker, 3–5 h |
+| Placed on the presenter's display automatically, show on the projector | yes | yes when a second display is connected: borderless fullscreen on the first non-primary, presenter view on the primary. One display stays full screen on the current one. No swap and no manual choice. Wayland ignores window positions, so the presenter window may not land on the laptop screen there | |
 | Swap displays | yes | no | |
 | Pen, laser, black screen, zoom from presenter view | yes | keys only | |
 | See all slides from presenter view | yes | no | |
@@ -63,14 +63,15 @@ Reading View in a window with navigation: present (checklist row done).
 
 | Work | Hours |
 |---|---|
-| Presenter view on the right display, swap displays, pause/reset timer, clock, notes size | 3–5 |
+| Swap displays, choose the monitor, pause/reset timer, clock, notes size | 2–3 |
 | Laser pointer, highlighter, eraser, keep-annotations prompt | 2–4 |
 | See All Slides and zoom during the show | 2–3 |
 | Record slide show with narration (no camera) | 5–8 |
-| **Total** | **~12–20** (the slide-show row of the feature table carries 10–16 h; recording overlaps the Media row) |
+| **Total** | **~11–18** (the slide-show row of the feature table carries 8–14 h; recording overlaps the Media row) |
 
 ## Revision history
 
 | Date | Change | Summary |
 |---|---|---|
+| 2026-10-13 | minor | Show on the other display, presenter view on the primary (checklist breadth 66% → 71%). Swap and a manual choice remain |
 | 2026-10-10 | major | Created: show, presenter view, rehearse and record, compared with PowerPoint 16.113's Slide Show tab and menu |

@@ -1,6 +1,6 @@
 # DeckCraft roadmap: milestones and what's next
 
-> **Last reviewed:** 2026-10-10 · **Last updated:** 2026-10-10 · **Change:** minor (core-workflow alpha gate added; stage stays alpha; previous: major, created; milestones carried from the local execution plan, the beta plan built from gaps.md) · **Target:** Microsoft PowerPoint for Mac 16.113 (Microsoft 365)
+> **Last reviewed:** 2026-10-10 · **Last updated:** 2026-10-13 · **Change:** minor (show on the other display; previous: minor, core-workflow alpha gate added) · **Target:** Microsoft PowerPoint for Mac 16.113 (Microsoft 365)
 
 Forward-looking: where DeckCraft is going and in what order. The one-page summary is
 [ROADMAP.md](../ROADMAP.md); every shortfall is in [gaps.md](gaps.md); numbers are in
@@ -17,7 +17,7 @@ points and lead the beta plan.
 |---|---|---|---|
 | Build a deck from scratch (theme, layouts, titles and bullets, shapes, pictures from file), save, close and reopen it | yes | Commands for all of it; `.deckcraft` and `.pptx` round-trip tests (`crates/pptx/tests/roundtrip.rs`, `crates/format`); AutoRecover. Close discards edits without asking (#60, PR #75); image *paste* fails on Windows/Linux (#53), though insert-from-file works | 1–3 |
 | Open a colleague's `.pptx`, edit it, save it back as `.pptx` that PowerPoint opens | partial (not blocking) | The reader is lenient and keeps unknown objects. Files open in PowerPoint without repair (checked 2026-10-06). But only generated decks have been tested; text inside EMF/WMF pictures is missing; comment threads, media options and rewind are lost (#70, #74, #77) | 31–55 |
-| Present: full-screen show with transitions, animations, media, presenter view with notes, next slide and timer | yes | 48/48 transitions, 64 effects, triggers, builds, media playback, presenter window. Presenter view isn't placed on the second display automatically (drag it there) | 3–5 |
+| Present: full-screen show with transitions, animations, media, presenter view with notes, next slide and timer | yes | 48/48 transitions, 64 effects, triggers, builds, media playback, presenter window. With a second display the show fills the other one and presenter view the primary; swap and timer pause are still missing | 1–2 |
 | Add business content: tables, charts with their data, simple diagrams | partial (not blocking) | Tables with styles, merge/split, all D or P. Charts insert with the common types and edit data in the Chart Data dialog (P0 partial); SmartArt is basic (pre-drawn shapes) | 12–20 |
 | Share the deck: PDF of slides, notes or handouts; images | yes | `file.export` PDF with text layer, links, bookmarks, handouts 1–9; PNG/JPEG. Artwork is raster in the PDF; no direct print (print the PDF) | 10–16 |
 | Review: comments with replies, resolve, spelling | partial (not blocking) | Comments, replies and resolve work and survive `.deckcraft`; threads are flattened on `.pptx` save (#70); spelling is a small built-in list | 4–8 |
@@ -47,7 +47,7 @@ Beta means ~75% ready for real work and opening and saving PowerPoint's `.pptx` 
 | 7 | Font weights (#69), image paste (#53), Tab in text (#78) | 6–11 | Features |
 | 8 | Charts: data grid, elements | 6–10 | Features |
 | 9 | Animation Pane timeline, preview, effect options | 5–8 | Features |
-| 10 | Presenter view on the right display, timer controls | 3–5 | Hardware, Slide show |
+| 10 | Presenter timer controls (pause, reset, clock) and swapping displays | 1–2 | Slide show |
 | 11 | Native macOS menu bar, Format Shape pane depth, start screen and window chrome fixes | 13–22 | UI/UX 60 → 75% |
 | 12 | Performance baseline and the obvious fixes | 4–8 | Performance |
 | **Total** | | **~120–210** | Ready ~55% → ~75% |
@@ -77,7 +77,7 @@ From the local execution plan (`plan/execution-plan.md`, gitignored). Status as 
 | M4 | Design | mostly | Notes/Handout masters, variants, Designer |
 | M5 | Pictures and media | mostly | SVG/EMF, remove background, compress, icons, WMA/WMV |
 | M6 | Transitions and animations | mostly | Animation Pane timeline, remaining effects, transition sounds |
-| M7 | Slide show | mostly | second-display placement, laser, record |
+| M7 | Slide show | mostly | laser, record |
 | M8 | Tables and charts | partly | chart data grid, elements, chartex types, draw table |
 | M9 | SmartArt, equations, WordArt | partly | SmartArt text pane and layouts, equations (PR #55), text warps |
 | M10 | Views | done | grid options, New Window |
@@ -109,5 +109,6 @@ plan above.
 
 | Date | Change | Summary |
 |---|---|---|
+| 2026-10-13 | minor | Show on the other display; beta item 10 is timer controls and swapping displays |
 | 2026-10-10 | minor | Added the alpha gate (six core workflows): all pass, two with partial depth; stage stays alpha |
 | 2026-10-10 | major | Created: current focus, ranked beta plan with hours, milestones M0–M14 with status, the old alpha checklist as history |
