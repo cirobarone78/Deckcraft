@@ -2,10 +2,10 @@
 title: Install DeckCraft
 description: Download DeckCraft for Windows 11 or macOS from GitHub or install it with ArtCraft Launcher, and find out which file fits your PC.
 order: 10
-verified: 0.5.0
+verified: 0.6.1
 ---
 
-Download the file for your system from the [latest release](https://github.com/storytold/deckcraft/releases/latest) and install it, or install DeckCraft from ArtCraft Launcher. In file names, `<version>` stands for the version number, for example `0.5.0`.
+Download the file for your system from the [latest release](https://github.com/storytold/deckcraft/releases/latest) and install it, or install DeckCraft from ArtCraft Launcher. In file names, `<version>` stands for the version number, for example `0.6.1`.
 
 ## Windows 11
 
@@ -22,6 +22,7 @@ Other Windows builds on the release page:
 |------------------------------------|-----------------------------------------|--------------------------------------------------|
 | 64-bit Intel or AMD                | `deckcraft-<version>-windows-x64.msi`   | `deckcraft-<version>-windows-x64-portable.zip`   |
 | Arm (Snapdragon and other Arm PCs) | `deckcraft-<version>-windows-arm64.msi` | `deckcraft-<version>-windows-arm64-portable.zip` |
+| 32-bit Windows                     | `deckcraft-<version>-windows-x86.msi`   | `deckcraft-<version>-windows-x86-portable.zip`   |
 
 The README says the installers and executables are code-signed, and that `SHA256SUMS.txt` on the release lists a checksum for every file.
 

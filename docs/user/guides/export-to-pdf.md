@@ -2,7 +2,7 @@
 title: Export a deck to PDF
 description: Save a deck as a PDF with full-page slides, notes pages or handouts, or export slides as PNG or JPEG images.
 order: 50
-verified: 0.5.0
+verified: 0.6.1
 ---
 
 Open the command palette with Ctrl+Shift+P, run **Export…**, keep **PDF document (.pdf)** selected and click **Export**. On macOS, use Cmd in place of Ctrl.

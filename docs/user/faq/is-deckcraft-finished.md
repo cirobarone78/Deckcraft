@@ -2,7 +2,7 @@
 title: Is DeckCraft finished?
 description: DeckCraft is in alpha; the README gives its own measure of how much of PowerPoint it covers.
 order: 30
-verified: 0.5.0
+verified: 0.6.1
 ---
 
 No. DeckCraft is in alpha, heading for beta. Expect missing features and rough edges.

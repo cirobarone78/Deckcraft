@@ -2,7 +2,7 @@
 title: Getting started
 description: Start DeckCraft, pick a theme, add a slide and play it, in a few steps.
 order: 20
-verified: 0.5.0
+verified: 0.6.1
 ---
 
 Start DeckCraft, pick a theme tile under **New presentation**, then use **New Slide** on the **Home** tab to add slides. Press F5 to play the deck.

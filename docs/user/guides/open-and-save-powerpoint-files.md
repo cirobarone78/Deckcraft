@@ -2,7 +2,7 @@
 title: Open and save PowerPoint files
 description: Open a .pptx in DeckCraft, save it back as .pptx, or keep it as a DeckCraft file.
 order: 20
-verified: 0.5.0
+verified: 0.6.1
 ---
 
 Press Ctrl+O to open a `.pptx`. To save as PowerPoint, press Ctrl+Shift+S and give the file a name that ends in `.pptx`. On macOS, use Cmd in place of Ctrl.

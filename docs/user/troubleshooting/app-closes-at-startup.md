@@ -2,7 +2,7 @@
 title: DeckCraft closes right after it starts
 description: On Windows 11 the DeckCraft window appears and closes at once; start it with the Vulkan graphics backend instead.
 order: 10
-verified: 0.5.0
+verified: 0.6.1
 ---
 
 If DeckCraft flashes and quits, start it from PowerShell with `WGPU_BACKEND` set to `vulkan`. On Intel graphics, use `gl` instead.
@@ -32,7 +32,7 @@ On AMD graphics do not set `WGPU_BACKEND` to `gl`: it can bring back the `atio6a
 
 Two causes are documented. Vulkan works around the first one except on Intel graphics.
 
-- **Missing DirectX shader compiler files.** Issue 153 reports that the 0.5.0 build, in both the MSI and the portable zip, ships neither `dxcompiler.dll` nor `dxil.dll`. DirectX 12 shader compilation then fails and the graphics device is lost before the first frame, which is where `Parent device is lost` comes from. The reporter saw this on an NVIDIA PC on Windows 11 and confirmed that `WGPU_BACKEND=vulkan` starts the app. A fix, pull request 176 ("Windows: compile DX12 shaders with FXC"), is open and is not in 0.5.0.
+- **Missing DirectX shader compiler files.** Issue 153 reports that the 0.5.0 build, in both the MSI and the portable zip, ships neither `dxcompiler.dll` nor `dxil.dll`, and the 0.6.1 portable zip does not have them either. DirectX 12 shader compilation then fails and the graphics device is lost before the first frame, which is where `Parent device is lost` comes from. The reporter saw this on an NVIDIA PC on Windows 11 and confirmed that `WGPU_BACKEND=vulkan` starts the app. A fix, pull request 176 ("Windows: compile DX12 shaders with FXC"), is open and is not in a release yet.
 - **An OpenGL crash in some AMD drivers.** The README says the Windows app starts the graphics layer on DirectX 12 only by default, because also creating an OpenGL instance can crash some drivers (AMD's `atio6axx.dll`) before the window appears.
 
 ## Find the log

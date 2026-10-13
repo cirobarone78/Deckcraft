@@ -2,7 +2,7 @@
 title: Build a deck
 description: Start a deck from a theme, add slides with layouts, and change the theme later.
 order: 10
-verified: 0.5.0
+verified: 0.6.1
 ---
 
 Pick a theme on the start screen, add slides from the **Home** tab with **New Slide**, and change the look any time from the **Design** tab.

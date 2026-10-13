@@ -2,7 +2,7 @@
 title: Guides
 description: Step-by-step guides for the main things you do in DeckCraft.
 order: 30
-verified: 0.5.0
+verified: 0.6.1
 ---
 
 Each guide covers one task.

@@ -2,7 +2,7 @@
 title: Add a slide transition
 description: Choose a transition for a slide, set how long it runs and when the show moves on, and copy it to every slide.
 order: 30
-verified: 0.5.0
+verified: 0.6.1
 ---
 
 Select a slide, open the **Transitions** tab and click an effect in the gallery. Click **Preview** to see it.
@@ -21,7 +21,7 @@ To give every slide the same transition, click **Apply To All**.
 
 ## Check the duration of imported transitions
 
-In DeckCraft 0.5.0 a transition imported from a PowerPoint file can show the wrong **Duration:**. See [Imported transitions are too slow](../troubleshooting/imported-transitions-too-slow.md).
+In DeckCraft 0.6.1 a transition imported from a PowerPoint file can show the wrong **Duration:**. See [Imported transitions are too slow](../troubleshooting/imported-transitions-too-slow.md).
 
 ## Related
 

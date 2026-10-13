@@ -2,7 +2,7 @@
 title: Can DeckCraft open my PowerPoint files?
 description: DeckCraft opens and saves .pptx, .potx and .ppsx files, but some details do not import or export correctly yet.
 order: 20
-verified: 0.5.0
+verified: 0.6.1
 ---
 
 Yes. DeckCraft opens and saves PowerPoint `.pptx` files, and its Open dialog also accepts `.potx` and `.ppsx`. Steps are in [Open and save PowerPoint files](../guides/open-and-save-powerpoint-files.md).

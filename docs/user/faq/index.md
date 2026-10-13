@@ -2,7 +2,7 @@
 title: FAQ
 description: Short answers about DeckCraft's price, PowerPoint files and how finished it is.
 order: 50
-verified: 0.5.0
+verified: 0.6.1
 ---
 
 - [Is DeckCraft free?](is-deckcraft-free.md)
