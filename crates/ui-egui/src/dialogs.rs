@@ -718,6 +718,29 @@ fn body(app: &mut SlideApp, ui: &mut Ui, d: &mut Dialog) -> bool {
             if ui.add(egui::Slider::new(&mut scale, 0.75..=1.75).text("Interface size")).changed() {
                 app.ui.ui_scale = scale;
             }
+            let effects = app.ui.animation_effects;
+            ui.horizontal(|ui| {
+                ui.label("Animation effects:");
+                egui::ComboBox::from_id_salt("animation_effects")
+                    .selected_text(effects.label())
+                    .show_ui(ui, |ui| {
+                        for mode in crate::motion::Animations::ALL {
+                            if ui.selectable_label(effects == mode, mode.label()).clicked() {
+                                run(app, "view.animationEffects", json!({"mode": mode.code()}));
+                            }
+                        }
+                    })
+                    .response
+                    .on_hover_text(crate::motion::HINT);
+            });
+            if effects == crate::motion::Animations::System {
+                let system = match app.system_animations() {
+                    Some(true) => "Animation effects are on in your system's settings.",
+                    Some(false) => "Animation effects are off in your system's settings.",
+                    None => "Your system doesn't report an animation setting, so effects stay on.",
+                };
+                ui.label(egui::RichText::new(system).color(Tokens::get(ui.ctx()).text_dim));
+            }
             ui.label(egui::RichText::new("Editing").font(theme::bold(13.0)));
             ui.checkbox(&mut app.session.prefs.smart_guides, "Show smart guides");
             ui.checkbox(&mut app.session.prefs.snap_to_grid, "Snap objects to grid");

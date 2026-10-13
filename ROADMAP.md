@@ -128,6 +128,7 @@ app's JSON control channel (`deckcraft --control PORT`).
 
 | Date | What landed |
 |---|---|
+| 2026-10-12 | Animation effects follow the system: with Windows' Animation effects off, macOS' Reduce motion on, a Linux/BSD desktop's animations off or a browser's `prefers-reduced-motion`, wheel scrolling and zooming land at once and menus, tooltips and dialogs don't fade. Preferences ▸ Animation effects (Use system setting, On, Off), `view.animationEffects` |
 | 2026-10-12 | Objects off the slide show and can be selected and moved around it in Normal view, as in PowerPoint; the show, exports and thumbnails still clip to the slide (#270) |
 | 2026-10-12 | Korean, Japanese and Chinese input: IME composition shown in place and underlined, one undo step per composition, candidate window at the caret (slide text, notes, fields); interface text (title, notes, outline, sections, comments) borrows installed fonts for scripts the interface fonts lack (#101) |
 | 2026-10-12 | Selection Pane like PowerPoint (#133): front-most first, groups fold, drag and drop restacks among siblings, Bring Forward / Send Backward, Show All / Hide All, eye, rename in place, keyboard; Lock (pane padlock, canvas menu) keeps objects from moving, sizing or rotating and round-trips PowerPoint's locking attributes |
@@ -147,6 +148,7 @@ app's JSON control channel (`deckcraft --control PORT`).
 
 | Date | Change | Summary |
 |---|---|---|
+| 2026-10-12 | trivial | Progress log: animation effects follow the system's reduced-motion setting |
 | 2026-10-12 | trivial | Progress log: File tab (Backstage, #76) |
 | 2026-10-12 | trivial | Progress log: lines in scaled groups (#233) |
 | 2026-10-10 | minor | Readiness-by-audience table with hours to ~95% for full, mainstream and essentials |

@@ -15,6 +15,7 @@ pub mod fillui;
 pub mod icons;
 pub mod media;
 pub mod menus;
+pub mod motion;
 pub mod panes;
 pub mod ribbon;
 pub mod selpane;
@@ -62,6 +63,12 @@ pub struct Services {
     pub clipboard_image: Option<Box<dyn FnMut() -> Option<Vec<u8>>>>,
     /// Audio output for media playback (cpal on desktop); without one media plays silently.
     pub audio_out: Option<Box<dyn deckcraft_media::AudioOut>>,
+    /// Whether the system has animation effects on (Windows: Animation effects; macOS: Reduce
+    /// motion off; Linux and the BSDs: the desktop's animations setting; the web: no
+    /// `prefers-reduced-motion`), `None` when it doesn't say. What Animation effects ▸ Use system
+    /// setting follows ([`motion::Animations`]). Asked every frame, so the host answers from
+    /// memory and does any slow asking elsewhere. Without the hook, animations stay on.
+    pub animations_enabled: Option<Box<dyn Fn() -> Option<bool>>>,
 }
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
@@ -102,6 +109,10 @@ pub struct UiState {
     /// Format Shape pane: tab (`fill`, `effects`, `size`, `picture`, `text`).
     pub format_tab: String,
     pub grayscale: bool,
+    /// Animation effects (Preferences): smooth scrolling and zooming and egui's own fades are
+    /// on, off, or follow the system's setting (see [`motion`]): `"system"`, `"on"` or `"off"`.
+    #[serde(deserialize_with = "motion::lenient")]
+    pub animation_effects: motion::Animations,
 }
 
 impl Default for UiState {
@@ -127,6 +138,7 @@ impl Default for UiState {
             ui_scale: 1.0,
             format_tab: "fill".into(),
             grayscale: false,
+            animation_effects: motion::Animations::System,
         }
     }
 }
@@ -151,6 +163,7 @@ pub const UI_COMMANDS: &[(&str, &str, Option<&str>, &str)] = &[
     ("view.collapseRibbon", "Collapse the Ribbon", Some("Cmd+F1"), "{}"),
     ("view.dark", "Dark Mode", None, "{on?: bool}"),
     ("view.grayscale", "Grayscale", None, "{on?: bool}"),
+    ("view.animationEffects", "Animation Effects", None, "{mode?: system|on|off} or {on?: bool} (toggles without either) → {mode, on, system}"),
     ("show.start", "Slide Show", Some("F5"), "{from?: index}"),
     ("show.presenter", "Presenter View", None, "{on?: bool}"),
     ("show.end", "End Show", None, "{}"),
@@ -216,6 +229,10 @@ pub struct SlideApp {
     restyle: bool,
     fonts_ready: bool,
     last_time: f64,
+    /// What the system last said about its animation effects ([`Services::animations_enabled`]).
+    system_animations: Option<bool>,
+    /// egui's own animation settings while Animation effects has them off ([`motion::apply`]).
+    egui_motion: Option<motion::EguiMotion>,
     /// When AutoRecover data was last written (seconds, egui time).
     pub last_recovery: f64,
     /// Quit was confirmed (changes saved or discarded): let the window close.
@@ -261,6 +278,8 @@ impl SlideApp {
             restyle: true,
             fonts_ready: false,
             last_time: 0.0,
+            system_animations: None,
+            egui_motion: None,
             last_recovery: 0.0,
             quit_confirmed: false,
             notes_buf: (0, usize::MAX, String::new()),
@@ -277,6 +296,22 @@ impl SlideApp {
 
     pub fn set_status(&mut self, msg: impl Into<String>) {
         self.status = Some((msg.into(), now_ms()));
+    }
+
+    /// Whether animation effects run right now: the Animation effects preference, where Use
+    /// system setting follows what the system says ([`motion::Animations::enabled`]).
+    pub fn animations_on(&self) -> bool {
+        self.ui.animation_effects.enabled(self.system_animations)
+    }
+
+    /// What the system last said about its animation effects (`None`: it doesn't say).
+    pub fn system_animations(&self) -> Option<bool> {
+        self.system_animations
+    }
+
+    /// Asks the host what the system says about animation effects.
+    fn read_system_animations(&mut self) {
+        self.system_animations = self.services.animations_enabled.as_ref().and_then(|ask| ask());
     }
 
     /// Run a command by id (UI commands here, everything else in the engine). Errors show in the
@@ -493,6 +528,20 @@ impl SlideApp {
                 self.restyle = true;
             }
             "view.grayscale" => self.ui.grayscale = self.flag(p, self.ui.grayscale),
+            "view.animationEffects" => {
+                // `{"mode": "system" | "on" | "off"}`, or a switch's `{"on": bool}`; without
+                // either it toggles what shows now.
+                self.read_system_animations();
+                let mode = match (p.get("mode").filter(|mode| !mode.is_null()), p.get("on").and_then(Value::as_bool)) {
+                    (Some(mode), _) => mode.as_str().and_then(motion::Animations::parse).ok_or("`mode` must be system, on, or off")?,
+                    (None, Some(true)) => motion::Animations::On,
+                    (None, Some(false)) => motion::Animations::Off,
+                    (None, None) if self.animations_on() => motion::Animations::Off,
+                    (None, None) => motion::Animations::On,
+                };
+                self.ui.animation_effects = mode;
+                return Ok(json!({"mode": mode.code(), "on": self.animations_on(), "system": self.system_animations}));
+            }
             "show.start" => {
                 let from = p.get("from").and_then(Value::as_u64).map(|v| v as usize).unwrap_or(0);
                 self.start_show(from, false);
@@ -734,6 +783,10 @@ impl SlideApp {
             theme::apply(ctx, &theme::Tokens::for_brightness(self.ui.brightness));
             self.restyle = false;
         }
+        // Animation effects: the host is asked every frame (it answers from memory), so a change
+        // made in the system's settings is followed while the app runs.
+        self.read_system_animations();
+        motion::apply(ctx, self.animations_on(), &mut self.egui_motion);
         let now = ctx.input(|i| i.time);
         let dt = now - self.last_time;
         if dt > 0.0 {
@@ -933,6 +986,10 @@ impl SlideApp {
             return;
         }
         let t0 = now_ms();
+        // Animation effects off: a wheel notch scrolls whole, not eased in over the next frames.
+        if !self.animations_on() {
+            motion::settle_scroll(&ctx);
+        }
         let t = theme::Tokens::get(&ctx);
         self.tick_media(&ctx);
         if self.show.is_some() {

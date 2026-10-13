@@ -620,7 +620,7 @@ pub fn ui(app: &mut SlideApp, ui: &mut Ui) {
     }
     // Presenter view in a second window.
     if show.presenter && !show.reading && !show.ended {
-        presenter_window(&ctx, &mut show, &doc, now, &mut keep);
+        presenter_window(&ctx, &mut show, &doc, now, &mut keep, app.animations_on());
     }
     if keep {
         app.show = Some(show);
@@ -726,7 +726,7 @@ impl Show {
     }
 }
 
-fn presenter_window(ctx: &egui::Context, show: &mut Show, doc: &Presentation, now: f64, keep: &mut bool) {
+fn presenter_window(ctx: &egui::Context, show: &mut Show, doc: &Presentation, now: f64, keep: &mut bool, animate: bool) {
     let cur = show.state.slide;
     let next = deckcraft_anim::show_order(doc).into_iter().find(|i| *i > cur);
     let cur_tex = show.tex.as_ref().map(|(_, t)| t.clone());
@@ -752,6 +752,10 @@ fn presenter_window(ctx: &egui::Context, show: &mut Show, doc: &Presentation, no
         egui::ViewportId::from_hash_of("deckcraft_presenter"),
         egui::ViewportBuilder::default().with_title("Presenter View — DeckCraft").with_inner_size([1100.0, 700.0]),
         |ui, _| {
+            // This window has its own wheel input: the notes scroll whole too.
+            if !animate {
+                crate::motion::settle_scroll(ui.ctx());
+            }
             egui::CentralPanel::default().frame(egui::Frame::NONE.fill(Color32::from_gray(24)).inner_margin(egui::Margin::same(16))).show(ui, |ui| {
                 ui.horizontal(|ui| {
                     ui.label(

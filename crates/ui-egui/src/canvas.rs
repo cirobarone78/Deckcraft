@@ -72,7 +72,10 @@ pub fn show(app: &mut SlideApp, ui: &mut Ui) {
     let mut offset: egui::Vec2 = ui.data_mut(|d| d.get_temp(scroll_id).unwrap_or_default());
     let overflow = vec2((content_rect.width() + 56.0 - avail.width()).max(0.0), (content_rect.height() + 56.0 - avail.height()).max(0.0));
     let resp = ui.allocate_rect(avail, Sense::click_and_drag());
-    let (wheel, zoom_delta, pinch_pos) = ui.input(|i| (i.smooth_scroll_delta, i.zoom_delta(), i.pointer.hover_pos()));
+    // With Animation effects off a wheel notch scrolls and zooms whole: the scroll delta has been
+    // put right for the whole window already (`SlideApp::ui`), the zoom is ours.
+    let zoom_delta = crate::motion::zoom_delta(ui.ctx(), app.animations_on());
+    let (wheel, pinch_pos) = ui.input(|i| (i.smooth_scroll_delta, i.pointer.hover_pos()));
     if resp.hovered() {
         if (zoom_delta - 1.0).abs() > 1e-3 {
             let cur = app.ui.zoom.unwrap_or(scale);

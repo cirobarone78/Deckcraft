@@ -17,6 +17,7 @@ mod control_server;
 #[cfg(any(target_os = "windows", test))]
 mod graphics;
 mod logging;
+mod motion;
 
 use deckcraft_engine::Session;
 use deckcraft_ui_egui::{Services, SlideApp};
@@ -209,6 +210,9 @@ fn main() -> eframe::Result {
                 }
             }
             app.integrated_titlebar = cfg!(target_os = "macos");
+            // The system's animation setting, which Preferences ▸ Animation effects follows
+            // unless it is set to On or Off.
+            app.services.animations_enabled = Some(motion::hook(&cc.egui_ctx));
             if let Some(port) = control_port {
                 let rx = control_server::start(port, cc.egui_ctx.clone());
                 app = app.with_control(rx);

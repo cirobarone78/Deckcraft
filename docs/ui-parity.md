@@ -1,6 +1,6 @@
 # UI parity with PowerPoint
 
-> **Last reviewed:** 2026-10-10 · **Last updated:** 2026-10-12 · **Change:** minor (File tab / Backstage, #76; previous: off-slide objects in Normal view, #270) · **Target:** Microsoft PowerPoint for Mac 16.113 (Microsoft 365)
+> **Last reviewed:** 2026-10-10 · **Last updated:** 2026-10-12 · **Change:** minor (animation effects follow the system's reduced-motion setting; previous: File tab / Backstage, #76) · **Target:** Microsoft PowerPoint for Mac 16.113 (Microsoft 365)
 
 > **Last reviewed:** 2026-10-12 · **Last updated:** 2026-10-12 · **Change:** minor (text editing keys observed in PowerPoint for Windows, #268) · **Target:** Microsoft PowerPoint for Mac 16.113 (Microsoft 365)
 
@@ -23,6 +23,7 @@ AGENTS.md §2). Dimension score: **~60% ready** (estimated), **30–50 h** to pa
 | Status bar: slide counter, language, notes, comments, views, zoom slider | yes | yes | |
 | Command search (Tell Me) | yes | command palette | #79 default entry fails |
 | Light / dark appearance | follows the system | light or dark; doesn't follow the system (#41) | 1–2 h |
+| Animation effects (smooth scrolling and zooming, fading menus and dialogs) | Office's interface animations follow the system setting on Windows; not observed on Mac | follow the system (Windows Animation effects, macOS Reduce motion, the Linux/BSD desktop's setting, the browser's `prefers-reduced-motion`); Preferences ▸ Animation effects: Use system setting, On, Off | |
 | One window per presentation, New Window, Arrange All | yes | tabs in one window; no New Window | 3–5 h |
 | Quick Access Toolbar customization | yes | no | P1 partial |
 
@@ -148,6 +149,7 @@ imitate Microsoft's. No pixel comparison against PowerPoint screenshots has been
 
 | Date | Change | Summary |
 |---|---|---|
+| 2026-10-12 | minor | Animation effects follow the system's setting on Windows, macOS, Linux/BSD and the web, with a Preferences override |
 | 2026-10-12 | minor | File tab (Backstage) observed in PowerPoint for Windows and matched (#76); the start screen is File › Home |
 | 2026-10-12 | minor | Off-slide objects drawn and editable around the slide in Normal view (#270) |
 | 2026-10-12 | minor | Selection Pane matched to PowerPoint (#133): drag and drop, arrows, groups, eye, Lock |
