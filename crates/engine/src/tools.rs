@@ -240,7 +240,8 @@ impl Session {
                     }
                 }
                 let (pts, rot) = box_handles(&x);
-                if (rot - p).hypot() <= tol * 1.8 && st.selection.text.is_none() {
+                // Also while typing in it, as PowerPoint's text boxes rotate mid-edit (#470).
+                if (rot - p).hypot() <= tol * 1.8 {
                     return Some(Hit::Rotate { id: *id });
                 }
                 for (i, q) in pts.iter().enumerate() {
@@ -369,9 +370,12 @@ impl Session {
             && let Some(sh) = st.shape(t.shape)
         {
             let x = xfrm_of(&st.doc, &st.selection, sh);
-            if x.bounds().inflate(tol, tol).contains(p)
-                && !matches!(self.hit_test(p, tol), Some(Hit::Resize { .. } | Hit::Rotate { .. } | Hit::Adjust { .. }))
-            {
+            // The box's edge (a `tol` band either side of the dashed border) grabs the box to move
+            // it, as in PowerPoint; inside it, the press is for the text (#470).
+            let local = x.affine().inverse() * p;
+            let band = tol.min(x.w / 4.0).min(x.h / 4.0).max(0.0);
+            let in_text = local.x > band && local.y > band && local.x < x.w - band && local.y < x.h - band;
+            if in_text && !matches!(self.hit_test(p, tol), Some(Hit::Resize { .. } | Hit::Rotate { .. } | Hit::Adjust { .. })) {
                 let pos = text_pos(st, sh, p);
                 let shift = mods.shift;
                 self.select(|_, sel| {
