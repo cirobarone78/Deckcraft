@@ -44,7 +44,7 @@ pub fn sniff(bytes: &[u8]) -> bool {
     zip::ZipArchive::new(std::io::Cursor::new(bytes)).map(|z| z.index_for_name("[Content_Types].xml").is_some()).unwrap_or(false)
 }
 
-/// Read a `.pptx` / `.potx` / `.ppsx` package.
+/// Read a `.pptx` / `.potx` / `.ppsx` package (and the macro-enabled `.pptm` / `.potm` / `.ppsm`).
 pub fn import(bytes: &[u8]) -> Result<Presentation, PptxError> {
     read::import(bytes)
 }
@@ -52,6 +52,12 @@ pub fn import(bytes: &[u8]) -> Result<Presentation, PptxError> {
 /// Write a `.pptx` package.
 pub fn export(p: &Presentation) -> Result<Vec<u8>, PptxError> {
     write::export(p)
+}
+
+/// Write a macro-enabled `.pptm` / `.potm` / `.ppsm` package (`ext` without the dot), keeping
+/// the VBA project read from the original untouched. Macros are never run.
+pub fn export_macro_enabled(p: &Presentation, ext: &str) -> Result<Vec<u8>, PptxError> {
+    write::export_macro_enabled(p, ext)
 }
 
 /// Content type for a file name's extension.

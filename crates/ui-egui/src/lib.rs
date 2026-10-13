@@ -694,6 +694,9 @@ impl SlideApp {
             || lower.ends_with(".pptx")
             || lower.ends_with(".potx")
             || lower.ends_with(".ppsx")
+            || lower.ends_with(".pptm")
+            || lower.ends_with(".potm")
+            || lower.ends_with(".ppsm")
         {
             "file.openBytes"
         } else if ct.starts_with("image/") {

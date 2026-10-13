@@ -376,6 +376,28 @@ fn sanitized(p: &Presentation) -> std::borrow::Cow<'_, Presentation> {
 }
 
 pub fn export(p: &Presentation) -> Result<Vec<u8>, PptxError> {
+    export_with(p, None)
+}
+
+/// Macro-enabled main content types by extension.
+const CT_PRES_MACRO: &str = "application/vnd.ms-powerpoint.presentation.macroEnabled.main+xml";
+const CT_TEMPLATE_MACRO: &str = "application/vnd.ms-powerpoint.template.macroEnabled.main+xml";
+const CT_SLIDESHOW_MACRO: &str = "application/vnd.ms-powerpoint.slideshow.macroEnabled.main+xml";
+const CT_VBA: &str = "application/vnd.ms-office.vbaProject";
+const RT_VBA: &str = "http://schemas.microsoft.com/office/2006/relationships/vbaProject";
+
+/// Write a macro-enabled package (`pptm`, `potm` or `ppsm`) with the kept VBA project.
+pub fn export_macro_enabled(p: &Presentation, ext: &str) -> Result<Vec<u8>, PptxError> {
+    let ct = match ext.to_ascii_lowercase().as_str() {
+        "potm" => CT_TEMPLATE_MACRO,
+        "ppsm" => CT_SLIDESHOW_MACRO,
+        _ => CT_PRES_MACRO,
+    };
+    export_with(p, Some(ct))
+}
+
+/// `macro_ct`: the macro-enabled main content type, which also writes `ppt/vbaProject.bin`.
+fn export_with(p: &Presentation, macro_ct: Option<&'static str>) -> Result<Vec<u8>, PptxError> {
     let p = sanitized(p);
     let p: &Presentation = &p;
     let mut x = Exp {
@@ -514,8 +536,14 @@ pub fn export(p: &Presentation) -> Result<Vec<u8>, PptxError> {
     x.pkg.xml_part("ppt/viewProps.xml", CT_VIEW_PROPS, view_props_xml());
     let ts = crate::tables::table_styles_xml(&x.table_styles, &p.table_styles);
     x.pkg.xml_part("ppt/tableStyles.xml", CT_TABLE_STYLES, ts);
+    if macro_ct.is_some()
+        && let Some(vba) = p.vba_project.and_then(|m| p.media(m)).filter(|m| !m.data.is_empty())
+    {
+        pres.rels.add(RT_VBA, "vbaProject.bin", false);
+        x.pkg.xml_part_binary("ppt/vbaProject.bin", CT_VBA, vba.data.as_ref().clone());
+    }
     let pxml = presentation_xml(&mut x, &mut pres, &master_rids, notes_master_rid.as_deref(), &slide_rids);
-    x.pkg.xml_part("ppt/presentation.xml", CT_PRES, pxml);
+    x.pkg.xml_part("ppt/presentation.xml", macro_ct.unwrap_or(CT_PRES), pxml);
     x.pkg.rels("ppt/presentation.xml", &pres.rels);
 
     // Document properties and package relationships.
