@@ -1,6 +1,6 @@
 # DeckCraft vs Microsoft PowerPoint: parity assessment
 
-> **Last reviewed:** 2026-10-10 · **Last updated:** 2026-10-10 · **Change:** minor (hours to ~95% per audience added; ready recomputed from written weights, 56% → 55%; stage stays alpha; previous: major, full re-measure against PowerPoint for Mac 16.113.4; replaces the parity sections of ROADMAP.md) · **Target:** Microsoft PowerPoint for Mac 16.113 (Microsoft 365)
+> **Last reviewed:** 2026-10-13 · **Last updated:** 2026-10-13 · **Change:** minor (View › Arrange All; breadth 79% → 80%; previous: minor, hours to ~95% per audience added) · **Target:** Microsoft PowerPoint for Mac 16.113 (Microsoft 365)
 
 The authoritative answer to "how close is DeckCraft to PowerPoint, and how much work is left?".
 [ROADMAP.md](../ROADMAP.md) summarizes it; [gaps.md](gaps.md) itemizes every shortfall;
@@ -11,7 +11,7 @@ number.
 
 | Number | Value | Kind |
 |---|---|---|
-| **Feature breadth** (weighted checklist) | **79%** over 191 features (P0 92%, P1 75%, P2 36%) | **measured**: `cargo xtask parity` formula over [parity-checklist.md](parity-checklist.md), rows re-scored 2026-10-10 |
+| **Feature breadth** (weighted checklist) | **80%** over 191 features (P0 92%, P1 75%, P2 40%) | **measured**: `cargo xtask parity` formula over [parity-checklist.md](parity-checklist.md) |
 | Menu-bar coverage | **59%** (128 of 217 app-specific PowerPoint menu items have a DeckCraft command or UI label of the same name) | **measured** (heuristic lower bound): script matching the 2026-10-07 PowerPoint menu dump against the 226 engine command labels and the UI's strings; excludes the app, Window and Help menus and the subtitle language lists |
 | **Ready for real work** | **~55%** | **estimated**: weighted dimension table below (was ~56% until the features row was recomputed from written area weights) |
 | **Mainstream practitioner** | **~53%** | **estimated**: [method below](#mainstream-practitioner-and-essentials-user) |
@@ -64,7 +64,7 @@ The weights are what those users actually depend on, written down so the total c
 
 | Dimension | Weight | Ready | Hours to full | Doc | Evidence |
 |---|---:|---:|---|---|---|
-| Features (breadth × depth) | 30% | ~62% | 140–240 | [parity-checklist.md](parity-checklist.md), [animation-parity.md](animation-parity.md), [slideshow-parity.md](slideshow-parity.md) | Breadth 79% measured. Depth lags: 37 of 191 rows are partial, and users found depth bugs in rows scored done within two days (#53, #60, #69, #70, #74, #77, #78) |
+| Features (breadth × depth) | 30% | ~62% | 140–240 | [parity-checklist.md](parity-checklist.md), [animation-parity.md](animation-parity.md), [slideshow-parity.md](slideshow-parity.md) | Breadth 80% measured. Depth lags: partial rows remain, and users found depth bugs in rows scored done within two days (#53, #60, #69, #70, #74, #77, #78) |
 | File formats | 20% | ~58% | 60–110 | [file-format-parity.md](file-format-parity.md) | PPTX reads and writes every main part and keeps unknown objects; files open in PowerPoint without repair. But it has never met a corpus of real decks, EMF/WMF/SVG pictures don't decode, comments/media/rewind settings are lost on round trip, and there is no `.ppt`, `.pptm`, `.odp`, video or GIF export |
 | UI/UX fidelity | 15% | ~60% | 30–50 | [ui-parity.md](ui-parity.md) | All 10 ribbon tabs and the contextual tabs exist; Format Shape pane, Animation Pane, dialogs and menus are thinner than PowerPoint's; no native macOS menu bar; user reports #17, #71, #73, #76 |
 | Stability | 10% | ~60% | 10–20 | [gaps.md](gaps.md) | Never-crash rules, a panic guard round every command, PPTX fuzz/malformed tests. But startup crashes on some Windows GPUs (#40, #59) and Close discards edits without asking (#60) |
@@ -179,10 +179,10 @@ it is the Features row of the dimension table. Automation and Platforms are scor
 
 | Area | Weight | Breadth (measured) | Ready (est.) | Hours | Main shortfalls | Doc |
 |---|---:|---:|---:|---|---|---|
-| Application shell | 5 | 71% | ~55% | 8–14 | No native macOS menu bar, thin start screen (templates, recent), one window per presentation missing | [ui-parity.md](ui-parity.md) |
+| Application shell | 5 | 71% | ~55% | 8–14 | No native macOS menu bar, thin start screen (templates, recent), second window has no text caret | [ui-parity.md](ui-parity.md) |
 | Files (commands) | 4 | 69% | ~50% | see file formats | Print, reuse slides, passwords, legacy and macro formats | [file-format-parity.md](file-format-parity.md) |
 | Slides and sections | 6 | 90% | ~85% | 3–5 | Zoom (summary/section/slide), copying slides between decks keeps formatting only partly | [parity-checklist.md](parity-checklist.md) |
-| Views | 4 | 90% | ~80% | 3–6 | Snap to grid and grid options, Arrange All | [ui-parity.md](ui-parity.md) |
+| Views | 4 | 95% | ~80% | 3–6 | Snap to grid and grid options | [ui-parity.md](ui-parity.md) |
 | Masters and themes | 7 | 85% | ~70% | 8–14 | Notes and Handout masters, theme variants, `.thmx`, effect schemes | [parity-checklist.md](parity-checklist.md) |
 | Shapes | 7 | 86% | ~75% | 8–14 | Edit points, text warp, WordArt depth | [ui-parity.md](ui-parity.md) |
 | Format (fill, line, effects) | 6 | 81% | ~65% | 8–14 | Format Shape pane depth, bevel and 3-D, picture/texture fill options | [ui-parity.md](ui-parity.md) |
@@ -276,6 +276,7 @@ scored done (16 open issues).
 
 | Date | Change | Summary |
 |---|---|---|
+| 2026-10-13 | minor | View › Arrange All. Checklist breadth 79% → 80% (P2 40%, Views 95%). The second window still has no text caret |
 | 2026-10-10 | minor | Added the readiness-by-audience table: each number gets its own hours to ~95% (full 340–600, mainstream 150–250, essentials 50–90). The full number stays an additive weighted sum; no change to the percentages |
 | 2026-10-10 | minor | Added the mainstream practitioner (~53%) and essentials user (~62%) numbers with written weights, discounts and user evidence. Features dimension recomputed from written area weights (66% judgement → 62.4% weighted mean), which moves ready for real work from ~56% to ~55%; stage unchanged |
 | 2026-10-10 | minor | Stage checked against the core-workflow gate (all six pass); stays alpha |

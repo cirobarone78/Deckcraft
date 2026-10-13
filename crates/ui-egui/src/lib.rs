@@ -153,6 +153,7 @@ pub const UI_COMMANDS: &[(&str, &str, Option<&str>, &str)] = &[
     ("view.dark", "Dark Mode", None, "{on?: bool}"),
     ("view.grayscale", "Grayscale", None, "{on?: bool}"),
     ("view.newWindow", "New Window", None, "{on?: bool, slide?: index, delta?: int}"),
+    ("view.arrangeAll", "Arrange All", None, "{width?: points, height?: points}"),
     ("show.start", "Slide Show", Some("F5"), "{from?: index}"),
     ("show.presenter", "Presenter View", None, "{on?: bool}"),
     ("show.end", "End Show", None, "{}"),
@@ -231,6 +232,8 @@ pub struct SlideApp {
     pub selpane: selpane::State,
     /// View › New Window: a second window on one presentation. `None` when it is closed.
     pub doc_window: Option<doc_window::DocWindow>,
+    /// View › Arrange All, applied once on the next frame that can move the windows.
+    pub arrange: Option<doc_window::Arrange>,
 }
 
 impl SlideApp {
@@ -272,6 +275,7 @@ impl SlideApp {
             thumb_drag: None,
             selpane: selpane::State::default(),
             doc_window: None,
+            arrange: None,
         }
     }
 
@@ -499,6 +503,7 @@ impl SlideApp {
             }
             "view.grayscale" => self.ui.grayscale = self.flag(p, self.ui.grayscale),
             "view.newWindow" => return doc_window::command(self, p),
+            "view.arrangeAll" => return doc_window::arrange(self, p),
             "show.start" => {
                 let from = p.get("from").and_then(Value::as_u64).map(|v| v as usize).unwrap_or(0);
                 self.start_show(from, false);
