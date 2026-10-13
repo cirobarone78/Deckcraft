@@ -835,3 +835,37 @@ fn slide_ranges_parse_like_powerpoints_print_box() {
     let opts = cmd::file::pdf_options(&json!({"slides": [0, 7, 1]}), 2).unwrap();
     assert_eq!(opts.slides, Some(vec![0, 1]), "indices past the end are dropped");
 }
+
+#[test]
+fn a_new_slides_body_takes_leading_tabs_as_bullet_levels() {
+    // `slide.new` (MCP `add_slide`) with `body` reads leading tabs like `text.set` does: they set
+    // the outline level and are not kept in the text.
+    let body = "Install from DMG\nLaunch app\n\tCheck signing\n\t\tDeeper\nBuild a deck";
+    let mut s = session();
+    s.execute("slide.new", &json!({"layout": "titleAndContent", "title": "Test Plan", "body": body})).unwrap();
+    let levels = |s: &Session| -> Vec<(u8, String)> {
+        let st = s.doc().unwrap();
+        let slide = &st.doc.slides[st.selection.slide];
+        let sh = slide.shapes.iter().find(|x| x.ph_type().is_some_and(|k| !k.is_title())).unwrap();
+        sh.text.as_ref().unwrap().paragraphs.iter().map(|p| (p.level, p.text())).collect()
+    };
+    let want = vec![
+        (0, "Install from DMG".to_string()),
+        (0, "Launch app".into()),
+        (1, "Check signing".into()),
+        (2, "Deeper".into()),
+        (0, "Build a deck".into()),
+    ];
+    assert_eq!(levels(&s), want);
+    // The same text through `text.set` gives the same levels.
+    let id = {
+        let st = s.doc().unwrap();
+        let slide = &st.doc.slides[st.selection.slide];
+        slide.shapes.iter().find(|x| x.ph_type().is_some_and(|k| !k.is_title())).unwrap().id.0
+    };
+    s.execute("text.set", &json!({"id": id, "text": body})).unwrap();
+    assert_eq!(levels(&s), want);
+    // A body without tabs and a title are unchanged.
+    s.execute("slide.new", &json!({"layout": "titleAndContent", "title": "\tT", "body": "a\nb"})).unwrap();
+    assert_eq!(levels(&s), vec![(0, "a".to_string()), (0, "b".into())]);
+}

@@ -4,7 +4,7 @@ use std::sync::Arc;
 
 use deckcraft_model::edit::{self as ed, Pos};
 use deckcraft_model::resolve::{self, Ctx};
-use deckcraft_model::text::{AutoFit, Hyperlink, Run, RunKind, RunProps, TextBody};
+use deckcraft_model::text::{AutoFit, Hyperlink, Paragraph, Run, RunKind, RunProps, TextBody};
 use deckcraft_model::{Presentation, ShapeId, ShapeKind};
 use serde_json::{Value, json};
 
@@ -687,6 +687,16 @@ fn select_para(s: &mut Session, p: &Value) -> Result<Value> {
     ok()
 }
 
+/// Leading tabs of a paragraph set its outline level (one level per tab, up to 8) and are dropped
+/// from the text. False when the paragraph has none.
+pub(crate) fn take_tab_level(para: &mut Paragraph) -> bool {
+    let tabs = para.runs.first().map(|r| r.text.chars().take_while(|c| *c == '\t').count()).unwrap_or(0);
+    let Some(r) = para.runs.first_mut().filter(|_| tabs > 0) else { return false };
+    r.text = r.text.trim_start_matches('\t').to_string();
+    para.level = tabs.min(8) as u8;
+    true
+}
+
 fn set(s: &mut Session, p: &Value) -> Result<Value> {
     let text = str_param(p, "text").ok_or_else(|| bad("text.set", "missing `text`"))?.to_string();
     let id = match id_param(p, "id") {
@@ -705,13 +715,7 @@ fn set(s: &mut Session, p: &Value) -> Result<Value> {
         let levels: Vec<(u8, deckcraft_model::text::ParaProps)> = body.paragraphs.iter().map(|p| (p.level, p.props.clone())).collect();
         let mut nb = TextBody::from_text(&text);
         for (i, para) in nb.paragraphs.iter_mut().enumerate() {
-            // Leading tabs set the outline level.
-            let tabs = para.runs.first().map(|r| r.text.chars().take_while(|c| *c == '\t').count()).unwrap_or(0);
-            if tabs > 0
-                && let Some(r) = para.runs.first_mut()
-            {
-                r.text = r.text.trim_start_matches('\t').to_string();
-                para.level = tabs.min(8) as u8;
+            if take_tab_level(para) {
             } else if let Some((lv, pp)) = levels.get(i) {
                 para.level = *lv;
                 para.props = pp.clone();

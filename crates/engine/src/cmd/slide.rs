@@ -108,7 +108,12 @@ fn new(s: &mut Session, p: &Value) -> Result<Value> {
         if let Some(b) = str_param(p, "body")
             && let Some(sh) = slide.shapes.iter_mut().find(|x| x.ph_type().is_some_and(|k| !k.is_title()))
         {
-            sh.text = Some(TextBody::from_text(b));
+            // As in `text.set`, a leading tab makes a paragraph a sub-bullet.
+            let mut body = TextBody::from_text(b);
+            body.paragraphs.iter_mut().for_each(|p| {
+                super::text::take_tab_level(p);
+            });
+            sh.text = Some(body);
         }
         let at = usize_param(p, "at").unwrap_or(if doc.slides.is_empty() { 0 } else { sel.slide + 1 }).min(doc.slides.len());
         let id = slide.id;
