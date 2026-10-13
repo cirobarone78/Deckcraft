@@ -1,6 +1,6 @@
 # PowerPoint feature checklist
 
-> **Generated:** 2026-10-10 (summary by `cargo xtask parity`; rows re-scored 2026-10-10 against PowerPoint for Mac 16.113.4) · **Target:** Microsoft PowerPoint for Mac 16.113 (Microsoft 365)
+> **Generated:** 2026-10-14 (summary by `cargo xtask parity`; rows re-scored 2026-10-14, Insert screenshot partial on macOS; previously 2026-10-10 against PowerPoint for Mac 16.113.4) · **Target:** Microsoft PowerPoint for Mac 16.113 (Microsoft 365)
 
 The summary between `<!-- SUMMARY -->
 **Weighted breadth parity: 79%** over 191 features.
@@ -9,7 +9,7 @@ The summary between `<!-- SUMMARY -->
 |---|---|---|---|---|---|
 | P0 | 72 | 61 | 11 | 0 | 92% |
 | P1 | 65 | 38 | 21 | 6 | 75% |
-| P2 | 54 | 13 | 15 | 26 | 38% |
+| P2 | 54 | 13 | 16 | 25 | 39% |
 
 | Area | Parity |
 |---|---|
@@ -25,7 +25,7 @@ The summary between `<!-- SUMMARY -->
 | Tables | 89% |
 | Charts | 65% |
 | SmartArt | 33% |
-| Pictures | 48% |
+| Pictures | 50% |
 | Media | 67% |
 | Transitions | 92% |
 | Animations | 79% |
@@ -188,7 +188,7 @@ Open P0 items: Contextual tabs (Shape Format, Picture Format, Table Design/Layou
 | Pictures | Change / reset picture | P1 | D |
 | Pictures | Compress pictures | P2 | M |
 | Pictures | Paste image from clipboard (fails on Windows and Linux, #53) | P0 | P |
-| Pictures | Insert screenshot | P2 | M |
+| Pictures | Insert screenshot | P2 | P |
 | Media | Insert audio (any common format) | P0 | D |
 | Media | Insert video | P1 | D |
 | Media | Audio/video playback in the show (WMA/WMV not decodable yet) | P0 | P |
