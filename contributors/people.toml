@@ -37,3 +37,6 @@ sync_github_name = false
 
 [people.Johannesgauss]
 sync_github_name = true
+
+[people.n0mahd]
+sync_github_name = true
