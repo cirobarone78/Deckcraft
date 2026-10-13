@@ -15,7 +15,7 @@ pub fn specs() -> Vec<CommandSpec> {
         cmd!(noundo "file.saveAs", "Save As…", ["File"], Some("Cmd+Shift+S"), "{path, format?}", has_doc, save_as),
         cmd!(noundo "file.saveTemplate", "Save as Template…", ["File"], None, "{path}", has_doc, save_as),
         cmd!(query "file.saveBytes", "Save to Data", [], None, "{format?: deckcraft|pptx} → {data: base64}", has_doc, save_bytes_cmd),
-        cmd!(noundo "file.export", "Export…", ["File"], None, "{path, format: png|jpeg|pptx|deckcraft|outline|pdf, slide?: index, all?: bool, scale?: px per pt; pdf: layout?: slides|notes|handouts, perPage?: 1|2|3|4|6|9, dpi?, slides?: [index] | \"1-3,5\", includeHidden?, textLayer?, frame?}", has_doc, export),
+        cmd!(noundo "file.export", "Export…", ["File"], None, "{path, format: png|jpeg|pptx|deckcraft|outline|pdf|mp4|mov, slide?: index, all?: bool, scale?: px per pt; pdf: layout?: slides|notes|handouts, perPage?: 1|2|3|4|6|9, dpi?, slides?: [index] | \"1-3,5\", includeHidden?, textLayer?, frame?; mp4/mov: height?: 480|720|1080|2160, fps?, secondsPerSlide?}", has_doc, export),
         cmd!(
             query "file.info",
             "Info",
@@ -192,6 +192,10 @@ pub fn format_for_path(path: &str) -> &'static str {
         "jpeg"
     } else if l.ends_with(".pdf") {
         "pdf"
+    } else if l.ends_with(".mp4") || l.ends_with(".m4v") {
+        "mp4"
+    } else if l.ends_with(".mov") {
+        "mov"
     } else if l.ends_with(".txt") || l.ends_with(".md") {
         "outline"
     } else {
@@ -305,6 +309,7 @@ fn export(s: &mut Session, p: &Value) -> Result<Value> {
             }
             Ok(json!({"files": written}))
         }
+        "mp4" | "mov" => video_export(&st.doc, &path, &format, p),
         "pdf" => {
             let bytes = pdf_bytes(&st.doc, p)?;
             write_file(&path, &bytes)?;
@@ -316,6 +321,21 @@ fn export(s: &mut Session, p: &Value) -> Result<Value> {
             Ok(json!({"path": path, "bytes": bytes.len()}))
         }
     }
+}
+
+/// File › Export › Create a Video.
+fn video_export(doc: &deckcraft_model::Presentation, path: &str, format: &str, p: &Value) -> Result<Value> {
+    let d = crate::video::VideoOpts::default();
+    let opts = crate::video::VideoOpts {
+        height: usize_param(p, "height").map(|h| h.clamp(2, 4320) as u32).unwrap_or(d.height),
+        fps: usize_param(p, "fps").map(|f| f.clamp(1, 60) as u32).unwrap_or(d.fps),
+        seconds_per_slide: f64_or(p, "secondsPerSlide", d.seconds_per_slide).clamp(0.1, 3600.0),
+        include_hidden: bool_or(p, "includeHidden", false),
+    };
+    let (bytes, frames, (w, h)) = crate::video::encode(doc, format, &opts).map_err(|e| bad("file.export", e))?;
+    write_file(path, &bytes)?;
+    let fps = opts.fps.clamp(1, 60);
+    Ok(json!({"path": path, "bytes": bytes.len(), "frames": frames, "width": w, "height": h, "fps": fps, "seconds": frames as f64 / fps as f64}))
 }
 
 /// File › Info: what the Info page shows about the active presentation.
