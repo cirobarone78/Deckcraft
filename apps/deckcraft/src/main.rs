@@ -14,6 +14,8 @@
 
 mod audio;
 mod control_server;
+#[cfg(all(unix, not(target_os = "macos")))]
+mod displays;
 #[cfg(any(target_os = "windows", test))]
 mod graphics;
 mod logging;
@@ -123,6 +125,8 @@ fn services() -> Services {
         audio_out: std::env::var_os("DECKCRAFT_NO_AUDIO")
             .is_none()
             .then(|| Box::new(audio::CpalOut::default()) as Box<dyn deckcraft_media::AudioOut>),
+        #[cfg(all(unix, not(target_os = "macos")))]
+        displays: Some(Box::new(|| displays::count(use_x11()))),
         ..Default::default()
     }
 }
@@ -184,7 +188,7 @@ fn main() -> eframe::Result {
         options.viewport = options.viewport.with_icon(icon);
     }
     #[cfg(all(unix, not(target_os = "macos")))]
-    if std::env::var_os("DISPLAY").is_some() && std::env::var_os("DECKCRAFT_WAYLAND").is_none() {
+    if use_x11() {
         options.event_loop_builder = Some(Box::new(|b| {
             use winit::platform::x11::EventLoopBuilderExtX11;
             b.with_x11();
@@ -227,4 +231,11 @@ fn main() -> eframe::Result {
             Ok(Box::new(App(app)))
         }),
     )
+}
+
+/// Whether the window opens through X11 (under a Wayland compositor, XWayland) rather than
+/// Wayland; `DECKCRAFT_WAYLAND` asks for Wayland.
+#[cfg(all(unix, not(target_os = "macos")))]
+fn use_x11() -> bool {
+    std::env::var_os("DISPLAY").is_some() && std::env::var_os("DECKCRAFT_WAYLAND").is_none()
 }
