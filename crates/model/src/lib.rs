@@ -247,6 +247,8 @@ pub struct MediaClip {
     /// Probed picture size of a video in pixels (0 = unknown).
     pub width: u32,
     pub height: u32,
+    /// Recorded with Record Slide Show. The show skips it when Play Narrations is off.
+    pub narration: bool,
 }
 
 /// One ink stroke (Draw tab): points in slide coordinates with pressure.
@@ -257,6 +259,24 @@ pub struct InkStroke {
     pub color: Rgba,
     pub width: f64,
     pub highlighter: bool,
+}
+
+/// One sample of a laser pointer recorded during Record Slide Show, in slide points.
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct LaserSample {
+    pub x: f64,
+    pub y: f64,
+    /// Milliseconds from the start of the slide.
+    pub t_ms: u32,
+}
+
+/// The laser path recorded for one slide.
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct LaserTrace {
+    pub color: Rgba,
+    pub points: Vec<LaserSample>,
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
@@ -537,6 +557,9 @@ pub struct Slide {
     /// Unmodelled XML kept for round-trip (custom data, tags).
     #[serde(skip_serializing_if = "Option::is_none")]
     pub raw_ext: Option<String>,
+    /// Laser pointer recorded with the slide. Empty when the show was not recording one.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub laser: Option<LaserTrace>,
 }
 
 impl Default for Slide {
@@ -555,6 +578,7 @@ impl Default for Slide {
             comments: vec![],
             color_map: None,
             raw_ext: None,
+            laser: None,
         }
     }
 }

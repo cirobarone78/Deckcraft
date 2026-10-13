@@ -325,3 +325,16 @@ fn player_plays_decoded_audio_through_the_mixer() {
     assert!((rms - 0.0884 * 0.5).abs() < 0.005, "{rms}");
     assert!((p.status(1).map(|s| s.position).unwrap_or(0.0) - 0.1).abs() < 1e-6);
 }
+
+#[test]
+fn wav_mono_round_trips_through_decode() {
+    let samples: Vec<f32> = (0..4000).map(|i| (i as f32 * 0.15).sin() * 0.25).collect();
+    let bytes = deckcraft_media::wav_mono(8000, &samples).expect("wav");
+    assert_eq!(Container::sniff(&bytes), Container::Wav);
+    let pcm = audio::decode(&Arc::new(bytes)).expect("decode");
+    assert_eq!(pcm.rate, 8000);
+    assert_eq!(pcm.channels, 1);
+    assert!(pcm.frames() > 3000, "{}", pcm.frames());
+    assert!(pcm.rms() > 0.05, "{}", pcm.rms());
+    assert!(deckcraft_media::wav_mono(1000, &samples).is_err());
+}

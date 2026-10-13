@@ -1,6 +1,6 @@
 # Slide show and presenter view: parity with PowerPoint
 
-> **Last reviewed:** 2026-10-14 · **Last updated:** 2026-10-14 · **Change:** minor (Record Slide Show keeps timings and pen ink; previous: major, created from the Slide Show tab) · **Target:** Microsoft PowerPoint for Mac 16.113 (Microsoft 365)
+> **Last reviewed:** 2026-10-14 · **Last updated:** 2026-10-14 · **Change:** minor (Record Slide Show keeps narration and a laser trace; previous: minor, timings and pen ink) · **Target:** Microsoft PowerPoint for Mac 16.113 (Microsoft 365)
 
 Presenting is the job PowerPoint is hired for. This doc covers the show window, presenter view,
 rehearsal and recording. Transition and animation playback are in
@@ -51,7 +51,7 @@ ready** (estimated), **10–16 h** to parity.
 | Feature | PowerPoint | DeckCraft |
 |---|---|---|
 | Rehearse Timings, keep timings | yes | yes |
-| Record Slide Show (narration, ink, laser, camera; Cameo) | yes | timings and pen ink; no narration audio, laser or camera |
+| Record Slide Show (narration, ink, laser, camera; Cameo) | yes | timings, per-slide narration audio, pen ink and a recorded laser trace; no camera or screen capture |
 | Clear timing / narration | yes | timings only |
 | Export the recorded show to video | yes | no (see [file-format-parity.md](file-format-parity.md)) |
 
@@ -66,12 +66,13 @@ Reading View in a window with navigation: present (checklist row done).
 | Presenter view on the right display, swap displays, pause/reset timer, clock, notes size | 3–5 |
 | Laser pointer, highlighter, eraser, keep-annotations prompt | 2–4 |
 | See All Slides and zoom during the show | 2–3 |
-| Record slide show narration audio (timings and pen ink are kept) | 4–6 |
-| **Total** | **~11–18** (the slide-show row of the feature table carries 10–16 h; recording overlaps the Media row) |
+| Record slide show screen capture (narration, timings, ink and laser are kept) | 4–8 |
+| **Total** | **~11–20** (the slide-show row of the feature table carries 10–16 h; recording overlaps the Media row) |
 
 ## Revision history
 
 | Date | Change | Summary |
 |---|---|---|
+| 2026-10-14 | minor | Record Slide Show keeps per-slide narration (played in the show, written to PPTX) and a laser trace. Camera and screen capture stay open |
 | 2026-10-14 | minor | Record Slide Show keeps timings and pen ink. Narration audio, laser and camera stay open |
 | 2026-10-10 | major | Created: show, presenter view, rehearse and record, compared with PowerPoint 16.113's Slide Show tab and menu |

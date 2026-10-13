@@ -26,7 +26,7 @@ Coordinates are slide points (1/72 inch; a 16:9 slide is 960 × 540) unless note
 | `ui.screenshot` | `{path?}` | PNG of the whole window (base64 when no path) |
 | `ui.render` | `{path?, slide?, scale?}` | Render a slide headlessly |
 | `ui.resize` / `ui.focus` | | Window control |
-| `show.start` / `show.end` | `{from?: slide index, presenter?, reading?, record?}` | Slide show. `record` keeps timings and pen ink (`show.record`) |
+| `show.start` / `show.end` | `{from?: slide index, presenter?, reading?, record?}` | Slide show. `record` keeps timings, narration, pen ink and a laser trace (`show.record`) |
 | `app.open` / `app.save` / `app.export` / `app.quit` | `{path, …}` | Files (export takes the `file.export` params, e.g. `{"path": "deck.pdf", "layout": "handouts", "perPage": 3}`) |
 
 The MCP server (`deckcraft-cli mcp`, see [mcp.md](mcp.md)) wraps the same methods for Claude

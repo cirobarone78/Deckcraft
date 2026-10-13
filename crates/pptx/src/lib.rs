@@ -21,6 +21,10 @@ use deckcraft_model::Presentation;
 /// Extension URI of the PowerPoint 2010 section list in `presentation.xml`.
 pub(crate) const SECTION_EXT_URI: &str = "{521415D9-36F7-43E2-AB2F-B90AF26B5E84}";
 
+/// Private extension for a laser trace recorded in the show. PowerPoint ignores an extension it
+/// does not know; DeckCraft reads it back.
+pub(crate) const LASER_EXT_URI: &str = "{D3C4A571-1A5E-4E01-9C11-DEC0A7710001}";
+
 #[derive(Debug, thiserror::Error)]
 pub enum PptxError {
     #[error("not a PPTX file: {0}")]
