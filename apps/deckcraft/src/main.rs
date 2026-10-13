@@ -134,27 +134,59 @@ fn app_icon() -> Option<egui::IconData> {
     eframe::icon_data::from_png_bytes(png).map_err(|e| log::warn!("app icon: {e}")).ok()
 }
 
-fn main() -> eframe::Result {
-    // First, so every start-up record (and the engine's panic hook, installed with the first
-    // Session) is captured; see `logging`.
-    let logger = logging::install();
-    let mut control_port: Option<u16> = std::env::var("DECKCRAFT_CONTROL_PORT").ok().and_then(|p| p.parse().ok());
-    let mut files = Vec::new();
-    let mut sample = false;
-    let mut show = false;
-    let mut args = std::env::args().skip(1);
+const USAGE: &str = "\
+Usage: deckcraft [OPTIONS] [FILES...]
+
+Options:
+  --control <PORT>  start the localhost JSON-lines control server on PORT (or set DECKCRAFT_CONTROL_PORT)
+  --sample          open the sample presentation
+  --show            start the slide show
+  --version         print the version and exit
+  -h, --help        print this help and exit
+";
+
+/// What the command line asks for.
+#[derive(Debug, PartialEq)]
+enum Cli {
+    /// Print this text and exit.
+    Print(String),
+    Run {
+        control_port: Option<u16>,
+        files: Vec<String>,
+        sample: bool,
+        show: bool,
+    },
+}
+
+/// Read the arguments (without the program name); `env_port` is `DECKCRAFT_CONTROL_PORT`.
+fn parse_args(args: impl IntoIterator<Item = String>, env_port: Option<u16>) -> Cli {
+    let (mut control_port, mut files, mut sample, mut show) = (env_port, Vec::new(), false, false);
+    let mut args = args.into_iter();
     while let Some(a) = args.next() {
         match a.as_str() {
             "--control" => control_port = args.next().and_then(|p| p.parse().ok()),
             "--sample" => sample = true,
             "--show" => show = true,
-            "--version" => {
-                println!("deckcraft {}", env!("CARGO_PKG_VERSION"));
-                return Ok(());
-            }
+            "--version" => return Cli::Print(format!("deckcraft {}\n", env!("CARGO_PKG_VERSION"))),
+            "--help" | "-h" => return Cli::Print(USAGE.to_string()),
             _ => files.push(a),
         }
     }
+    Cli::Run { control_port, files, sample, show }
+}
+
+fn main() -> eframe::Result {
+    // First, so every start-up record (and the engine's panic hook, installed with the first
+    // Session) is captured; see `logging`.
+    let logger = logging::install();
+    let env_port = std::env::var("DECKCRAFT_CONTROL_PORT").ok().and_then(|p| p.parse().ok());
+    let (control_port, files, sample, show) = match parse_args(std::env::args().skip(1), env_port) {
+        Cli::Print(text) => {
+            print!("{text}");
+            return Ok(());
+        }
+        Cli::Run { control_port, files, sample, show } => (control_port, files, sample, show),
+    };
     log::info!("DeckCraft {} ({} {})", env!("CARGO_PKG_VERSION"), std::env::consts::OS, std::env::consts::ARCH);
     // The log file lives under the settings directory; opened after the arguments, so `--version`
     // leaves no file behind. Records logged until now are written to it first.
@@ -227,4 +259,32 @@ fn main() -> eframe::Result {
             Ok(Box::new(App(app)))
         }),
     )
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn args(a: &[&str]) -> Vec<String> {
+        a.iter().map(|s| s.to_string()).collect()
+    }
+
+    #[test]
+    fn help_prints_the_usage_instead_of_opening_a_file() {
+        for flag in ["--help", "-h"] {
+            let Cli::Print(text) = parse_args(args(&["a.pptx", flag]), None) else { panic!("{flag} must print") };
+            assert!(text.starts_with("Usage: deckcraft") && text.contains("--control") && text.contains("--help"), "{text}");
+        }
+        assert_eq!(parse_args(args(&["--version"]), None), Cli::Print(format!("deckcraft {}\n", env!("CARGO_PKG_VERSION"))));
+    }
+
+    #[test]
+    fn the_other_arguments_still_mean_what_they_did() {
+        assert_eq!(
+            parse_args(args(&["--control", "7979", "--sample", "--show", "a.pptx", "b.deckcraft"]), None),
+            Cli::Run { control_port: Some(7979), files: args(&["a.pptx", "b.deckcraft"]), sample: true, show: true }
+        );
+        assert_eq!(parse_args(args(&[]), Some(1234)), Cli::Run { control_port: Some(1234), files: vec![], sample: false, show: false });
+        assert_eq!(parse_args(args(&["--control", "x"]), Some(1234)), Cli::Run { control_port: None, files: vec![], sample: false, show: false });
+    }
 }
