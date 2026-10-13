@@ -74,22 +74,23 @@ impl Tokens {
         }
     }
     pub fn dark() -> Self {
+        // ArtCraft native dark UI roles. Slide content, handles and guides stay semantic.
         Tokens {
             dark: true,
-            chrome: Color32::from_rgb(0x26, 0x26, 0x26),
-            card: Color32::from_rgb(0x33, 0x33, 0x33),
-            card_border: Color32::from_rgb(0x44, 0x44, 0x44),
-            canvas: Color32::from_rgb(0x1E, 0x1E, 0x1E),
-            text: Color32::from_rgb(0xEE, 0xEE, 0xEE),
-            text_dim: Color32::from_rgb(0xBB, 0xBB, 0xBB),
-            text_faint: Color32::from_rgb(0x88, 0x88, 0x88),
-            border: Color32::from_rgb(0x4A, 0x4A, 0x4A),
-            separator: Color32::from_rgb(0x48, 0x48, 0x48),
-            hover: Color32::from_rgb(0x40, 0x40, 0x40),
-            pressed: Color32::from_rgb(0x4C, 0x4C, 0x4C),
-            selected: Color32::from_rgb(0x47, 0x47, 0x47),
-            accent: Color32::from_rgb(0xF2, 0x6B, 0x1D),
-            accent_text: Color32::WHITE,
+            chrome: Color32::from_rgb(0x0A, 0x0A, 0x0C),
+            card: Color32::from_rgb(0x1E, 0x1F, 0x22),
+            card_border: Color32::from_rgb(0x36, 0x37, 0x3A),
+            canvas: Color32::from_rgb(0x12, 0x13, 0x16),
+            text: Color32::from_rgb(0xF2, 0xF1, 0xEE),
+            text_dim: Color32::from_rgb(0xA6, 0xA6, 0xA8),
+            text_faint: Color32::from_rgb(0x71, 0x71, 0x76),
+            border: Color32::from_rgb(0x36, 0x37, 0x3A),
+            separator: Color32::from_rgb(0x36, 0x37, 0x3A),
+            hover: Color32::from_rgb(0x32, 0x33, 0x37),
+            pressed: Color32::from_rgb(0x41, 0x42, 0x46),
+            selected: Color32::from_rgb(0x20, 0x3B, 0x65),
+            accent: Color32::from_rgb(0x2D, 0x81, 0xFF),
+            accent_text: Color32::from_rgb(0x06, 0x06, 0x07),
             contextual: Color32::from_rgb(0xF5, 0x8A, 0x4B),
             selection: Color32::from_rgb(0xAA, 0xAA, 0xAA),
             handle_fill: Color32::WHITE,
@@ -97,7 +98,7 @@ impl Tokens {
             guide: Color32::from_rgb(0xF2, 0x8A, 0x4B),
             caret: Color32::BLACK,
             text_selection: Color32::from_rgba_unmultiplied(0x5A, 0x8F, 0xE0, 90),
-            field_bg: Color32::from_rgb(0x2A, 0x2A, 0x2A),
+            field_bg: Color32::from_rgb(0x06, 0x06, 0x07),
             shadow: Color32::from_black_alpha(90),
         }
     }
@@ -122,8 +123,8 @@ pub fn apply(ctx: &egui::Context, t: &Tokens) {
     v.window_stroke = Stroke::new(1.0, t.card_border);
     v.window_corner_radius = CornerRadius::same(10);
     v.menu_corner_radius = CornerRadius::same(8);
-    v.selection.bg_fill = t.accent.gamma_multiply(0.85);
-    v.selection.stroke = Stroke::new(1.0, t.accent_text);
+    v.selection.bg_fill = if t.dark { t.selected } else { t.accent.gamma_multiply(0.85) };
+    v.selection.stroke = Stroke::new(1.0, if t.dark { t.text } else { t.accent_text });
     v.hyperlink_color = t.accent;
     v.override_text_color = Some(t.text);
     for w in [&mut v.widgets.noninteractive, &mut v.widgets.inactive, &mut v.widgets.hovered, &mut v.widgets.active, &mut v.widgets.open] {
@@ -135,7 +136,7 @@ pub fn apply(ctx: &egui::Context, t: &Tokens) {
     v.widgets.inactive.bg_stroke = Stroke::NONE;
     v.widgets.hovered.weak_bg_fill = t.hover;
     v.widgets.hovered.bg_fill = t.hover;
-    v.widgets.hovered.bg_stroke = Stroke::NONE;
+    v.widgets.hovered.bg_stroke = if t.dark { Stroke::new(1.0, Color32::from_rgb(0x74, 0xAA, 0xFF)) } else { Stroke::NONE };
     v.widgets.active.weak_bg_fill = t.pressed;
     v.widgets.active.bg_fill = t.pressed;
     v.widgets.open.weak_bg_fill = t.pressed;
@@ -234,6 +235,23 @@ pub fn to_color32(c: deckcraft_color::Rgba) -> Color32 {
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn artcraft_dark_roles_preserve_slide_and_light() {
+        let dark = super::Tokens::dark();
+        let light = super::Tokens::light();
+        assert_eq!(dark.chrome, egui::Color32::from_rgb(0x0A, 0x0A, 0x0C));
+        assert_eq!(dark.card, egui::Color32::from_rgb(0x1E, 0x1F, 0x22));
+        assert_eq!(dark.accent, egui::Color32::from_rgb(0x2D, 0x81, 0xFF));
+        assert_eq!(dark.accent_text, egui::Color32::from_rgb(0x06, 0x06, 0x07));
+        assert_eq!(dark.canvas, egui::Color32::from_rgb(0x12, 0x13, 0x16));
+        assert_eq!(dark.guide, egui::Color32::from_rgb(0xF2, 0x8A, 0x4B));
+        let ctx = egui::Context::default();
+        super::apply(&ctx, &dark);
+        assert_eq!(ctx.global_style().visuals.selection.bg_fill, dark.selected);
+        assert_eq!(light.chrome, egui::Color32::from_rgb(0xF5, 0xF5, 0xF5));
+        assert_eq!(super::Brightness::default(), super::Brightness::Light);
+    }
+
     /// Each character of `text` laid out in the interface fonts at interface sizes, and whether it
     /// has ink (a glyph image).
     fn drawn(text: &str) -> Vec<(char, f32, bool)> {
