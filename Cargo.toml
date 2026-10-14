@@ -59,6 +59,8 @@ vello_common = { version = "0.2", default-features = false }
 image = { version = "0.25", default-features = false, features = ["png", "jpeg", "webp", "gif", "tiff", "bmp"] }
 krilla = { version = "0.8", features = ["pdf"] }
 i_overlay = "9"
+# QR codes for Insert ▸ QR Code (#154); no image feature, we draw the modules ourselves.
+qrcode = { version = "0.14", default-features = false }
 quick-xml = "0.38"
 zip = { version = "3", default-features = false, features = ["deflate"] }
 

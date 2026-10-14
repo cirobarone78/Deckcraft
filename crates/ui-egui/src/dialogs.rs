@@ -55,6 +55,7 @@ fn title(id: &str) -> &'static str {
         "chartData" => "Chart Data",
         "trim" => "Trim Media",
         "smartart" => "Choose a SmartArt Graphic",
+        "qrCode" => "Insert QR Code",
         "quit" => "DeckCraft",
         _ => "DeckCraft",
     }
@@ -343,6 +344,27 @@ fn body(app: &mut SlideApp, ui: &mut Ui, d: &mut Dialog) -> bool {
                 app.ui.pane = Some("comments".into());
             }
             ok || cancel
+        }
+        "qrCode" => {
+            ui.label("A link or any text. Scanning the code opens the link or shows the text.");
+            field(ui, d, "Link or text:", "text", "https://");
+            let levels = [("L", "Low (7%)"), ("M", "Medium (15%)"), ("Q", "Quartile (25%)"), ("H", "High (30%)")];
+            let level = d.get("level", "M");
+            ui.horizontal(|ui| {
+                ui.add_sized(vec2(120.0, 20.0), egui::Label::new("Error correction:"));
+                for (k, l) in levels {
+                    if ui.selectable_label(level == k, l).clicked() {
+                        d.fields.insert("level".into(), k.into());
+                    }
+                }
+            });
+            let (ok, cancel) = buttons(ui, "Insert");
+            let text = d.get("text", "https://");
+            let usable = !text.trim().is_empty() && text.trim() != "https://";
+            if ok && usable {
+                run(app, "insert.qrCode", json!({"text": text, "level": level}));
+            }
+            (ok && usable) || cancel
         }
         "altText" => {
             let cur = app.session.active().and_then(|s| s.selected_shapes().first().map(|x| x.descr.clone())).unwrap_or_default();
