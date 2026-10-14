@@ -221,6 +221,9 @@ RISC-V 64 (riscv64): `deckcraft-<ver>-linux-riscv64.tar.gz`, a tarball only (cro
 |---|---|---|
 | Static site | `deckcraft-web-<ver>.zip` | Runs in a modern browser; host it on any static server |
 
+Hosting it yourself? The optional `self-hosted-update` feature adds update notices and an
+administrator-triggered update; see [`docs/self-hosted-updates.md`](docs/self-hosted-updates.md).
+
 ## The Crafting Apps
 
 DeckCraft is one of the **Crafting Apps**: free, open-source creative tools from the

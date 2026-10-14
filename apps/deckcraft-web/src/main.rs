@@ -14,9 +14,16 @@
 //!
 //! URL query flags: `?webgl` forces the WebGL2 backend instead of WebGPU; `?blank` starts with an
 //! empty presentation instead of the sample deck; `?show` starts the slide show.
+//!
+//! Self-hosted deployments can build with `--features self-hosted-update` (off by default): a
+//! notice tells visitors when a newer release exists and the administrator can start the update
+//! (`updates`, docs/self-hosted-updates.md).
 #![deny(clippy::unwrap_used, clippy::expect_used, clippy::panic, clippy::unimplemented, clippy::todo, clippy::unreachable)]
 #![forbid(unsafe_code)]
 
+// The web shell uses it; natively it only exists for its tests.
+#[cfg(all(feature = "self-hosted-update", any(target_arch = "wasm32", test)))]
+mod updates;
 #[cfg(target_arch = "wasm32")]
 mod web;
 

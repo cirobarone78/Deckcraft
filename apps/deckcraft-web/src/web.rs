@@ -49,7 +49,12 @@ pub fn start() {
                     if q.contains("show") {
                         app.start_show(0, false);
                     }
-                    Ok(Box::new(WebShell { app, inbox }))
+                    Ok(Box::new(WebShell {
+                        app,
+                        inbox,
+                        #[cfg(feature = "self-hosted-update")]
+                        updates: crate::updates::browser(cc.egui_ctx.clone()),
+                    }))
                 }),
             )
             .await;
@@ -71,6 +76,8 @@ fn query() -> String {
 struct WebShell {
     app: SlideApp,
     inbox: Inbox,
+    #[cfg(feature = "self-hosted-update")]
+    updates: crate::updates::Updates<craft_update::web::Client>,
 }
 
 impl eframe::App for WebShell {
@@ -98,6 +105,8 @@ impl eframe::App for WebShell {
     }
 
     fn ui(&mut self, ui: &mut egui::Ui, _frame: &mut eframe::Frame) {
+        #[cfg(feature = "self-hosted-update")]
+        self.updates.show(ui);
         self.app.ui(ui);
     }
 }
