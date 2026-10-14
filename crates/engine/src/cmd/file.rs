@@ -215,10 +215,8 @@ fn mark_saved(s: &mut Session, path: Option<String>) -> Result<()> {
 
 #[cfg(not(target_arch = "wasm32"))]
 fn write_file(path: &str, bytes: &[u8]) -> Result<()> {
-    // Write to a temporary sibling then rename, so a failed save never truncates the old file.
-    let tmp = format!("{path}.saving");
-    std::fs::write(&tmp, bytes).map_err(|e| EngineError::Other(format!("{path}: {e}")))?;
-    std::fs::rename(&tmp, path).map_err(|e| EngineError::Other(format!("{path}: {e}")))
+    // Temporary sibling, flushed, then renamed: a failed save never truncates the old file.
+    crate::fsx::write_atomic(std::path::Path::new(path), bytes)
 }
 #[cfg(target_arch = "wasm32")]
 fn write_file(_path: &str, _bytes: &[u8]) -> Result<()> {
