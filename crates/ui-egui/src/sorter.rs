@@ -54,7 +54,19 @@ pub fn show(app: &mut SlideApp, ui: &mut Ui) {
                     );
                     p.text(pos2(img.min.x, img.max.y + 12.0), Align2::LEFT_CENTER, format!("{}", i + 1), theme::font(12.0), t.text_dim);
                     if let Some(tr) = doc.slides.get(i).and_then(|s| s.transition.as_ref()).filter(|t| t.kind != "none") {
-                        p.text(pos2(img.max.x, img.max.y + 12.0), Align2::RIGHT_CENTER, format!("★ {}", tr.kind), theme::font(10.5), t.text_faint);
+                        p.text(
+                            pos2(img.max.x, img.max.y + 12.0),
+                            Align2::RIGHT_CENTER,
+                            format!(
+                                "★ {}",
+                                crate::i18n::tr(
+                                    ui.ctx(),
+                                    deckcraft_model::anim::TRANSITIONS.iter().find(|x| x.0 == tr.kind).map_or(tr.kind.as_str(), |x| x.1)
+                                )
+                            ),
+                            theme::font(10.5),
+                            t.text_faint,
+                        );
                     }
                     if resp.clicked() {
                         let add = ui.input(|i| i.modifiers.command);
@@ -137,7 +149,7 @@ pub fn notes_page(app: &mut SlideApp, ui: &mut Ui) {
     let mut buf: String = child.data_mut(|d| d.get_temp(id).unwrap_or_else(|| current.clone()));
     let r = child.add(
         egui::TextEdit::multiline(&mut buf)
-            .hint_text("Click to add text")
+            .hint_text(crate::i18n::tr(ui.ctx(), "Click to add text"))
             .desired_width(notes_rect.width())
             .desired_rows(12)
             .frame(egui::Frame::NONE)

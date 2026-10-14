@@ -12,6 +12,7 @@ const SHOW_MS: f64 = 8000.0;
 
 pub struct Toast {
     pub text: String,
+    pub chinese: String,
     pub at: f64,
 }
 
@@ -35,7 +36,8 @@ pub fn note_missing_fonts(app: &mut SlideApp) {
         return;
     }
     if let Some(text) = missing_fonts_message(&d.missing_fonts) {
-        app.toast = Some(Toast { text, at: crate::now_ms() });
+        let chinese = format!("这些字体未安装：{}。将使用相似字体显示文字。", d.missing_fonts.join("、"));
+        app.toast = Some(Toast { text, chinese, at: crate::now_ms() });
     }
 }
 
@@ -46,7 +48,7 @@ pub fn show(app: &mut SlideApp, ctx: &egui::Context) {
         return;
     }
     let t = Tokens::get(ctx);
-    let text = toast.text.clone();
+    let text = if app.ui.language == crate::i18n::Language::SimplifiedChinese { toast.chinese.clone() } else { toast.text.clone() };
     let mut close = false;
     egui::Area::new(egui::Id::new("toast")).anchor(Align2::CENTER_BOTTOM, vec2(0.0, -44.0)).order(egui::Order::Foreground).show(ctx, |ui| {
         egui::Frame::NONE
@@ -65,7 +67,7 @@ pub fn show(app: &mut SlideApp, ctx: &egui::Context) {
                         ui.painter().rect_filled(r, CornerRadius::same(4), t.hover);
                     }
                     icons::paint(ui.painter(), r.shrink(3.0), Icon::Close, t.text_dim, false);
-                    if resp.on_hover_text("Close").clicked() {
+                    if resp.on_hover_text(crate::i18n::tr(ctx, "Close")).clicked() {
                         close = true;
                     }
                 });

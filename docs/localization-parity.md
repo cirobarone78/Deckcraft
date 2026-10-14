@@ -1,11 +1,32 @@
 # Localization parity with PowerPoint
 
-> **Last reviewed:** 2026-10-10 · **Last updated:** 2026-10-12 · **Change:** minor (IME composition and CJK interface text, #101; previous: major, created; string count measured from source, PowerPoint's localizations read from its bundle) · **Target:** Microsoft PowerPoint for Mac 16.113 (Microsoft 365)
+> **Last reviewed:** 2026-10-10 · **Last updated:** 2026-10-14 · **Change:** major (expanded Simplified Chinese interface, localized editor prompts and native file dialogs; user review pending) · **Target:** Microsoft PowerPoint for Mac 16.113 (Microsoft 365)
 
-DeckCraft's interface is English only today: strings are literals in the UI and engine code, with
-no catalog and no language switch. Requests: #15 (follow the system language), #30 and PR #34
-(Ukrainian, open). Dimension score: **~8% ready** (estimated: English complete, slide-text script
-support partly there), **55–90 h** to parity plus native-speaker review.
+DeckCraft defaults to English and offers a **Simplified Chinese interface preview** under
+File → Options → Interface language (or Ctrl/Cmd+,). Changes apply without restarting and the
+desktop saves the choice with its existing UI preferences. The browser still does not persist
+preferences. Unsupported interface languages are disabled. System-language detection (#15)
+and other translations (#30, PR #34) remain open. The previous **~8% ready**, **55–90 h**
+estimate has not been re-measured; catalog size is not a reviewed coverage percentage.
+
+The catalog lives in `crates/ui-egui/src/zh_hans.rs`, with context-local language handling in
+`i18n.rs`. It covers ribbon tools, galleries (shapes, transitions, animations, charts and table
+styles), File pages and print/export settings, format/background/animation/comment panes,
+dialogs, command palette labels, slideshow/presenter controls, contributor tables, common
+engine notices and native file-picker titles/filters. Formatted labels keep Rust's compile-time
+format checks. Editor-only placeholder prompts are supplied through a renderer callback and
+cached by interface language; document contents, custom prompts, stored IDs and API responses
+remain unchanged. Unknown strings and third-party diagnostic details retain English fallback.
+
+On Windows the interface prefers the user's installed DengXian/等线 face. No proprietary font
+is bundled, downloaded or installed by this build. Other platforms keep existing font fallback;
+browser CJK coverage depends on embedded fonts. This expanded preview was compiled for a local
+Windows installer. Its visual and functional validation and native-language review are pending
+with the user; the tests from the earlier partial preview are not evidence for this expanded pass.
+
+Review → Language is a separate **text-language** dialog. Its unimplemented choices are now
+disabled rather than looking actionable, with a link to interface preferences. This preview
+does not implement proofing languages or alter the language metadata of a presentation.
 
 ## How the numbers are measured
 
@@ -25,7 +46,7 @@ support partly there), **55–90 h** to parity plus native-speaker review.
 | Language | Code | UI strings translated | Dialogs / tooltips / help | Script support (slide text) | Native review | Status | PowerPoint for Mac UI | Hours to full |
 |---|---|---|---|---|---|---|---|---|
 | English | en | ~1,050 / ~1,050 (100%) | yes / yes / no help | full | yes | **full** | yes | 0 |
-| Simplified Chinese (Mandarin) | zh-Hans | 0 (0%) | no | renders with system CJK fonts (asset policy excludes Noto CJK from builds); UAX #14 breaking; IME composition (#101); no true vertical layout | no | none | yes | 6–10 (incl. IME) |
+| Simplified Chinese (Mandarin) | zh-Hans | expanded catalog; reviewed coverage not measured | main interface, advanced panes/dialogs, galleries and tooltips; no help translation | renders with system CJK fonts (asset policy excludes Noto CJK from builds); UAX #14 breaking; IME composition (#101); no true vertical layout | pending | preview | yes | not re-measured |
 | Spanish | es | 0 (0%) | no | full (Latin) | no | none | yes (es, es-MX) | 3–5 |
 | Hindi | hi | 0 (0%) | no | Devanagari shaping through HarfRust, untested; no bundled Devanagari font | no | none | **no** (Windows only) | 4–7 |
 | Arabic | ar | 0 (0%) | no | bidi, contextual shaping, kashida justification, RTL bullets and caret (#4); **UI not mirrored**; browser export shows boxes (#81) | no | none | yes | 10–16 (incl. UI mirroring) |
@@ -37,14 +58,14 @@ support partly there), **55–90 h** to parity plus native-speaker review.
 | Korean | ko | 0 (0%) | no | system Hangul fonts, in the interface too; IME composition (#101) | no | none | yes | 4–7 |
 | Vietnamese | vi | 0 (0%) | no | stacked diacritics through HarfRust | no | none | **no** (Windows only) | 3–5 |
 
-Other languages shipped: **0** (Ukrainian is in review as PR #34). PowerPoint for Mac ships 16 more
+Other translated interface languages shipped: **0** (Ukrainian is in review as PR #34). PowerPoint for Mac ships 16 more
 than the twelve above: Czech, Danish, Greek, Finnish, Hebrew, Hungarian, Italian, Dutch, Norwegian,
 Polish, Russian, Slovak, Swedish, Thai, Turkish and Traditional Chinese.
 
-Per-language hours assume the infrastructure exists: **8–14 h** once for a string catalog (copy a
-sibling app's approach, e.g. EffectCraft's menu and panel catalogs), a language setting that follows
-the system (#15), plural and number formatting, and an `xtask` check that every key has a
-translation. IME composition landed with #101 (slide text, notes and text fields; one undo step
+The Chinese catalog and a manual language setting exist; system detection (#15), a reusable
+plural/number framework, native review and an `xtask` completeness check remain open.
+The previous infrastructure estimate was **8–14 h** and has not been re-measured.
+IME composition landed with #101 (slide text, notes and text fields; one undo step
 per composition); the hours that included it are kept until the next re-measure.
 
 ## Proofing languages
@@ -57,5 +78,6 @@ common misspellings (`crates/engine/src/cmd/review.rs`); see [gaps.md](gaps.md#p
 
 | Date | Change | Summary |
 |---|---|---|
+| 2026-10-14 | major | Expanded Simplified Chinese across the editor, dialogs, galleries, File pages, slideshow, notices and native file pickers; localized editor placeholders; installed DengXian preference; user review pending |
 | 2026-10-12 | minor | IME composition for Chinese, Japanese and Korean, and interface text in any installed script (#101) |
 | 2026-10-10 | major | Created: twelve-language table, ~1,050 UI strings measured, PowerPoint for Mac's 26 languages from its bundle |

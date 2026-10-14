@@ -28,6 +28,8 @@ pub struct UiFonts {
     doc: Option<(u64, u64)>,
     /// Faces were added since the fonts were last installed.
     changed: bool,
+    #[cfg(target_os = "windows")]
+    preferred_chinese_checked: bool,
 }
 
 /// Characters worth a lookup: not ASCII, a space, a control or a private-use character.
@@ -60,6 +62,26 @@ pub fn faces_for_text(
 }
 
 impl UiFonts {
+    /// Use an installed Windows Chinese face; its bytes remain on the user's machine and are
+    /// never bundled with the application. Missing families keep the existing fallback chain.
+    #[cfg(target_os = "windows")]
+    pub fn prefer_installed_chinese(&mut self) {
+        if std::mem::replace(&mut self.preferred_chinese_checked, true) {
+            return;
+        }
+        let db = FontDb::global();
+        for family in ["DengXian", "等线"] {
+            if db.has_family(family) {
+                let face = db.face(family, "Regular");
+                if !face.is_color() && face.data().len() <= MAX_FACE_BYTES {
+                    self.faces.insert(0, face);
+                    self.changed = true;
+                }
+                break;
+            }
+        }
+    }
+
     /// Look at `text` the interface is about to draw; borrow faces for what it can't draw.
     pub fn note(&mut self, ctx: &egui::Context, text: &str) {
         if !text.chars().any(|c| wanted(c) && !self.seen.contains(&c)) {

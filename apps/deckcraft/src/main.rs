@@ -89,26 +89,34 @@ fn save_prefs(app: &SlideApp) {
     }
 }
 
-fn services() -> Services {
+fn services(ctx: egui::Context) -> Services {
+    let open_ctx = ctx.clone();
     Services {
-        pick_open: Some(Box::new(|purpose: &str| {
-            let d = rfd::FileDialog::new();
+        pick_open: Some(Box::new(move |purpose: &str| {
+            let label = |text| deckcraft_ui_egui::i18n::tr(&open_ctx, text);
+            let d = rfd::FileDialog::new().set_title(label("Open"));
             let d = match purpose {
-                "picture" => d.add_filter("Pictures", &["png", "jpg", "jpeg", "gif", "webp", "bmp", "tif", "tiff"]),
+                "picture" => d.add_filter(label("Pictures"), &["png", "jpg", "jpeg", "gif", "webp", "bmp", "tif", "tiff"]),
                 "audio" => d.add_filter(
-                    "Audio",
+                    label("Audio"),
                     &["wav", "mp3", "m4a", "m4b", "aac", "flac", "ogg", "oga", "opus", "aif", "aiff", "aifc", "caf", "wma", "weba", "mka"],
                 ),
-                "video" => d.add_filter("Video", &["mp4", "m4v", "mov", "webm", "mkv", "wmv"]),
+                "video" => d.add_filter(label("Video"), &["mp4", "m4v", "mov", "webm", "mkv", "wmv"]),
                 _ => d
-                    .add_filter("Presentations", &["deckcraft", "pptx", "potx", "ppsx"])
+                    .add_filter(label("Presentations"), &["deckcraft", "pptx", "potx", "ppsx"])
                     .add_filter("DeckCraft", &["deckcraft"])
                     .add_filter("PowerPoint", &["pptx", "potx", "ppsx"])
-                    .add_filter("Outline", &["txt", "md"]),
+                    .add_filter(label("Outline"), &["txt", "md"]),
             };
             d.pick_file().map(|p| p.to_string_lossy().to_string())
         })),
-        pick_save: Some(Box::new(|name: &str| rfd::FileDialog::new().set_file_name(name).save_file().map(|p| p.to_string_lossy().to_string()))),
+        pick_save: Some(Box::new(move |name: &str| {
+            rfd::FileDialog::new()
+                .set_title(deckcraft_ui_egui::i18n::tr(&ctx, "Save As"))
+                .set_file_name(name)
+                .save_file()
+                .map(|p| p.to_string_lossy().to_string())
+        })),
         read: Some(Box::new(|p: &str| std::fs::read(p).map_err(|e| e.to_string()))),
         write: Some(Box::new(|p: &str, b: &[u8]| std::fs::write(p, b).map_err(|e| e.to_string()))),
         clipboard_image: Some(Box::new(|| {
@@ -197,15 +205,21 @@ fn main() -> eframe::Result {
         "DeckCraft",
         options,
         Box::new(move |cc| {
-            let mut app = SlideApp::new(Session::new(), services());
+            let mut app = SlideApp::new(Session::new(), services(cc.egui_ctx.clone()));
             load_prefs(&mut app);
+            deckcraft_ui_egui::i18n::set_language(&cc.egui_ctx, app.ui.language);
             // AutoRecover: reopen what a previous run left unsaved, then keep it current.
             if std::env::var_os("DECKCRAFT_NO_RECOVERY").is_none() {
                 app.session.recovery_dir = deckcraft_engine::recovery::default_dir();
                 if let Ok(v) = app.session.execute("file.recovery.open", &serde_json::json!({}))
                     && let Some(n) = v.get("opened").and_then(|o| o.as_array()).map(Vec::len).filter(|n| *n > 0)
                 {
-                    app.set_status(format!("Recovered {n} unsaved presentation{} from the last session", if n == 1 { "" } else { "s" }));
+                    let notice = if app.ui.language == deckcraft_ui_egui::i18n::Language::SimplifiedChinese {
+                        format!("已恢复上次会话中未保存的 {n} 份演示文稿")
+                    } else {
+                        format!("Recovered {n} unsaved presentation{} from the last session", if n == 1 { "" } else { "s" })
+                    };
+                    app.set_status(notice);
                 }
             }
             app.integrated_titlebar = cfg!(target_os = "macos");
