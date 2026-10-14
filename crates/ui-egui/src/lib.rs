@@ -6,6 +6,8 @@
 #![deny(clippy::unwrap_used, clippy::expect_used, clippy::panic, clippy::unimplemented, clippy::todo, clippy::unreachable)]
 #![forbid(unsafe_code)]
 
+mod drop_files;
+
 pub mod backstage;
 pub mod canvas;
 pub mod control;
@@ -680,12 +682,15 @@ impl SlideApp {
         let Some(inbox) = self.services.inbox.clone() else { return };
         let files: Vec<(String, Vec<u8>)> = inbox.lock().map(|mut v| std::mem::take(&mut *v)).unwrap_or_default();
         for (name, bytes) in files {
-            self.open_or_insert_bytes(&name, &bytes);
+            self.open_or_insert_bytes(&name, &bytes, None);
         }
     }
 
     /// A dropped or picked file: presentations open, media is inserted.
-    pub fn open_or_insert_bytes(&mut self, name: &str, bytes: &[u8]) {
+    ///
+    /// `at` is a point in slide coordinates. A picture dropped on the canvas is centred there.
+    /// `None` keeps the centred insert (a pick from the dialog, or a drop on the ribbon).
+    pub fn open_or_insert_bytes(&mut self, name: &str, bytes: &[u8], at: Option<(f64, f64)>) {
         let lower = name.to_ascii_lowercase();
         let data = deckcraft_engine::cmd::base64_encode(bytes);
         let ct = deckcraft_engine::cmd::insert::content_type(name, bytes);
@@ -708,7 +713,13 @@ impl SlideApp {
             self.set_status(format!("{name}: DeckCraft can't open this kind of file"));
             return;
         };
-        let p = if cmd == "slide.fromOutline" { json!({"text": String::from_utf8_lossy(bytes)}) } else { json!({"name": name, "data": data}) };
+        let mut p = if cmd == "slide.fromOutline" { json!({"text": String::from_utf8_lossy(bytes)}) } else { json!({"name": name, "data": data}) };
+        if cmd == "insert.picture"
+            && let Some((x, y)) = at
+            && let Some(obj) = p.as_object_mut()
+        {
+            obj.insert("at".to_string(), json!([x, y]));
+        }
         if self.session.active().is_none() && cmd != "file.openBytes" {
             let _ = self.session.execute("file.new", &json!({}));
         }
@@ -772,11 +783,26 @@ impl SlideApp {
         // On the web, dropped files can only be read asynchronously: the host reads them and
         // delivers them through `Services::inbox`.
         #[cfg(not(target_arch = "wasm32"))]
-        for f in ctx.input(|i| i.raw.dropped_files.clone()) {
-            let name = f.path().file_name().map(|n| n.to_string_lossy().to_string()).unwrap_or_else(|| "dropped file".into());
-            match f.bytes() {
-                Ok(bytes) => self.open_or_insert_bytes(&name, &bytes),
-                Err(e) => self.set_status(e),
+        {
+            let dropped = ctx.input(|i| i.raw.dropped_files.clone());
+            if !dropped.is_empty() {
+                // The show covers the editor, so a drop there has no slide under the pointer.
+                let anchor = if self.show.is_none() {
+                    drop_files::drop_pointer(ctx).and_then(|p| drop_files::slide_anchor(self.canvas_rect, self.slide_rect, self.canvas_scale, p))
+                } else {
+                    None
+                };
+                for (i, f) in dropped.iter().enumerate() {
+                    let name = f.path().file_name().map(|n| n.to_string_lossy().to_string()).unwrap_or_else(|| "dropped file".into());
+                    match f.bytes() {
+                        Ok(bytes) => {
+                            // A second picture in the same drop sits just below the first.
+                            let at = anchor.map(|(x, y)| (x + 24.0 * i as f64, y + 24.0 * i as f64));
+                            self.open_or_insert_bytes(&name, &bytes, at);
+                        }
+                        Err(e) => self.set_status(e),
+                    }
+                }
             }
         }
     }
