@@ -1,5 +1,6 @@
 //! Slide Show: full-screen playback with transitions and animations (`deckcraft-anim`),
-//! keyboard/mouse navigation, pen, black/white screens, presenter view and rehearsed timings.
+//! keyboard/mouse navigation, pen, black/white screens, presenter view, rehearsed timings
+//! and recorded timings and ink.
 
 use deckcraft_anim::{Layer, LinkJump, ShowAction, ShowState, Source, Timeline};
 use deckcraft_model::text::Hyperlink;
@@ -20,6 +21,8 @@ pub struct Show {
     /// Play every step automatically (animation preview).
     pub autoplay: bool,
     pub rehearse: bool,
+    /// Record Slide Show: keep timings and pen ink when the show ends.
+    pub record: bool,
     timeline: Option<(usize, Timeline)>,
     step_start: f64,
     slide_start: f64,
@@ -34,6 +37,10 @@ pub struct Show {
     started: bool,
     show_start: f64,
     timings: Vec<(usize, f64)>,
+    /// Pen strokes kept while recording, in slide points, with the slide they were drawn on.
+    recorded: Vec<(usize, Vec<(f64, f64)>)>,
+    /// Pen width in slide points, matching the 3px stroke on screen.
+    ink_width: f64,
     last_move: f64,
     pub ended: bool,
     /// The slide whose media was last started (auto-play runs once per visit).
@@ -80,6 +87,7 @@ impl Show {
             preview_only: false,
             autoplay: false,
             rehearse: false,
+            record: false,
             timeline: None,
             step_start: 0.0,
             slide_start: 0.0,
@@ -94,6 +102,8 @@ impl Show {
             started: false,
             show_start: 0.0,
             timings: vec![],
+            recorded: vec![],
+            ink_width: 2.25,
             last_move: 0.0,
             ended: false,
             media_slide: None,
@@ -125,9 +135,11 @@ impl Show {
                 self.step_end = now;
             }
             ShowAction::Slide(i) => {
-                if self.rehearse {
-                    self.timings.push((self.timeline.as_ref().map(|t| t.0).unwrap_or(i), now - self.slide_start));
+                let left = self.timeline.as_ref().map(|t| t.0).unwrap_or(i);
+                if self.rehearse || self.record {
+                    self.timings.push((left, now - self.slide_start));
                 }
+                self.stash_ink(doc, left);
                 let (kind, option, dur) = doc
                     .slides
                     .get(i)
@@ -177,6 +189,29 @@ impl Show {
             }
         }
     }
+
+    /// Move the pen's strokes into the recording, in slide points. Always clears the live strokes.
+    fn stash_ink(&mut self, doc: &Presentation, slide: usize) {
+        let strokes = std::mem::take(&mut self.strokes);
+        let w = doc.slide_size.width;
+        let h = doc.slide_size.height;
+        if !self.record || !(w > 0.0 && h > 0.0) {
+            return;
+        }
+        for stroke in strokes {
+            let mut pts = Vec::new();
+            for q in stroke.iter().take(4096) {
+                let x = q.x as f64 * w;
+                let y = q.y as f64 * h;
+                if x.is_finite() && y.is_finite() {
+                    pts.push((x, y));
+                }
+            }
+            if pts.len() >= 2 {
+                self.recorded.push((slide, pts));
+            }
+        }
+    }
 }
 
 fn state_for(tl: &Timeline, id: ShapeId, step: usize, t: f64) -> ShapeState {
@@ -198,6 +233,39 @@ fn state_for(tl: &Timeline, id: ShapeId, step: usize, t: f64) -> ShapeState {
             })
             .collect(),
     }
+}
+
+fn record_bar_rect(full: Rect) -> Rect {
+    Rect::from_min_size(pos2(full.min.x + 12.0, full.min.y + 12.0), vec2(300.0, 32.0))
+}
+
+fn pen_width_slide(doc: &Presentation, full: Rect, reading: bool) -> f64 {
+    let avail = if reading { Rect::from_min_max(full.min, pos2(full.max.x, full.max.y - 34.0)) } else { full };
+    let srect = fit(avail, doc);
+    let scale = srect.width() / doc.slide_size.width.max(1.0) as f32;
+    if scale.is_finite() && scale > 0.01 { (3.0 / scale) as f64 } else { 2.25 }
+}
+
+/// The recording badge. Returns false when Stop was clicked.
+fn recording_bar(ui: &mut Ui, painter: &egui::Painter, ctx: &egui::Context, full: Rect, now: f64, show: &Show) -> bool {
+    let t = now - show.slide_start;
+    let secs = if t.is_finite() { t.max(0.0) } else { 0.0 };
+    let r = record_bar_rect(full);
+    painter.rect_filled(r, CornerRadius::same(6), Color32::from_black_alpha(180));
+    painter.circle_filled(pos2(r.min.x + 16.0, r.center().y), 5.0, Color32::from_rgb(220, 40, 40));
+    painter.text(
+        pos2(r.min.x + 30.0, r.center().y),
+        Align2::LEFT_CENTER,
+        format!("Recording  {:02}:{:04.1}", (secs / 60.0) as u32, secs % 60.0),
+        theme::font(13.0),
+        Color32::WHITE,
+    );
+    let stop = Rect::from_min_size(pos2(r.max.x - 62.0, r.min.y + 4.0), vec2(54.0, 24.0));
+    let resp = ui.interact(stop, ui.id().with("record_stop"), Sense::click());
+    painter.rect_filled(stop, CornerRadius::same(4), if resp.hovered() { Color32::from_rgb(180, 40, 40) } else { Color32::from_rgb(140, 32, 32) });
+    painter.text(stop.center(), Align2::CENTER_CENTER, "Stop", theme::font(12.0), Color32::WHITE);
+    ctx.request_repaint_after(std::time::Duration::from_millis(100));
+    !resp.clicked()
 }
 
 fn fit(avail: Rect, doc: &Presentation) -> Rect {
@@ -314,7 +382,7 @@ pub fn ui(app: &mut SlideApp, ui: &mut Ui) {
             _ => {}
         }
     }
-    let on_slide = !show.pen && !show.ended && show.blank.is_none() && !show.reading_bar_hit(&ctx);
+    let on_slide = !show.pen && !show.ended && show.blank.is_none() && !show.reading_bar_hit(&ctx) && !show.record_bar_hit(&ctx);
     let gif_click = if clicked && on_slide { gif_hit(&ctx, ui, &show, &doc, app) } else { None };
     let media_click = if clicked && on_slide && gif_click.is_none() { media_hit(&ctx, ui, &show, &doc) } else { None };
     let link = if on_slide && gif_click.is_none() && media_click.is_none() { link_hit(&ctx, ui, &mut show, &doc) } else { None };
@@ -330,7 +398,7 @@ pub fn ui(app: &mut SlideApp, ui: &mut Ui) {
             LinkJump::Exit => keep = false,
             LinkJump::None => {}
         }
-    } else if clicked && !show.pen && !show.reading_bar_hit(&ctx) {
+    } else if clicked && !show.pen && !show.reading_bar_hit(&ctx) && !show.record_bar_hit(&ctx) {
         if show.ended {
             keep = false;
         } else if show.blank.is_some() {
@@ -339,7 +407,7 @@ pub fn ui(app: &mut SlideApp, ui: &mut Ui) {
             actions.push(show.state.next(&doc));
         }
     }
-    if secondary && !show.ended {
+    if secondary && !show.ended && !show.record_bar_hit(&ctx) {
         actions.push(show.state.prev(&doc));
     }
     // Apply input first: a step started by this click must restart the clock before it is read.
@@ -364,12 +432,13 @@ pub fn ui(app: &mut SlideApp, ui: &mut Ui) {
         let next_auto = show.timeline(&doc).step_is_auto(cur_step);
         let n_steps = show.timeline(&doc).steps();
         let step_due = cur_step < n_steps && ((show.autoplay && idle > 0.3) || next_auto);
-        if step_due || (!show.rehearse && show.state.auto_advance_due(&doc, idle) && !show.ended) {
+        if step_due || (!(show.rehearse || show.record) && show.state.auto_advance_due(&doc, idle) && !show.ended) {
             actions.push(show.state.next(&doc));
         } else if show.preview_only && cur_step >= n_steps && idle > 0.8 {
             keep = false;
         }
     }
+    show.ink_width = pen_width_slide(&doc, ui.max_rect(), show.reading);
     for a in actions {
         if !show.apply(a, &doc, now) {
             keep = false;
@@ -646,7 +715,9 @@ pub fn ui(app: &mut SlideApp, ui: &mut Ui) {
         }
         ctx.request_repaint_after(std::time::Duration::from_millis(300));
     }
-    if show.rehearse {
+    if show.record {
+        keep = recording_bar(ui, &painter, &ctx, full, now, &show) && keep;
+    } else if show.rehearse {
         let t = now - show.slide_start;
         let total = now - show.show_start;
         let r = Rect::from_min_size(pos2(full.min.x + 12.0, full.min.y + 12.0), vec2(220.0, 30.0));
@@ -671,15 +742,24 @@ pub fn ui(app: &mut SlideApp, ui: &mut Ui) {
         if !show.reading {
             ctx.send_viewport_cmd(egui::ViewportCommand::Fullscreen(false));
         }
-        if show.rehearse {
-            if let Some((_, tl)) = &show.timeline {
-                let _ = tl;
-            }
+        if show.rehearse || show.record {
+            show.stash_ink(&doc, show.state.slide);
             show.timings.push((show.state.slide, now - show.slide_start));
             for (i, secs) in show.timings.clone() {
-                let _ = app.run("transition.timing", json!({"index": i, "after": (secs * 1000.0).round() as u64}));
+                let ms = if secs.is_finite() { (secs.max(0.0) * 1000.0).round() as u64 } else { 0 };
+                let _ = app.run("transition.timing", json!({"index": i, "after": ms}));
             }
-            app.set_status("Slide timings recorded.");
+            if show.record {
+                let c = doc.show.pen_color;
+                for (i, pts) in &show.recorded {
+                    let points: Vec<_> = pts.iter().map(|(x, y)| json!([x, y, 0.5])).collect();
+                    let _ = app.run("ink.stroke", json!({"index": i, "points": points, "width": show.ink_width, "color": [c.r, c.g, c.b]}));
+                }
+                let _ = app.run("show.setup", json!({"useTimings": true}));
+                app.set_status(if show.recorded.is_empty() { "Recording saved: slide timings." } else { "Recording saved: slide timings and ink." });
+            } else {
+                app.set_status("Slide timings recorded.");
+            }
         }
         let last = show.state.slide;
         let _ = app.run("slide.go", json!({"index": last}));
@@ -759,6 +839,13 @@ fn gif_hit(ctx: &egui::Context, ui: &Ui, show: &Show, doc: &Presentation, app: &
 }
 
 impl Show {
+    fn record_bar_hit(&self, ctx: &egui::Context) -> bool {
+        if !self.record {
+            return false;
+        }
+        ctx.input(|i| i.pointer.interact_pos()).is_some_and(|p| record_bar_rect(ctx.content_rect()).contains(p))
+    }
+
     fn reading_bar_hit(&self, ctx: &egui::Context) -> bool {
         // Clicks on the on-screen controls must not also advance.
         ctx.input(|i| i.pointer.interact_pos()).is_some_and(|p| {

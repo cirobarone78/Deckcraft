@@ -1,6 +1,6 @@
 # DeckCraft roadmap: milestones and what's next
 
-> **Last reviewed:** 2026-10-10 · **Last updated:** 2026-10-10 · **Change:** minor (core-workflow alpha gate added; stage stays alpha; previous: major, created; milestones carried from the local execution plan, the beta plan built from gaps.md) · **Target:** Microsoft PowerPoint for Mac 16.113 (Microsoft 365)
+> **Last reviewed:** 2026-10-14 · **Last updated:** 2026-10-14 · **Change:** trivial (Record Slide Show keeps timings and pen ink; previous: minor, core-workflow alpha gate added; stage stays alpha) · **Target:** Microsoft PowerPoint for Mac 16.113 (Microsoft 365)
 
 Forward-looking: where DeckCraft is going and in what order. The one-page summary is
 [ROADMAP.md](../ROADMAP.md); every shortfall is in [gaps.md](gaps.md); numbers are in
@@ -59,7 +59,8 @@ reference renders, a Windows tester with the affected GPUs, native speakers to r
 ## After beta: toward full parity (~245–440 h more)
 
 SmartArt editing, chartex chart types, the remaining animation effects and motion paths, Notes and
-Handout masters, edit points, text warp and 3-D, proofing dictionaries, Zoom, recording, video and
+Handout masters, edit points, text warp and 3-D, proofing dictionaries, Zoom, narration audio and
+screen capture (Record Slide Show already keeps timings and pen ink), video and
 GIF export, legacy `.ppt` import and `.odp` (owner decision), GPU rasterization and hardware video
 decode, the other 21 languages with RTL mirroring, a larger original template gallery, and local AI
 features (owner decision on models). Itemized with hours in [gaps.md](gaps.md).
@@ -109,5 +110,6 @@ plan above.
 
 | Date | Change | Summary |
 |---|---|---|
+| 2026-10-14 | trivial | Record Slide Show keeps timings and pen ink; narration audio and screen capture stay after beta |
 | 2026-10-10 | minor | Added the alpha gate (six core workflows): all pass, two with partial depth; stage stays alpha |
 | 2026-10-10 | major | Created: current focus, ranked beta plan with hours, milestones M0–M14 with status, the old alpha checklist as history |
