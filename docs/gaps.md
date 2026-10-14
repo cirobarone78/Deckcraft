@@ -1,6 +1,6 @@
 # Where DeckCraft falls short of PowerPoint
 
-> **Last reviewed:** 2026-10-14 · **Last updated:** 2026-10-14 · **Change:** minor (laser pointer during a show; Clear Timing and Clear Narration; previous: minor, narration and a laser trace) · **Target:** Microsoft PowerPoint for Mac 16.113 (Microsoft 365)
+> **Last reviewed:** 2026-10-14 · **Last updated:** 2026-10-14 · **Change:** minor (presenter laser dot; Rehearse Timings pause, repeat and keep prompt; previous: minor, laser pointer and Clear Timing) · **Target:** Microsoft PowerPoint for Mac 16.113 (Microsoft 365)
 
 Every known shortfall, one entry each, ranked by how much it stops someone who presents with
 PowerPoint from switching. This is the work list: pick from the top. Numbers are summarized in
@@ -256,6 +256,7 @@ Detail in [localization-parity.md](localization-parity.md).
 
 | Date | Change | Summary |
 |---|---|---|
+| 2026-10-14 | minor | The presenter window draws the laser dot. Rehearse Timings pauses, repeats the current slide, and asks before keeping timings |
 | 2026-10-14 | minor | Laser pointer during a show (hold Ctrl, red/green/blue). Clear Timing and Clear Narration on the current slide or all slides |
 | 2026-10-14 | minor | Record Slide Show keeps narration audio and a laser trace. Screen capture and camera stay open |
 | 2026-10-14 | minor | Record Slide Show keeps timings and pen ink. Audio and screen capture stay open |

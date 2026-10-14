@@ -2,7 +2,7 @@
 
 **Stage: alpha** · next: beta, ~20 points and ~120–210 h away
 
-> **Last reviewed:** 2026-10-14 · **Last updated:** 2026-10-14 · **Change:** trivial (breadth 80%: laser pointer during a show is partial; previous: trivial, narration and a laser trace) · **Target:** Microsoft PowerPoint for Mac 16.113 (Microsoft 365)
+> **Last reviewed:** 2026-10-14 · **Last updated:** 2026-10-14 · **Change:** trivial (breadth 80%, P2 41%, slide show 74%; previous: trivial, laser pointer partial) · **Target:** Microsoft PowerPoint for Mac 16.113 (Microsoft 365)
 
 DeckCraft aims at full PowerPoint parity, and to be better: faster, open (a documented zip+JSON
 format plus PPTX), scriptable by agents (CLI, JSON control channel, MCP), and available everywhere
@@ -14,7 +14,7 @@ format plus PPTX), scriptable by agents (CLI, JSON control channel, MCP), and av
 
 | | Value | Kind |
 |---|---|---|
-| **Feature breadth** | **80%** weighted over 191 PowerPoint features (P0 92%, P1 75%, P2 40%) | measured: `cargo xtask parity` over [docs/parity-checklist.md](docs/parity-checklist.md) |
+| **Feature breadth** | **80%** weighted over 191 PowerPoint features (P0 92%, P1 75%, P2 41%) | measured: `cargo xtask parity` over [docs/parity-checklist.md](docs/parity-checklist.md) |
 | Menu-bar coverage | 59% of 217 app-specific PowerPoint menu items matched by name (lower bound) | measured: script over the PowerPoint menu dump and the 226 commands |
 | **Ready for real work** | **~55%** | estimated: weighted dimensions below |
 | Mainstream practitioner | ~53% | estimated: weekly-use areas × discounts for interaction (×0.92), stability (×0.92) and `.pptx` exchange (×0.88), [method](docs/target-app-parity.md#mainstream-practitioner-and-essentials-user) |
@@ -76,7 +76,7 @@ EMF/SVG pictures, the data-loss and startup-crash bugs (#60, #40, #59) and the b
 | Media | 67% | ~60% | 8–14 | [file formats](docs/file-format-parity.md) |
 | Transitions | 92% | ~80% | 4–8 | [animation-parity](docs/animation-parity.md) |
 | Animations | 79% | ~65% | 10–16 | [animation-parity](docs/animation-parity.md) |
-| Slide show and presenter view | 71% | ~60% | 10–16 | [slideshow-parity](docs/slideshow-parity.md) |
+| Slide show and presenter view | 74% | ~60% | 10–16 | [slideshow-parity](docs/slideshow-parity.md) |
 | Review | 60% | ~45% | 8–14 | [gaps](docs/gaps.md) |
 | Draw (ink) | 33% | ~30% | 5–9 | [hardware-parity](docs/hardware-parity.md) |
 | Undo and clipboard | 88% | ~75% | 3–5 | [ui-parity](docs/ui-parity.md) |
@@ -128,6 +128,7 @@ app's JSON control channel (`deckcraft --control PORT`).
 
 | Date | What landed |
 |---|---|
+| 2026-10-14 | The presenter window draws the laser dot (ordinary show and a recorded trace). Rehearse Timings: Pause and Repeat, then "Keep the new slide timings?". Breadth stays 80%; P2 41%; slide show 74% |
 | 2026-10-14 | Laser pointer in an ordinary show: hold Ctrl (or the on-screen button) for a dot in the colour chosen in Set Up Slide Show (red, green or blue; written to PPTX). Clear Timing and Clear Narration on the current slide or all slides. Breadth 80% |
 | 2026-10-14 | Record Slide Show narration and laser: each slide's microphone audio is embedded and plays in the show (Play Narrations turns it off), and it is written to PPTX; a laser trace is recorded and replayed. Screen capture and camera stay open |
 | 2026-10-14 | Record Slide Show (`show.record`): a recording badge in the show, slide timings kept on exit, and pen ink kept on the slide. Narration audio and screen capture stay open |
@@ -153,7 +154,7 @@ app's JSON control channel (`deckcraft --control PORT`).
 
 | Date | Change | Summary |
 |---|---|---|
-| 2026-10-14 | trivial | Breadth 80% after the laser pointer moved to partial; Clear Timing and Clear Narration |
+| 2026-10-14 | trivial | Breadth stays 80% after the laser pointer moved to done (presenter window draws the dot); P2 41%, slide show 74%. Rehearse Timings asks before keeping timings |
 | 2026-10-14 | trivial | Progress log: Record Slide Show keeps narration and a laser trace |
 | 2026-10-14 | trivial | Progress log: Record Slide Show keeps timings and pen ink |
 | 2026-10-13 | trivial | Progress log: wild text cases |

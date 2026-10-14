@@ -1,11 +1,11 @@
 # Slide show and presenter view: parity with PowerPoint
 
-> **Last reviewed:** 2026-10-14 · **Last updated:** 2026-10-14 · **Change:** minor (laser pointer in an ordinary show; Clear Timing and Clear Narration; previous: minor, narration and a laser trace) · **Target:** Microsoft PowerPoint for Mac 16.113 (Microsoft 365)
+> **Last reviewed:** 2026-10-14 · **Last updated:** 2026-10-14 · **Change:** minor (laser dot in the presenter window; Rehearse Timings pause, repeat and keep prompt; previous: minor, laser pointer and Clear Timing) · **Target:** Microsoft PowerPoint for Mac 16.113 (Microsoft 365)
 
 Presenting is the job PowerPoint is hired for. This doc covers the show window, presenter view,
 rehearsal and recording. Transition and animation playback are in
 [animation-parity.md](animation-parity.md); display hardware in
-[hardware-parity.md](hardware-parity.md). Area score: checklist breadth **71%** (measured), **~60%
+[hardware-parity.md](hardware-parity.md). Area score: checklist breadth **74%** (measured), **~60%
 ready** (estimated), **10–16 h** to parity.
 
 ## Running the show
@@ -25,7 +25,7 @@ ready** (estimated), **10–16 h** to parity.
 | See All Slides grid during the show | yes | no | |
 | Zoom into part of a slide during the show | yes | no | |
 | Pen and highlighter ink | yes | pen only (Cmd+P pen, Cmd+A arrow, E erases all ink) | No highlighter, per-stroke eraser, ink colours, or keep/discard annotations prompt |
-| Laser pointer | yes | hold Ctrl, or the on-screen button; colour is red, green or blue in Set Up Slide Show | A recorded trace still replays. The presenter window does not draw the dot |
+| Laser pointer | yes | hold Ctrl, or the on-screen button; the presenter window draws the same dot; colour is red, green or blue in Set Up Slide Show | A recorded trace still replays, including in the presenter window |
 | Subtitles and live captions | yes (cloud speech) | no | AI dimension |
 | Custom shows | yes | yes | |
 | Set Up Show: loop until Esc, kiosk (browsed at a kiosk), show without animation/narration, pen colour, laser colour, slides range | yes | yes, most options | Laser colour is red, green or blue |
@@ -42,7 +42,7 @@ ready** (estimated), **10–16 h** to parity.
 | Notes font size, scrolling | yes | scrolling only | |
 | Placed on the presenter's display automatically, show on the projector | yes | **no**: opens wherever the OS puts it | Beta blocker, 3–5 h |
 | Swap displays | yes | no | |
-| Pen, laser, black screen, zoom from presenter view | yes | keys only | |
+| Pen, laser, black screen, zoom from presenter view | yes | the current slide shows the laser dot | Pen, black screen and zoom are still keys only |
 | See all slides from presenter view | yes | no | |
 | Rehearse with Coach (Speaker Coach) | yes (cloud) | no | AI dimension |
 
@@ -50,7 +50,7 @@ ready** (estimated), **10–16 h** to parity.
 
 | Feature | PowerPoint | DeckCraft |
 |---|---|---|
-| Rehearse Timings, keep timings | yes | yes |
+| Rehearse Timings, keep timings | yes | yes: Pause and Repeat on the timer; ending asks whether to keep the new timings, and No discards them |
 | Record Slide Show (narration, ink, laser, camera; Cameo) | yes | timings, per-slide narration audio, pen ink and a recorded laser trace; no camera or screen capture |
 | Clear timing / narration | yes | current slide or all slides |
 | Export the recorded show to video | yes | no (see [file-format-parity.md](file-format-parity.md)) |
@@ -73,7 +73,7 @@ Reading View in a window with navigation: present (checklist row done).
 
 | Date | Change | Summary |
 |---|---|---|
-| 2026-10-14 | minor | Ordinary show: hold Ctrl for the laser pointer, colour in Set Up Slide Show. Clear Timing and Clear Narration on the current slide or all slides. Checklist breadth 71% |
+| 2026-10-14 | minor | The presenter window draws the laser dot. Rehearse Timings has Pause and Repeat, then asks whether to keep the new timings. Checklist breadth 74% |
 | 2026-10-14 | minor | Record Slide Show keeps per-slide narration (played in the show, written to PPTX) and a laser trace. Camera and screen capture stay open |
 | 2026-10-14 | minor | Record Slide Show keeps timings and pen ink. Narration audio, laser and camera stay open |
 | 2026-10-10 | major | Created: show, presenter view, rehearse and record, compared with PowerPoint 16.113's Slide Show tab and menu |

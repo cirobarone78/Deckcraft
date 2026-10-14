@@ -21,6 +21,12 @@ pub struct Show {
     /// Play every step automatically (animation preview).
     pub autoplay: bool,
     pub rehearse: bool,
+    /// Rehearse Timings is asking whether to keep the new slide times.
+    pub ask_keep: bool,
+    /// Yes on that prompt. Esc discards.
+    keep_timings: bool,
+    /// Slide and total clocks for Rehearse Timings. Pause freezes both; Repeat restarts the slide.
+    clock: RehearseClock,
     /// Record Slide Show: keep timings, narration, pen ink and laser when the show ends.
     pub record: bool,
     timeline: Option<(usize, Timeline)>,
@@ -44,6 +50,8 @@ pub struct Show {
     recorded: Vec<(usize, Vec<(f64, f64)>)>,
     /// Laser samples kept while recording: slide points and milliseconds from the slide start.
     laser_live: Vec<(f64, f64, u32)>,
+    /// Where the laser dot is on the slide this frame (0–1), so the presenter window can draw it.
+    laser_dot: Option<(f32, f32, Color32)>,
     laser_saved: Vec<(usize, Vec<(f64, f64, u32)>)>,
     /// WAV bytes per slide, taken from the microphone when the slide is left.
     narration: Vec<(usize, Vec<u8>)>,
@@ -97,6 +105,9 @@ impl Show {
             preview_only: false,
             autoplay: false,
             rehearse: false,
+            ask_keep: false,
+            keep_timings: false,
+            clock: RehearseClock::start(0.0),
             record: false,
             timeline: None,
             step_start: 0.0,
@@ -115,6 +126,7 @@ impl Show {
             timings: vec![],
             recorded: vec![],
             laser_live: vec![],
+            laser_dot: None,
             laser_saved: vec![],
             narration: vec![],
             mic_tried: false,
@@ -153,7 +165,13 @@ impl Show {
             ShowAction::Slide(i) => {
                 let left = self.timeline.as_ref().map(|t| t.0).unwrap_or(i);
                 if self.rehearse || self.record {
-                    self.timings.push((left, now - self.slide_start));
+                    let wall = now - self.slide_start;
+                    let secs = if self.rehearse && !self.record { self.clock.slide(now) } else { wall };
+                    let secs = if secs.is_finite() { secs.max(0.0) } else { 0.0 };
+                    self.timings.push((left, secs));
+                    if self.rehearse && !self.record {
+                        self.clock.advance(now);
+                    }
                 }
                 self.stash_ink(doc, left);
                 self.stash_laser(left);
@@ -381,6 +399,7 @@ pub fn ui(app: &mut SlideApp, ui: &mut Ui) {
         show.slide_start = now;
         show.step_start = now;
         show.show_start = now;
+        show.clock = RehearseClock::start(now);
         show.last_move = now;
         if !show.reading {
             ctx.send_viewport_cmd(egui::ViewportCommand::Fullscreen(true));
@@ -414,13 +433,19 @@ pub fn ui(app: &mut SlideApp, ui: &mut Ui) {
         show.last_move = now;
     }
     let mut actions: Vec<ShowAction> = vec![];
+    if show.ask_keep && keys.iter().any(|(k, _)| matches!(k, egui::Key::Escape | egui::Key::Minus)) {
+        keep = false;
+    }
     for (k, m) in keys {
         use egui::Key::*;
+        if show.ask_keep {
+            break;
+        }
         match k {
-            Escape | Minus => keep = false,
+            Escape | Minus => leave_show(&mut show, now, &mut keep),
             ArrowRight | ArrowDown | Space | PageDown | N => {
                 if show.ended {
-                    keep = false;
+                    leave_show(&mut show, now, &mut keep);
                 } else {
                     actions.push(show.state.next(&doc));
                 }
@@ -430,7 +455,7 @@ pub fn ui(app: &mut SlideApp, ui: &mut Ui) {
                     actions.push(show.state.goto(&doc, n.saturating_sub(1)));
                     show.goto.clear();
                 } else if show.ended {
-                    keep = false;
+                    leave_show(&mut show, now, &mut keep);
                 } else {
                     actions.push(show.state.next(&doc));
                 }
@@ -468,7 +493,14 @@ pub fn ui(app: &mut SlideApp, ui: &mut Ui) {
     }
     let ctrl = ctx.input(|i| i.modifiers.ctrl);
     let laser_on = pointer_is_laser(show.laser, ctrl, show.blank.is_some());
-    let on_slide = !show.pen && !laser_on && !show.ended && show.blank.is_none() && !show.reading_bar_hit(&ctx) && !show.record_bar_hit(&ctx);
+    let on_slide = !show.ask_keep
+        && !show.pen
+        && !laser_on
+        && !show.ended
+        && show.blank.is_none()
+        && !show.reading_bar_hit(&ctx)
+        && !show.record_bar_hit(&ctx)
+        && !show.rehearse_bar_hit(&ctx);
     let gif_click = if clicked && on_slide { gif_hit(&ctx, ui, &show, &doc, app) } else { None };
     let media_click = if clicked && on_slide && gif_click.is_none() { media_hit(&ctx, ui, &show, &doc) } else { None };
     let link = if on_slide && gif_click.is_none() && media_click.is_none() { link_hit(&ctx, ui, &mut show, &doc) } else { None };
@@ -481,27 +513,31 @@ pub fn ui(app: &mut SlideApp, ui: &mut Ui) {
         match show.state.follow(&doc, &l.action, last) {
             LinkJump::Show(a) => actions.push(a),
             LinkJump::Open(url) => ctx.open_url(egui::OpenUrl::new_tab(url)),
-            LinkJump::Exit => keep = false,
+            LinkJump::Exit => leave_show(&mut show, now, &mut keep),
             LinkJump::None => {}
         }
-    } else if clicked && !show.pen && !laser_on && !show.reading_bar_hit(&ctx) && !show.record_bar_hit(&ctx) {
+    } else if clicked
+        && !show.ask_keep
+        && !show.pen
+        && !laser_on
+        && !show.reading_bar_hit(&ctx)
+        && !show.record_bar_hit(&ctx)
+        && !show.rehearse_bar_hit(&ctx)
+    {
         if show.ended {
-            keep = false;
+            leave_show(&mut show, now, &mut keep);
         } else if show.blank.is_some() {
             show.blank = None;
         } else {
             actions.push(show.state.next(&doc));
         }
     }
-    if secondary && !show.ended && !laser_on && !show.record_bar_hit(&ctx) {
+    if secondary && !show.ask_keep && !show.ended && !laser_on && !show.record_bar_hit(&ctx) && !show.rehearse_bar_hit(&ctx) {
         actions.push(show.state.prev(&doc));
     }
     // Apply input first: a step started by this click must restart the clock before it is read.
     for a in actions.drain(..) {
-        before_slide_change(app, &mut show, &a);
-        if !show.apply(a, &doc, now) {
-            keep = false;
-        }
+        run_action(app, &mut show, &doc, now, a, &mut keep);
     }
     // Step clock.
     let (step, playing) = (show.state.step, show.state.playing);
@@ -519,7 +555,7 @@ pub fn ui(app: &mut SlideApp, ui: &mut Ui) {
         let next_auto = show.timeline(&doc).step_is_auto(cur_step);
         let n_steps = show.timeline(&doc).steps();
         let step_due = cur_step < n_steps && ((show.autoplay && idle > 0.3) || next_auto);
-        if step_due || (!(show.rehearse || show.record) && show.state.auto_advance_due(&doc, idle) && !show.ended) {
+        if !show.ask_keep && (step_due || (!(show.rehearse || show.record) && show.state.auto_advance_due(&doc, idle) && !show.ended)) {
             actions.push(show.state.next(&doc));
         } else if show.preview_only && cur_step >= n_steps && idle > 0.8 {
             keep = false;
@@ -527,10 +563,7 @@ pub fn ui(app: &mut SlideApp, ui: &mut Ui) {
     }
     show.ink_width = pen_width_slide(&doc, ui.max_rect(), show.reading);
     for a in actions {
-        before_slide_change(app, &mut show, &a);
-        if !show.apply(a, &doc, now) {
-            keep = false;
-        }
+        run_action(app, &mut show, &doc, now, a, &mut keep);
     }
     show_media(app, &mut show, &doc);
     // Draw.
@@ -750,19 +783,22 @@ pub fn ui(app: &mut SlideApp, ui: &mut Ui) {
         let pts: Vec<Pos2> = s.iter().map(|q| pos2(srect.min.x + q.x * srect.width(), srect.min.y + q.y * srect.height())).collect();
         painter.add(egui::Shape::line(pts, Stroke::new(3.0, pen_col)));
     }
+    show.laser_dot = None;
     if laser_on {
         if let Some(p) = ctx.input(|i| i.pointer.hover_pos()) {
             let nx = (p.x - srect.min.x) / srect.width().max(1.0);
             let ny = (p.y - srect.min.y) / srect.height().max(1.0);
-            if show.record && (0.0..=1.0).contains(&nx) && (0.0..=1.0).contains(&ny) {
-                let ms = (now - show.slide_start).max(0.0) * 1000.0;
-                if ms.is_finite() {
-                    show.note_laser(nx as f64 * doc.slide_size.width, ny as f64 * doc.slide_size.height, ms.min(3_600_000.0) as u32);
+            let col = theme::to_color32(doc.show.laser_color);
+            if (0.0..=1.0).contains(&nx) && (0.0..=1.0).contains(&ny) {
+                show.laser_dot = Some((nx, ny, col));
+                if show.record {
+                    let ms = (now - show.slide_start).max(0.0) * 1000.0;
+                    if ms.is_finite() {
+                        show.note_laser(nx as f64 * doc.slide_size.width, ny as f64 * doc.slide_size.height, ms.min(3_600_000.0) as u32);
+                    }
                 }
             }
-            let col = theme::to_color32(doc.show.laser_color);
-            painter.circle_filled(p, 7.0, col);
-            painter.circle_stroke(p, 11.0, Stroke::new(2.0, Color32::from_white_alpha(200)));
+            paint_laser_dot(&painter, p, col, 7.0);
         }
     } else if !show.record
         && let Some(sl) = doc.slides.get(show.state.slide)
@@ -774,8 +810,13 @@ pub fn ui(app: &mut SlideApp, ui: &mut Ui) {
         {
             let k = srect.width() / doc.slide_size.width.max(1.0) as f32;
             let p = pos2(srect.min.x + x as f32 * k, srect.min.y + y as f32 * k);
-            painter.circle_filled(p, 7.0, theme::to_color32(trace.color));
-            painter.circle_stroke(p, 11.0, Stroke::new(2.0, Color32::from_white_alpha(200)));
+            let col = theme::to_color32(trace.color);
+            let nx = (x / doc.slide_size.width.max(1.0)) as f32;
+            let ny = (y / doc.slide_size.height.max(1.0)) as f32;
+            if (0.0..=1.0).contains(&nx) && (0.0..=1.0).contains(&ny) {
+                show.laser_dot = Some((nx, ny, col));
+            }
+            paint_laser_dot(&painter, p, col, 7.0);
             ctx.request_repaint();
         }
     }
@@ -796,19 +837,15 @@ pub fn ui(app: &mut SlideApp, ui: &mut Ui) {
                 .layout(egui::Layout::right_to_left(egui::Align::Center)),
         );
         if child.button("Close").clicked() {
-            keep = false;
+            leave_show(&mut show, now, &mut keep);
         }
         if child.button("▶").clicked() {
             let a = show.state.next(&doc);
-            before_slide_change(app, &mut show, &a);
-            if !show.apply(a, &doc, now) {
-                keep = false;
-            }
+            run_action(app, &mut show, &doc, now, a, &mut keep);
         }
         if child.button("◀").clicked() {
             let a = show.state.prev(&doc);
-            before_slide_change(app, &mut show, &a);
-            show.apply(a, &doc, now);
+            run_action(app, &mut show, &doc, now, a, &mut keep);
         }
     } else if now - show.last_move < 2.5 {
         let bar = Rect::from_min_size(pos2(full.min.x + 20.0, full.max.y - 50.0), vec2(310.0, 34.0));
@@ -818,15 +855,11 @@ pub fn ui(app: &mut SlideApp, ui: &mut Ui) {
         let b = |ui: &mut Ui, s: &str| ui.add(egui::Button::new(egui::RichText::new(s).color(Color32::WHITE).size(15.0)).frame(false));
         if b(&mut child, "◀").clicked() {
             let a = show.state.prev(&doc);
-            before_slide_change(app, &mut show, &a);
-            show.apply(a, &doc, now);
+            run_action(app, &mut show, &doc, now, a, &mut keep);
         }
         if b(&mut child, "▶").clicked() {
             let a = show.state.next(&doc);
-            before_slide_change(app, &mut show, &a);
-            if !show.apply(a, &doc, now) {
-                keep = false;
-            }
+            run_action(app, &mut show, &doc, now, a, &mut keep);
         }
         if b(&mut child, if show.pen { "✏ on" } else { "✏" }).clicked() {
             show.pen = !show.pen;
@@ -845,7 +878,7 @@ pub fn ui(app: &mut SlideApp, ui: &mut Ui) {
             show.blank = Some(Color32::BLACK);
         }
         if b(&mut child, "End").clicked() {
-            keep = false;
+            leave_show(&mut show, now, &mut keep);
         }
         ctx.request_repaint_after(std::time::Duration::from_millis(300));
     }
@@ -853,18 +886,7 @@ pub fn ui(app: &mut SlideApp, ui: &mut Ui) {
         let mic_samples = app.services.mic.as_ref().map(|m| m.captured()).unwrap_or(0);
         keep = recording_bar(ui, &painter, &ctx, full, now, &mut show, mic_samples) && keep;
     } else if show.rehearse {
-        let t = now - show.slide_start;
-        let total = now - show.show_start;
-        let r = Rect::from_min_size(pos2(full.min.x + 12.0, full.min.y + 12.0), vec2(220.0, 30.0));
-        painter.rect_filled(r, CornerRadius::same(6), Color32::from_black_alpha(160));
-        painter.text(
-            r.center(),
-            Align2::CENTER_CENTER,
-            format!("Slide {:02}:{:04.1}   Total {:02}:{:02}", (t / 60.0) as u32, t % 60.0, (total / 60.0) as u32, (total % 60.0) as u32),
-            theme::font(13.0),
-            Color32::WHITE,
-        );
-        ctx.request_repaint_after(std::time::Duration::from_millis(100));
+        keep = rehearse_bar(ui, &painter, &ctx, full, now, &mut show) && keep;
     }
     // Presenter view in a second window.
     if show.presenter && !show.reading && !show.ended {
@@ -877,40 +899,44 @@ pub fn ui(app: &mut SlideApp, ui: &mut Ui) {
         if !show.reading {
             ctx.send_viewport_cmd(egui::ViewportCommand::Fullscreen(false));
         }
-        if show.rehearse || show.record {
-            if show.record {
-                take_narration(app, &mut show);
-            }
+        if show.record {
+            take_narration(app, &mut show);
             if show.mic_tried {
                 app.stop_mic();
             }
             show.stash_ink(&doc, show.state.slide);
             show.stash_laser(show.state.slide);
-            show.timings.push((show.state.slide, now - show.slide_start));
+            let wall = now - show.slide_start;
+            show.timings.push((show.state.slide, if wall.is_finite() { wall.max(0.0) } else { 0.0 }));
             for (i, secs) in show.timings.clone() {
                 let ms = if secs.is_finite() { (secs.max(0.0) * 1000.0).round() as u64 } else { 0 };
                 let _ = app.run("transition.timing", json!({"index": i, "after": ms}));
             }
-            if show.record {
-                let c = doc.show.pen_color;
-                for (i, pts) in &show.recorded {
-                    let points: Vec<_> = pts.iter().map(|(x, y)| json!([x, y, 0.5])).collect();
-                    let _ = app.run("ink.stroke", json!({"index": i, "points": points, "width": show.ink_width, "color": [c.r, c.g, c.b]}));
-                }
-                for (i, wav) in &show.narration {
-                    let _ =
-                        app.run("show.narration", json!({"index": i, "name": "narration.wav", "data": deckcraft_engine::cmd::base64_encode(wav)}));
-                }
-                let lc = doc.show.laser_color;
-                for (i, pts) in &show.laser_saved {
-                    let points: Vec<_> = pts.iter().map(|(x, y, t)| json!([x, y, t])).collect();
-                    let _ = app.run("show.laser", json!({"index": i, "points": points, "color": [lc.r, lc.g, lc.b]}));
-                }
-                let _ = app.run("show.setup", json!({"useTimings": true}));
-                app.set_status(saved_status(!show.narration.is_empty(), !show.recorded.is_empty(), !show.laser_saved.is_empty()));
-            } else {
-                app.set_status("Slide timings recorded.");
+            let c = doc.show.pen_color;
+            for (i, pts) in &show.recorded {
+                let points: Vec<_> = pts.iter().map(|(x, y)| json!([x, y, 0.5])).collect();
+                let _ = app.run("ink.stroke", json!({"index": i, "points": points, "width": show.ink_width, "color": [c.r, c.g, c.b]}));
             }
+            for (i, wav) in &show.narration {
+                let _ = app.run("show.narration", json!({"index": i, "name": "narration.wav", "data": deckcraft_engine::cmd::base64_encode(wav)}));
+            }
+            let lc = doc.show.laser_color;
+            for (i, pts) in &show.laser_saved {
+                let points: Vec<_> = pts.iter().map(|(x, y, t)| json!([x, y, t])).collect();
+                let _ = app.run("show.laser", json!({"index": i, "points": points, "color": [lc.r, lc.g, lc.b]}));
+            }
+            let _ = app.run("show.setup", json!({"useTimings": true}));
+            app.set_status(saved_status(!show.narration.is_empty(), !show.recorded.is_empty(), !show.laser_saved.is_empty()));
+        } else if show.rehearse && show.keep_timings {
+            show.timings.push((show.state.slide, show.clock.slide(now)));
+            for (i, secs) in show.timings.clone() {
+                let ms = timing_ms(secs);
+                let _ = app.run("transition.timing", json!({"index": i, "after": ms}));
+            }
+            let _ = app.run("show.setup", json!({"useTimings": true}));
+            app.set_status("Slide timings kept.");
+        } else if show.rehearse {
+            app.set_status("New timings discarded.");
         }
         let last = show.state.slide;
         let _ = app.run("slide.go", json!({"index": last}));
@@ -990,11 +1016,34 @@ fn gif_hit(ctx: &egui::Context, ui: &Ui, show: &Show, doc: &Presentation, app: &
 }
 
 impl Show {
+    pub fn rehearse_paused(&self) -> bool {
+        self.clock.paused
+    }
+
+    pub fn rehearse_times(&self, now: f64) -> (f64, f64) {
+        (self.clock.slide(now), self.clock.total(now))
+    }
+
+    fn arm_prompt(&mut self, now: f64) {
+        if !self.ask_keep {
+            self.clock.pause(now);
+            self.ask_keep = true;
+        }
+    }
+
     fn record_bar_hit(&self, ctx: &egui::Context) -> bool {
         if !self.record {
             return false;
         }
         ctx.input(|i| i.pointer.interact_pos()).is_some_and(|p| record_bar_rect(ctx.content_rect()).contains(p))
+    }
+
+    fn rehearse_bar_hit(&self, ctx: &egui::Context) -> bool {
+        if !self.rehearse || self.record {
+            return false;
+        }
+        let r = ctx.content_rect();
+        ctx.input(|i| i.pointer.interact_pos()).is_some_and(|p| rehearse_bar_rect(r).contains(p) || (self.ask_keep && keep_panel(r).contains(p)))
     }
 
     fn reading_bar_hit(&self, ctx: &egui::Context) -> bool {
@@ -1004,6 +1053,224 @@ impl Show {
             (self.reading && p.y > r.max.y - 34.0) || (!self.reading && p.y > r.max.y - 56.0 && p.x < r.min.x + 340.0)
         })
     }
+}
+
+fn leave_show(show: &mut Show, now: f64, keep: &mut bool) {
+    if show.rehearse && !show.record && !show.preview_only && !show.ask_keep {
+        show.arm_prompt(now);
+    } else {
+        *keep = false;
+    }
+}
+
+fn run_action(app: &mut SlideApp, show: &mut Show, doc: &Presentation, now: f64, action: ShowAction, keep: &mut bool) {
+    before_slide_change(app, show, &action);
+    let stay = show.apply(action, doc, now);
+    if show.rehearse && !show.record && !show.preview_only {
+        if (show.ended || !stay) && !show.ask_keep {
+            show.arm_prompt(now);
+        }
+    } else if !stay {
+        *keep = false;
+    }
+}
+
+fn timing_ms(secs: f64) -> u64 {
+    if !secs.is_finite() {
+        return 0;
+    }
+    (secs.max(0.0) * 1000.0).round().min(86_400_000.0) as u64
+}
+
+/// Slide clock `mm:ss.s` and the whole-show time for the keep prompt.
+fn format_clock(secs: f64) -> String {
+    let s = if secs.is_finite() { secs.max(0.0) } else { 0.0 };
+    format!("{:02}:{:04.1}", (s / 60.0) as u32, s % 60.0)
+}
+
+fn format_total(secs: f64) -> String {
+    let s = if secs.is_finite() { secs.max(0.0).round() as u32 } else { 0 };
+    let h = s / 3600;
+    let m = (s % 3600) / 60;
+    let sec = s % 60;
+    if h > 0 { format!("{h}:{m:02}:{sec:02}") } else { format!("{m}:{sec:02}") }
+}
+
+fn rehearse_bar_rect(full: Rect) -> Rect {
+    Rect::from_min_size(pos2(full.min.x + 12.0, full.min.y + 12.0), vec2(420.0, 32.0))
+}
+
+fn rehearse_pause_rect(full: Rect) -> Rect {
+    let r = rehearse_bar_rect(full);
+    Rect::from_min_size(pos2(r.min.x + 4.0, r.min.y + 4.0), vec2(64.0, 24.0))
+}
+
+fn rehearse_repeat_rect(full: Rect) -> Rect {
+    let r = rehearse_bar_rect(full);
+    Rect::from_min_size(pos2(r.min.x + 220.0, r.min.y + 4.0), vec2(72.0, 24.0))
+}
+
+fn keep_panel(full: Rect) -> Rect {
+    Rect::from_center_size(full.center(), vec2(460.0, 128.0))
+}
+
+fn keep_no_rect(full: Rect) -> Rect {
+    let p = keep_panel(full);
+    Rect::from_min_size(pos2(p.max.x - 168.0, p.max.y - 40.0), vec2(72.0, 28.0))
+}
+
+fn keep_yes_rect(full: Rect) -> Rect {
+    let p = keep_panel(full);
+    Rect::from_min_size(pos2(p.max.x - 88.0, p.max.y - 40.0), vec2(72.0, 28.0))
+}
+
+fn paint_laser_dot(painter: &egui::Painter, p: Pos2, col: Color32, radius: f32) {
+    painter.circle_filled(p, radius, col);
+    painter.circle_stroke(p, radius + 4.0, Stroke::new(2.0, Color32::from_white_alpha(200)));
+}
+
+/// The laser dot on a slide rectangle. `nx` and `ny` are 0–1 across that slide.
+fn laser_on_rect(rect: Rect, nx: f32, ny: f32) -> Option<Pos2> {
+    if !nx.is_finite() || !ny.is_finite() || !(0.0..=1.0).contains(&nx) || !(0.0..=1.0).contains(&ny) {
+        return None;
+    }
+    if rect.width() <= 1.0 || rect.height() <= 1.0 {
+        return None;
+    }
+    Some(pos2(rect.min.x + nx * rect.width(), rect.min.y + ny * rect.height()))
+}
+
+/// The rehearsal badge. Returns false once Keep or Don't keep has been chosen.
+fn rehearse_bar(ui: &mut Ui, painter: &egui::Painter, ctx: &egui::Context, full: Rect, now: f64, show: &mut Show) -> bool {
+    let pause = rehearse_pause_rect(full);
+    let repeat = rehearse_repeat_rect(full);
+    let presp = ui.interact(pause, ui.id().with("rehearse_pause"), Sense::click());
+    if presp.clicked() && !show.ask_keep {
+        show.clock.toggle(now);
+    }
+    let rresp = ui.interact(repeat, ui.id().with("rehearse_repeat"), Sense::click());
+    if rresp.clicked() && !show.ask_keep {
+        show.clock.repeat(now);
+    }
+    let r = rehearse_bar_rect(full);
+    painter.rect_filled(r, CornerRadius::same(6), Color32::from_black_alpha(180));
+    let pause_fill = if show.clock.paused {
+        Color32::from_rgb(160, 110, 20)
+    } else if presp.hovered() {
+        Color32::from_rgb(80, 80, 80)
+    } else {
+        Color32::from_rgb(50, 50, 50)
+    };
+    painter.rect_filled(pause, CornerRadius::same(4), pause_fill);
+    painter.text(pause.center(), Align2::CENTER_CENTER, if show.clock.paused { "Resume" } else { "Pause" }, theme::font(12.0), Color32::WHITE);
+    let (slide, total) = show.rehearse_times(now);
+    painter.text(
+        pos2(pause.max.x + 8.0, r.center().y),
+        Align2::LEFT_CENTER,
+        format!("Slide {}", format_clock(slide)),
+        theme::font(13.0),
+        Color32::WHITE,
+    );
+    let repeat_fill = if rresp.hovered() { Color32::from_rgb(80, 80, 80) } else { Color32::from_rgb(50, 50, 50) };
+    painter.rect_filled(repeat, CornerRadius::same(4), repeat_fill);
+    painter.text(repeat.center(), Align2::CENTER_CENTER, "Repeat", theme::font(12.0), Color32::WHITE);
+    painter.text(
+        pos2(repeat.max.x + 8.0, r.center().y),
+        Align2::LEFT_CENTER,
+        format!("Total {}", format_clock(total)),
+        theme::font(13.0),
+        Color32::WHITE,
+    );
+    ctx.request_repaint_after(std::time::Duration::from_millis(100));
+    if show.ask_keep { keep_prompt(ui, painter, full, now, show) } else { true }
+}
+
+/// "Keep the new slide timings?" Returns false when Yes or No was clicked.
+fn keep_prompt(ui: &mut Ui, painter: &egui::Painter, full: Rect, now: f64, show: &mut Show) -> bool {
+    let panel = keep_panel(full);
+    painter.rect_filled(panel, CornerRadius::same(8), Color32::from_gray(28));
+    painter.rect_stroke(panel, CornerRadius::same(8), Stroke::new(1.0, Color32::from_gray(90)), egui::StrokeKind::Inside);
+    let total = format_total(show.clock.total(now));
+    painter.text(
+        pos2(panel.min.x + 18.0, panel.min.y + 32.0),
+        Align2::LEFT_CENTER,
+        format!("The total time for the slide show was {total}."),
+        theme::font(15.0),
+        Color32::WHITE,
+    );
+    painter.text(pos2(panel.min.x + 18.0, panel.min.y + 58.0), Align2::LEFT_CENTER, "Keep the new slide timings?", theme::font(16.0), Color32::WHITE);
+    let no = keep_no_rect(full);
+    let yes = keep_yes_rect(full);
+    let nresp = ui.interact(no, ui.id().with("rehearse_no"), Sense::click());
+    let yresp = ui.interact(yes, ui.id().with("rehearse_yes"), Sense::click());
+    painter.rect_filled(no, CornerRadius::same(4), if nresp.hovered() { Color32::from_rgb(90, 90, 90) } else { Color32::from_rgb(60, 60, 60) });
+    painter.text(no.center(), Align2::CENTER_CENTER, "No", theme::font(13.0), Color32::WHITE);
+    painter.rect_filled(yes, CornerRadius::same(4), if yresp.hovered() { Color32::from_rgb(40, 140, 80) } else { Color32::from_rgb(28, 110, 64) });
+    painter.text(yes.center(), Align2::CENTER_CENTER, "Yes", theme::font(13.0), Color32::WHITE);
+    if yresp.clicked() {
+        show.keep_timings = true;
+        return false;
+    }
+    !nresp.clicked()
+}
+
+/// Rehearsal clocks. Pause freezes the slide and the total. Repeat restarts the current slide
+/// and drops that attempt from the total. Advancing stores the slide and starts the next at zero.
+#[derive(Clone, Copy)]
+struct RehearseClock {
+    earlier: f64,
+    origin: f64,
+    paused: bool,
+    frozen: f64,
+}
+
+impl RehearseClock {
+    fn start(now: f64) -> Self {
+        Self { earlier: 0.0, origin: finite_secs(now), paused: false, frozen: 0.0 }
+    }
+
+    fn slide(&self, now: f64) -> f64 {
+        let t = if self.paused { self.frozen } else { finite_secs(now) - self.origin };
+        if t.is_finite() { t.max(0.0) } else { 0.0 }
+    }
+
+    fn total(&self, now: f64) -> f64 {
+        let t = self.earlier + self.slide(now);
+        if t.is_finite() { t.max(0.0) } else { 0.0 }
+    }
+
+    fn pause(&mut self, now: f64) {
+        if !self.paused {
+            self.frozen = self.slide(now);
+            self.paused = true;
+        }
+    }
+
+    fn resume(&mut self, now: f64) {
+        if self.paused {
+            self.origin = finite_secs(now) - self.frozen;
+            self.paused = false;
+        }
+    }
+
+    fn toggle(&mut self, now: f64) {
+        if self.paused { self.resume(now) } else { self.pause(now) }
+    }
+
+    fn repeat(&mut self, now: f64) {
+        self.frozen = 0.0;
+        self.origin = finite_secs(now);
+    }
+
+    fn advance(&mut self, now: f64) {
+        self.earlier = self.total(now);
+        self.frozen = 0.0;
+        self.origin = finite_secs(now);
+    }
+}
+
+fn finite_secs(n: f64) -> f64 {
+    if n.is_finite() { n } else { 0.0 }
 }
 
 fn presenter_window(app: &mut SlideApp, ctx: &egui::Context, show: &mut Show, doc: &Presentation, now: f64, keep: &mut bool) {
@@ -1048,7 +1315,7 @@ fn presenter_window(app: &mut SlideApp, ctx: &egui::Context, show: &mut Show, do
                     ui.label(egui::RichText::new(format!("Slide {} of {}", cur + 1, doc.slides.len())).size(16.0).color(Color32::from_gray(200)));
                     ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                         if ui.button("End Show").clicked() {
-                            *keep = false;
+                            leave_show(show, now, keep);
                         }
                         if ui.button("Next ▶").clicked() {
                             actions.push(show.state.next(doc));
@@ -1066,6 +1333,12 @@ fn presenter_window(app: &mut SlideApp, ctx: &egui::Context, show: &mut Show, do
                 let cr = Rect::from_min_size(left.min, cr.size());
                 if let Some(t) = &cur_tex {
                     ui.painter().image(t.id(), cr, Rect::from_min_max(pos2(0.0, 0.0), pos2(1.0, 1.0)), Color32::WHITE);
+                }
+                if let Some((nx, ny, col)) = show.laser_dot
+                    && let Some(p) = laser_on_rect(cr, nx, ny)
+                {
+                    let radius = (cr.width() * 0.02).clamp(5.0, 9.0);
+                    paint_laser_dot(ui.painter(), p, col, radius);
                 }
                 let nr = Rect::from_min_size(
                     right.min + vec2(0.0, 22.0),
@@ -1093,10 +1366,7 @@ fn presenter_window(app: &mut SlideApp, ctx: &egui::Context, show: &mut Show, do
         },
     );
     for a in actions {
-        before_slide_change(app, show, &a);
-        if !show.apply(a, doc, now) {
-            *keep = false;
-        }
+        run_action(app, show, doc, now, a, keep);
     }
 }
 
@@ -1240,5 +1510,59 @@ mod tests {
         assert_eq!(laser_pos(&pts, 701), None);
         assert_eq!(saved_status(true, false, true), "Recording saved: slide timings, narration and laser.");
         assert_eq!(saved_status(false, false, false), "Recording saved: slide timings.");
+    }
+
+    #[test]
+    fn rehearse_pause_freezes_and_repeat_drops_the_current_attempt() {
+        let mut c = RehearseClock::start(10.0);
+        assert!((c.slide(12.5) - 2.5).abs() < 1e-9);
+        c.pause(12.5);
+        assert!(c.paused);
+        assert!((c.slide(20.0) - 2.5).abs() < 1e-9);
+        assert!((c.total(20.0) - 2.5).abs() < 1e-9);
+        c.resume(20.0);
+        assert!((c.slide(21.0) - 3.5).abs() < 1e-9);
+        c.advance(21.0);
+        assert!((c.slide(22.0) - 1.0).abs() < 1e-9);
+        assert!((c.total(22.0) - 4.5).abs() < 1e-9);
+        c.repeat(22.0);
+        assert!((c.slide(22.0) - 0.0).abs() < 1e-9);
+        assert!((c.total(22.0) - 3.5).abs() < 1e-9, "repeat drops the current attempt from the total");
+        assert!((c.slide(23.0) - 1.0).abs() < 1e-9);
+        assert!((c.total(23.0) - 4.5).abs() < 1e-9);
+        c.pause(23.0);
+        c.repeat(30.0);
+        assert!((c.slide(40.0) - 0.0).abs() < 1e-9);
+        assert!(c.paused);
+        assert_eq!(format_clock(65.2), "01:05.2");
+        assert_eq!(format_total(65.4), "1:05");
+        assert_eq!(format_total(3661.2), "1:01:01");
+        assert_eq!(timing_ms(1.25), 1250);
+    }
+
+    #[test]
+    fn the_prompt_pauses_the_clock_and_the_laser_maps_onto_the_presenter_slide() {
+        let mut s = deckcraft_engine::Session::with_new();
+        s.execute("slide.new", &json!({})).unwrap();
+        let doc = s.active().unwrap().doc.clone();
+        let mut show = Show::new(&doc, 0, false, true);
+        show.rehearse = true;
+        show.clock = RehearseClock::start(10.0);
+        let mut keep = true;
+        leave_show(&mut show, 13.0, &mut keep);
+        assert!(keep, "the first leave asks instead of closing");
+        assert!(show.ask_keep);
+        assert!(show.rehearse_paused());
+        assert!((show.rehearse_times(99.0).0 - 3.0).abs() < 1e-9);
+        leave_show(&mut show, 99.0, &mut keep);
+        assert!(!keep, "answering later closes, and does not keep the timings");
+        assert!(!show.keep_timings);
+        let cr = Rect::from_min_size(pos2(10.0, 20.0), vec2(200.0, 100.0));
+        assert_eq!(laser_on_rect(cr, 0.5, 0.25), Some(pos2(110.0, 45.0)));
+        assert_eq!(laser_on_rect(cr, -0.1, 0.5), None);
+        assert!(
+            rehearse_bar_rect(Rect::from_min_size(Pos2::ZERO, vec2(800.0, 600.0)))
+                .contains(rehearse_pause_rect(Rect::from_min_size(Pos2::ZERO, vec2(800.0, 600.0))).center())
+        );
     }
 }
