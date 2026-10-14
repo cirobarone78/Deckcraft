@@ -3,6 +3,7 @@
 pub(crate) mod chart;
 mod chartex;
 pub(crate) mod dml;
+mod model3d;
 mod shapes;
 mod theme;
 mod timing;
@@ -157,7 +158,7 @@ pub fn keep_xml(el: &El, ns: &[(String, String)]) -> String {
 }
 
 /// Namespace prefixes whose `mc:Choice` content we understand.
-const SUPPORTED_MC: [&str; 10] = ["p14", "p15", "p159", "a14", "a16", "p1510", "a15", "c14", "p188", "cx1"];
+const SUPPORTED_MC: [&str; 11] = ["p14", "p15", "p159", "a14", "a16", "p1510", "a15", "c14", "p188", "cx1", "am3d"];
 
 /// Office 2016 charts sit in a `cx1` choice; take it only for a layout DeckCraft reads (the
 /// fallback is a picture or "this chart isn't available" text). The part is checked later, when

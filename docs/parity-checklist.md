@@ -3,56 +3,36 @@
 > **Generated:** 2026-10-13 (summary by `cargo xtask parity`; Preview in editor re-scored; earlier rows re-scored 2026-10-10 against PowerPoint for Mac 16.113.4; video/animated GIF row re-scored 2026-10-11, #171) · **Target:** Microsoft PowerPoint for Mac 16.113 (Microsoft 365)
 
 The summary between `<!-- SUMMARY -->
-**Weighted breadth parity: 82%** over 193 features.
+**Weighted breadth parity: 83%** over 194 features.
 
 | Priority | Features | Done | Partial | Missing | Parity |
 |---|---|---|---|---|---|
 | P0 | 72 | 61 | 11 | 0 | 92% |
-| P1 | 65 | 39 | 20 | 6 | 75% |
-| P2 | 54 | 13 | 15 | 26 | 38% |
-| P1 | 65 | 38 | 21 | 6 | 75% |
-| P2 | 54 | 13 | 16 | 25 | 39% |
-| P1 | 65 | 38 | 21 | 6 | 75% |
-| P2 | 54 | 14 | 15 | 25 | 40% |
-| P1 | 65 | 39 | 21 | 5 | 76% |
-| P2 | 54 | 14 | 17 | 23 | 42% |
-| P1 | 65 | 38 | 21 | 6 | 75% |
-| P2 | 54 | 13 | 16 | 25 | 39% |
-| P1 | 66 | 43 | 18 | 5 | 79% |
-| P2 | 55 | 16 | 20 | 19 | 47% |
+| P1 | 66 | 45 | 16 | 5 | 80% |
+| P2 | 56 | 16 | 24 | 16 | 50% |
 
 | Area | Parity |
 |---|---|
 | Application shell | 81% |
-| Files | 71% |
+| Files | 72% |
 | Slides | 90% |
 | Views | 98% |
-| Masters & themes | 88% |
-| Views | 90% |
-| Masters & themes | 88% |
-| Shapes | 88% |
+| Masters & themes | 92% |
 | Shapes | 91% |
 | Format | 83% |
 | Arrange | 100% |
-| Text | 82% |
-| Tables | 95% |
-| Tables | 92% |
+| Text | 81% |
+| Tables | 97% |
 | Charts | 65% |
 | SmartArt | 50% |
 | Pictures | 52% |
-| Media | 67% |
+| Media | 71% |
 | Transitions | 100% |
-| Animations | 79% |
-| Slide show | 68% |
-| Transitions | 92% |
 | Animations | 85% |
-| Slide show | 66% |
-| Review | 60% |
+| Slide show | 68% |
 | Review | 70% |
-| Draw | 33% |
-| Undo & clipboard | 100% |
 | Draw | 50% |
-| Undo & clipboard | 88% |
+| Undo & clipboard | 100% |
 | Automation (✱) | 100% |
 | Platforms (✱) | 67% |
 
@@ -218,7 +198,7 @@ Open P0 items: Contextual tabs (Shape Format, Picture Format, Table Design/Layou
 | Media | Audio/video playback in the show (WMA/WMV not decodable yet) | P0 | P |
 | Media | Trim, fade in/out, volume, loop, play across slides | P2 | D |
 | Media | Record audio / screen recording | P2 | M |
-| Media | Icons, 3-D models, stock content | P2 | M |
+| Media | Icons, 3-D models, stock content (icons: Lucide gallery; 3-D models: insert from GLB, glTF, OBJ, STL, PLY, 3MF, turn, 3-D effects, Morph, PPTX; missing: stock content, Pan & Zoom, animated models) | P2 | P |
 | Media | Embedded objects (OLE): insert; foreign objects kept on round trip | P2 | P |
 | Transitions | Transition gallery (fade, push, wipe, split, cover, uncover, zoom, morph…) | P0 | D |
 | Transitions | Effect options and duration | P0 | D |

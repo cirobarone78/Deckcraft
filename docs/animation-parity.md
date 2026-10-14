@@ -3,6 +3,7 @@
 > **Last reviewed:** 2026-10-13 · **Last updated:** 2026-10-13 · **Change:** minor (interactive-deck clicks in the slide show; previous: major (transitions measured frame by frame against PowerPoint for Windows' video export and retuned; previous: created)) · **Target:** Microsoft PowerPoint for Mac 16.113 (Microsoft 365)
 > **Last reviewed:** 2026-10-14 · **Last updated:** 2026-10-14 · **Change:** trivial (animation bounce end and repeat round-trip; rewind still #77) · **Target:** Microsoft PowerPoint for Mac 16.113 (Microsoft 365)
 > **Last reviewed:** 2026-10-13 · **Last updated:** 2026-10-13 · **Change:** minor (Animations ▸ Preview plays the current slide on the editor canvas; previous: major, transitions measured frame by frame) · **Target:** Microsoft PowerPoint for Mac 16.113 (Microsoft 365)
+> **Last reviewed:** 2026-10-13 · **Last updated:** 2026-10-14 · **Change:** minor (3-D effects for 3-D models and Morph of 3-D models; previous: major, transitions measured frame by frame against PowerPoint for Windows' video export and retuned; before that: created) · **Target:** Microsoft PowerPoint for Mac 16.113 (Microsoft 365)
 
 Transitions and animations are what make a deck a presentation, and the part of PowerPoint people
 notice first when it's missing. Scores roll up into [target-app-parity.md](target-app-parity.md)
@@ -46,10 +47,10 @@ perspective-correct subdivided meshes.
 | Morph: objects move, resize, recolour; unmatched text boxes fade in place; a picture's crop morphs | yes | yes (#119, #118) |
 | Morph: Words and Characters | yes | yes (#5) |
 | Morph: geometry (circle to star) | yes | yes (#27) |
-| Morph: `!!` name forcing, pictures, 3-D models, ink | yes | names partly; no 3-D or ink |
+| Morph: `!!` name forcing, pictures, 3-D models, ink | yes | names partly; 3-D models turn along the shortest rotation while they move and resize; no ink |
 | Frame-by-frame comparison with PowerPoint | | done (Windows, 2026-10-13); headless frames: `deckcraft-cli render-transition` |
 
-## Animations: 64 of ~190 effects
+## Animations: 69 of ~195 effects
 
 | Class | PowerPoint (gallery + More Effects) | DeckCraft | Missing (examples) |
 |---|---:|---:|---|
@@ -58,6 +59,7 @@ perspective-correct subdivided meshes.
 | Exit | ~50 | 14 | Mirrors of the missing entrance effects, plus Blinds, Box, Checkerboard, Circle, Diamond, Peek Out, Strips as exits |
 | Motion paths | 64 presets + custom | 40 + Custom Path (Lines, Arcs, Turns, Loops, Basic shapes such as stars, heart, moon, teardrop; Lines & Curves such as zigzag, waves, S curves, spirals, bounces; Special such as figure 8, bean, peanut, neutron) | Remaining ~24 presets (some Basic shapes, Lines & Curves variants) |
 | Media (Play, Pause, Stop) | 3 (+ Seek) | 3 | Seek, bookmarks as triggers |
+| 3D (3-D models only: Arrive, Turntable, Swing, Jump & Turn, Leave) | 5 | 5 | Effect options (direction, intensity). Curves shaped after PowerPoint's, observed black-box; written to PPTX as PowerPoint writes them (`3d.view.rotation`, `3d.object.*` keyframes) and recognised by PowerPoint |
 
 By how often people use them, the effects present cover nearly all real decks (Appear, Fade, Fly
 In, Wipe, Zoom, Float In, Grow/Shrink, Pulse, Spin, motion lines): weighted, ~85% of use; by count,
@@ -103,6 +105,7 @@ In, Wipe, Zoom, Float In, Grow/Shrink, Pulse, Spin, motion lines): weighted, ~85
 |---|---|---|
 | 2026-10-14 | trivial | Repeat and bounce end round-trip through PPTX; rewind is still lost (#77) |
 | 2026-10-13 | minor | Animations ▸ Preview and Animation Pane ▸ Play All play the current slide's animations on the editor canvas; preview from the selected effect is still open |
+| 2026-10-14 | minor | 3-D effects (Arrive, Turntable, Swing, Jump & Turn, Leave) and Morph turning 3-D models |
 | 2026-10-13 | major | Transitions measured frame by frame against PowerPoint's video export and retuned (mean diff 35.7 → 15.0); PowerPoint's XML defaults and option meanings; new options |
 | 2026-10-13 | minor | Triggers now play in the slide show (they were read and written but never started), effects of different triggers apply in the order they were clicked |
 | 2026-10-11 | minor | Morph leaves unrelated text boxes unpaired: they fade in place (#119) |

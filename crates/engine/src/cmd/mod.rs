@@ -14,6 +14,7 @@ pub mod insert;
 pub mod inspect;
 pub mod media;
 pub mod merge;
+pub mod model3d;
 pub mod picture_style;
 pub mod points;
 pub mod recolor;
@@ -162,6 +163,7 @@ pub fn command_specs() -> &'static [CommandSpec] {
         v.extend(edit::specs());
         v.extend(slide::specs());
         v.extend(insert::specs());
+        v.extend(model3d::specs());
         v.extend(smartart::specs());
         v.extend(shape::specs());
         v.extend(background::specs());

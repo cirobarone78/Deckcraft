@@ -161,7 +161,30 @@ fn build(p: &Value) -> Result<Animation> {
     if a.effect == "growShrink" {
         a.amount = Some(1.5);
     }
+    // The 3-D effects' own easing, as PowerPoint sets it.
+    match a.effect.as_str() {
+        "turntable" => {
+            a.amount = Some(360.0);
+            (a.smooth_start, a.smooth_end) = (0.1, 0.1);
+        }
+        "swing" => (a.smooth_start, a.smooth_end) = (0.2, 0.2),
+        _ => {}
+    }
     Ok(a)
+}
+
+/// The targets an effect applies to: the 3-D effects animate 3-D models only.
+fn fitting(s: &Session, ids: Vec<ShapeId>, a: &Animation, cmd: &str) -> Result<Vec<ShapeId>> {
+    if !deckcraft_anim::is_model_effect(&a.effect) {
+        return Ok(ids);
+    }
+    let st = s.doc()?;
+    let models: Vec<ShapeId> =
+        ids.into_iter().filter(|id| st.shape(*id).is_some_and(|x| matches!(x.kind, deckcraft_model::ShapeKind::Model3d(_)))).collect();
+    if models.is_empty() {
+        return Err(bad(cmd, "the 3-D effects animate 3-D models: select one"));
+    }
+    Ok(models)
 }
 
 /// Default motion paths, in slide-fraction units relative to the shape's position.
@@ -182,8 +205,8 @@ pub fn default_path(effect: &str, option: &str) -> String {
 }
 
 fn set(s: &mut Session, p: &Value) -> Result<Value> {
-    let ids = targets(s, p)?;
     let a = build(p)?;
+    let ids = fitting(s, targets(s, p)?, &a, "animation.set")?;
     s.edit(|doc, sel| {
         let sl = doc.slides.get_mut(sel.slide).ok_or_else(|| bad("animation.set", "no slide"))?;
         let sl = Arc::make_mut(sl);
@@ -214,8 +237,8 @@ fn set(s: &mut Session, p: &Value) -> Result<Value> {
 }
 
 fn add(s: &mut Session, p: &Value) -> Result<Value> {
-    let ids = targets(s, p)?;
     let a = build(p)?;
+    let ids = fitting(s, targets(s, p)?, &a, "animation.add")?;
     s.edit(|doc, sel| {
         let sl = Arc::make_mut(doc.slides.get_mut(sel.slide).ok_or_else(|| bad("animation.add", "no slide"))?);
         for (k, id) in ids.iter().enumerate() {
