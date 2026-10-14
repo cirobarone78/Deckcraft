@@ -1,6 +1,7 @@
 //! The browser shell: web `Services`, drag-and-drop, and the eframe web runner.
 
 use deckcraft_engine::Session;
+use deckcraft_ui_egui::cloud;
 use deckcraft_ui_egui::{Inbox, Services, SlideApp};
 use wasm_bindgen::JsCast as _;
 
@@ -38,6 +39,11 @@ pub fn start() {
                     }
                     let inbox: Inbox = Inbox::default();
                     let mut app = SlideApp::new(Session::new(), services(inbox.clone(), cc.egui_ctx.clone()));
+                    app.cloud.connect(crate::cloud::Service::new(cc.egui_ctx.clone()));
+                    if let Some(share) = collabcraft_share::CollabCraft::from_env() {
+                        app.share.connect(share);
+                    }
+                    cloud::start(&mut app);
                     let q = query();
                     if !q.contains("blank") {
                         if let Err(e) = deckcraft_engine::sample::open_sample(&mut app.session) {
