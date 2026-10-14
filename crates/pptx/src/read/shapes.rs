@@ -378,6 +378,12 @@ fn frame(imp: &mut Imp, part: &Part, ctx: &mut IdCtx, e: &El, depth: usize) -> S
         {
             return g;
         }
+        if let Some(m3) = gd.child("model3d")
+            && let Some(m) = super::model3d::model3d(imp, part, m3, s.xfrm.map(|x| x.h).unwrap_or(0.0))
+        {
+            s.kind = ShapeKind::Model3d(Box::new(m));
+            return s;
+        }
     }
     // Something we don't model: keep its XML and show a preview picture when it has one.
     let preview = {

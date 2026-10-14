@@ -8,6 +8,9 @@ const PRESENTATION_EXTS: &[&str] = &["deckcraft", "pptx", "potx", "ppsx", "txt",
 const PICTURE_EXTS: &[&str] = &["png", "jpg", "jpeg", "gif", "webp", "bmp", "tif", "tiff"];
 const AUDIO_EXTS: &[&str] = &["wav", "mp3", "m4a", "aac", "flac", "ogg", "opus", "aif", "aiff"];
 const VIDEO_EXTS: &[&str] = &["mp4", "m4v", "mov", "webm"];
+/// 3-D models, and the material and texture files an OBJ or PLY model refers to (browsers give no
+/// folder to find them in, so they are picked with the model).
+const MODEL3D_EXTS: &[&str] = &["glb", "gltf", "obj", "stl", "ply", "3mf", "mtl", "bin", "png", "jpg", "jpeg", "webp", "bmp", "tga"];
 const CANVAS_ID: &str = "deckcraft_canvas";
 const LOADING_ID: &str = "deckcraft_loading";
 
@@ -114,14 +117,21 @@ fn services(inbox: Inbox, ctx: egui::Context) -> Services {
                 "picture" => rfd::AsyncFileDialog::new().add_filter("Pictures", PICTURE_EXTS),
                 "audio" => rfd::AsyncFileDialog::new().add_filter("Audio", AUDIO_EXTS),
                 "video" => rfd::AsyncFileDialog::new().add_filter("Video", VIDEO_EXTS),
+                "model3d" => rfd::AsyncFileDialog::new().add_filter("3D Models", MODEL3D_EXTS),
                 _ => rfd::AsyncFileDialog::new().add_filter("Presentations", PRESENTATION_EXTS),
             };
+            let many = purpose == "model3d";
             wasm_bindgen_futures::spawn_local(async move {
-                let Some(file) = dialog.pick_file().await else {
+                let files = if many { dialog.pick_files().await.unwrap_or_default() } else { dialog.pick_file().await.into_iter().collect() };
+                // All read first, then handed over together: a model and its companions arrive as one batch.
+                let mut read = Vec::with_capacity(files.len());
+                for file in files {
+                    read.push((file.file_name(), file.read().await));
+                }
+                if read.is_empty() {
                     return;
-                };
-                let bytes = file.read().await;
-                inbox.lock().unwrap_or_else(|e| e.into_inner()).push((file.file_name(), bytes));
+                }
+                inbox.lock().unwrap_or_else(|e| e.into_inner()).extend(read);
                 ctx.request_repaint();
             });
         })),

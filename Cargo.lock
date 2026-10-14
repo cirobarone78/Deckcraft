@@ -939,11 +939,13 @@ dependencies = [
 name = "deckcraft-engine"
 version = "0.6.1"
 dependencies = [
+ "deckcraft-anim",
  "deckcraft-color",
  "deckcraft-fonts",
  "deckcraft-format",
  "deckcraft-geom",
  "deckcraft-media",
+ "deckcraft-mesh",
  "deckcraft-model",
  "deckcraft-pdf",
  "deckcraft-pptx",
@@ -955,6 +957,7 @@ dependencies = [
  "serde",
  "serde_json",
  "thiserror 2.0.21",
+ "zip",
 ]
 
 [[package]]
@@ -1047,6 +1050,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "deckcraft-mesh"
+version = "0.6.1"
+dependencies = [
+ "image",
+ "log",
+ "quick-xml 0.38.4",
+ "serde_json",
+ "zip",
+]
+
+[[package]]
 name = "deckcraft-metafile"
 version = "0.6.1"
 dependencies = [
@@ -1093,6 +1107,7 @@ dependencies = [
 name = "deckcraft-pptx"
 version = "0.6.1"
 dependencies = [
+ "deckcraft-anim",
  "deckcraft-color",
  "deckcraft-engine",
  "deckcraft-geom",
@@ -1113,6 +1128,7 @@ dependencies = [
  "deckcraft-color",
  "deckcraft-fonts",
  "deckcraft-geom",
+ "deckcraft-mesh",
  "deckcraft-metafile",
  "deckcraft-model",
  "deckcraft-text",
@@ -1148,6 +1164,7 @@ dependencies = [
  "deckcraft-fonts",
  "deckcraft-geom",
  "deckcraft-media",
+ "deckcraft-mesh",
  "deckcraft-model",
  "deckcraft-render",
  "deckcraft-text",

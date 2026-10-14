@@ -120,7 +120,9 @@ fn open_bytes(s: &mut Session, p: &Value) -> Result<Value> {
 /// Encode the presentation in `format` (`deckcraft`, `pptx`, `outline`).
 pub fn save_bytes(doc: &Presentation, format: &str) -> Result<Vec<u8>> {
     match format {
-        "pptx" | "potx" | "ppsx" => deckcraft_pptx::export(doc).map_err(|e| EngineError::Other(e.to_string())),
+        // 3-D models get a freshly drawn fallback picture, at 2 pixels per point like PowerPoint's.
+        "pptx" | "potx" | "ppsx" => deckcraft_pptx::export_with_previews(doc, &|m, w, h| deckcraft_render::model_png(doc, m, w, h, 2.0))
+            .map_err(|e| EngineError::Other(e.to_string())),
         "outline" | "txt" => Ok(deckcraft_format::slides_to_outline(doc).into_bytes()),
         "pdf" => deckcraft_pdf::export(doc, &Default::default()).map_err(|e| EngineError::Other(e.to_string())),
         _ => deckcraft_format::save(doc).map_err(|e| EngineError::Other(e.to_string())),

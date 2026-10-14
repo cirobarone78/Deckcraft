@@ -2,6 +2,7 @@
 
 mod chart;
 pub(crate) mod dml;
+mod model3d;
 mod shapes;
 mod theme;
 mod timing;
@@ -117,7 +118,7 @@ pub fn keep_xml(el: &El, ns: &[(String, String)]) -> String {
 }
 
 /// Namespace prefixes whose `mc:Choice` content we understand.
-const SUPPORTED_MC: [&str; 9] = ["p14", "p15", "p159", "a14", "a16", "p1510", "a15", "c14", "p188"];
+const SUPPORTED_MC: [&str; 10] = ["p14", "p15", "p159", "a14", "a16", "p1510", "a15", "c14", "p188", "am3d"];
 
 /// Replace every `mc:AlternateContent` by the children of the branch we can read best.
 pub fn resolve_mc(el: &mut El, depth: usize) {

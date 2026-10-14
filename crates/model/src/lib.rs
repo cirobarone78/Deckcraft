@@ -11,6 +11,7 @@ pub mod anim;
 pub mod chart;
 pub mod defaults;
 pub mod edit;
+pub mod model3d;
 pub mod numfmt;
 pub mod resolve;
 pub mod style;
@@ -27,6 +28,7 @@ use serde::{Deserialize, Serialize};
 
 pub use anim::{AnimClass, AnimStart, Animation, Transition};
 pub use chart::Chart;
+pub use model3d::Model3d;
 pub use style::{ColorBase, ColorRef, Effects, Fill, Line, ShapeStyle};
 pub use table::{Cell, Table};
 pub use text::{Paragraph, Run, RunProps, TextBody};
@@ -282,6 +284,8 @@ pub enum ShapeKind {
     Ink {
         strokes: Vec<InkStroke>,
     },
+    /// A 3-D model (Insert ▸ 3D Models).
+    Model3d(Box<Model3d>),
     /// Something we read but don't model (SmartArt without fallback, OLE…): its XML is kept and its
     /// fallback picture, if any, is shown.
     Opaque {
@@ -388,6 +392,7 @@ impl Shape {
             ShapeKind::Media(m) if m.video => "video",
             ShapeKind::Media(_) => "audio",
             ShapeKind::Ink { .. } => "ink",
+            ShapeKind::Model3d(_) => "model3d",
             ShapeKind::Opaque { .. } => "object",
         }
     }

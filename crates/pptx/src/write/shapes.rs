@@ -396,8 +396,112 @@ pub fn shape(w: &mut W, x: &mut Exp, o: &mut Out, cx: &mut Ctx, s: &Shape, depth
             }
             w.close("p:grpSp");
         }
+        ShapeKind::Model3d(m) => {
+            let id = cx.id_for(s);
+            model3d_frame(w, x, o, id, s, m);
+        }
         ShapeKind::Opaque { xml, preview, label } => opaque(w, x, o, cx, s, xml, *preview, label),
     }
+}
+
+/// A 3-D model: the `am3d` graphic frame for readers that know it, its picture for the others.
+fn model3d_frame(w: &mut W, x: &mut Exp, o: &mut Out, id: u32, s: &Shape, m: &deckcraft_model::Model3d) {
+    let mut xf = s.xfrm.unwrap_or_default();
+    xf.rot = 0.0;
+    xf.flip_h = false;
+    xf.flip_v = false;
+    // The picture: freshly drawn, else the one read with the model, else a transparent pixel.
+    let png = (x.model_preview)(m, xf.w, xf.h);
+    let raster = match png {
+        Some(png) => x.png_rel(o, png),
+        None => match m.preview.and_then(|p| x.media_rel(o, p, "image")) {
+            Some(r) => r,
+            None => x.placeholder_rel(o),
+        },
+    };
+    let pic_box = |w: &mut W| {
+        w.open0("p:spPr");
+        dml::xfrm(w, "a:xfrm", &xf, None);
+        w.open("a:prstGeom", A::new().a("prst", "rect"));
+        w.empty0("a:avLst");
+        w.close("a:prstGeom");
+        w.close("p:spPr");
+    };
+    let Some(model) = x.media_rel(o, m.media, super::model3d::RT_MODEL3D) else {
+        // The model's file is missing: keep its picture.
+        log::warn!("pptx: 3-D model '{}' has no model data; written as its picture", s.name);
+        w.open0("p:pic");
+        w.open0("p:nvPicPr");
+        cnvpr(w, x, o, id, s);
+        w.open0("p:cNvPicPr");
+        w.empty("a:picLocks", A::new().a("noChangeAspect", "1"));
+        w.close("p:cNvPicPr");
+        w.empty0("p:nvPr");
+        w.close("p:nvPicPr");
+        w.open0("p:blipFill");
+        w.empty("a:blip", A::new().a("r:embed", &raster));
+        w.open0("a:stretch");
+        w.empty0("a:fillRect");
+        w.close("a:stretch");
+        w.close("p:blipFill");
+        pic_box(w);
+        w.close("p:pic");
+        return;
+    };
+    w.open("mc:AlternateContent", A::new().a("xmlns:mc", NS_MC));
+    w.open("mc:Choice", A::new().a("xmlns:am3d", super::model3d::NS_AM3D).a("Requires", "am3d"));
+    w.open0("p:graphicFrame");
+    w.open0("p:nvGraphicFramePr");
+    cnvpr(w, x, o, id, s);
+    w.open0("p:cNvGraphicFramePr");
+    w.empty(
+        "a:graphicFrameLocks",
+        A::new().t("noGrp", s.locked).t("noDrilldown", s.locked).a("noChangeAspect", "1").t("noMove", s.locked).t("noResize", s.locked),
+    );
+    w.close("p:cNvGraphicFramePr");
+    nv_pr(w, s);
+    w.close("p:nvGraphicFramePr");
+    dml::xfrm(w, "p:xfrm", &xf, None);
+    w.open0("a:graphic");
+    w.open("a:graphicData", A::new().a("uri", super::model3d::NS_AM3D));
+    let (ecx, ecy) = (deckcraft_geom::pt_to_emu(xf.w).max(1), deckcraft_geom::pt_to_emu(xf.h).max(1));
+    super::model3d::model3d(w, m, &model, &raster, ecx, ecy, xf.h);
+    w.close("a:graphicData");
+    w.close("a:graphic");
+    w.close("p:graphicFrame");
+    w.close("mc:Choice");
+    w.open0("mc:Fallback");
+    w.open0("p:pic");
+    w.open0("p:nvPicPr");
+    cnvpr(w, x, o, id, s);
+    w.open0("p:cNvPicPr");
+    w.empty(
+        "a:picLocks",
+        A::new()
+            .a("noGrp", "1")
+            .a("noRot", "1")
+            .a("noChangeAspect", "1")
+            .a("noMove", "1")
+            .a("noResize", "1")
+            .a("noEditPoints", "1")
+            .a("noAdjustHandles", "1")
+            .a("noChangeArrowheads", "1")
+            .a("noChangeShapeType", "1")
+            .a("noCrop", "1"),
+    );
+    w.close("p:cNvPicPr");
+    w.empty0("p:nvPr");
+    w.close("p:nvPicPr");
+    w.open0("p:blipFill");
+    w.empty("a:blip", A::new().a("r:embed", &raster));
+    w.open0("a:stretch");
+    w.empty0("a:fillRect");
+    w.close("a:stretch");
+    w.close("p:blipFill");
+    pic_box(w);
+    w.close("p:pic");
+    w.close("mc:Fallback");
+    w.close("mc:AlternateContent");
 }
 
 fn ink_shape(st: &deckcraft_model::InkStroke, i: usize) -> Option<Shape> {

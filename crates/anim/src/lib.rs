@@ -32,6 +32,7 @@ pub use deckcraft_model::Rgba;
 use serde::{Deserialize, Serialize};
 
 pub use easing::ease;
+pub use effects::{MODEL_EFFECTS, is_model_effect, model_effect};
 pub use mesh::{MeshVertex, layer_mesh};
 pub use morph::{MorphFrame, MorphPath, MorphText, morph_frame, morph_pairs, morph_xfrm};
 pub use path::{MotionPath, default_path};
@@ -55,11 +56,66 @@ pub struct AnimState {
     pub rotate: f64,
     pub clip: Option<[f64; 4]>,
     pub tint: Option<Rgba>,
+    /// What a 3-D effect does to a 3-D model.
+    pub model: ModelAnim,
 }
 
 impl Default for AnimState {
     fn default() -> Self {
-        AnimState { visible: true, opacity: 1.0, offset_x: 0.0, offset_y: 0.0, scale_x: 1.0, scale_y: 1.0, rotate: 0.0, clip: None, tint: None }
+        AnimState {
+            visible: true,
+            opacity: 1.0,
+            offset_x: 0.0,
+            offset_y: 0.0,
+            scale_x: 1.0,
+            scale_y: 1.0,
+            rotate: 0.0,
+            clip: None,
+            tint: None,
+            model: ModelAnim::default(),
+        }
+    }
+}
+
+/// What a 3-D effect (Arrive, Turntable, Swing, Jump & Turn, Leave) does to a 3-D model on top of
+/// its own pose: turns about the view's axes (after the model's rotation) and about its own (before
+/// it), a move in the scene and a scale along its own axes.
+#[derive(Clone, Copy, Debug, PartialEq, Serialize, Deserialize)]
+pub struct ModelAnim {
+    /// Degrees about the view's X, Y, Z axes.
+    pub view_turn: [f64; 3],
+    /// Degrees about the model's own X, Y, Z axes.
+    pub own_turn: [f64; 3],
+    /// Metres in the scene (Y up).
+    pub shift: [f64; 3],
+    pub scale: [f64; 3],
+}
+
+impl Default for ModelAnim {
+    fn default() -> Self {
+        ModelAnim { view_turn: [0.0; 3], own_turn: [0.0; 3], shift: [0.0; 3], scale: [1.0; 3] }
+    }
+}
+
+impl ModelAnim {
+    pub fn is_identity(&self) -> bool {
+        *self == ModelAnim::default()
+    }
+
+    /// `d` on top of `self`: turns and moves add, scales multiply.
+    pub fn compose(&self, d: &ModelAnim) -> ModelAnim {
+        let add = |a: [f64; 3], b: [f64; 3]| [a[0] + b[0], a[1] + b[1], a[2] + b[2]];
+        ModelAnim {
+            view_turn: add(self.view_turn, d.view_turn),
+            own_turn: add(self.own_turn, d.own_turn),
+            shift: add(self.shift, d.shift),
+            scale: [self.scale[0] * d.scale[0], self.scale[1] * d.scale[1], self.scale[2] * d.scale[2]],
+        }
+    }
+
+    fn sanitized(self) -> ModelAnim {
+        let f = |v: [f64; 3], d: f64| v.map(|c| if c.is_finite() { c.clamp(-1e6, 1e6) } else { d });
+        ModelAnim { view_turn: f(self.view_turn, 0.0), own_turn: f(self.own_turn, 0.0), shift: f(self.shift, 0.0), scale: f(self.scale, 1.0) }
     }
 }
 
@@ -90,6 +146,7 @@ impl AnimState {
             rotate: self.rotate + d.rotate,
             clip,
             tint: d.tint.or(self.tint),
+            model: self.model.compose(&d.model),
         }
     }
     /// Replace any non-finite number with its neutral value and clamp opacity and clip.
@@ -108,6 +165,7 @@ impl AnimState {
             let b = f(c[3], 1.0).clamp(0.0, 1.0);
             [l, t, r.max(l), b.max(t)]
         });
+        self.model = self.model.sanitized();
         self
     }
 }

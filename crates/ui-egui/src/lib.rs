@@ -165,6 +165,7 @@ pub const UI_COMMANDS: &[(&str, &str, Option<&str>, &str)] = &[
     ("app.insertPictureDialog", "Picture from File…", None, "{}"),
     ("app.insertAudioDialog", "Audio from File…", None, "{}"),
     ("app.insertVideoDialog", "Video from File…", None, "{}"),
+    ("app.insertModel3dDialog", "3D Models from This Device…", None, "{}"),
     ("app.saveAsDialog", "Save As…", None, "{}"),
     ("app.exportDialog", "Export…", None, "{}"),
     ("app.dialog", "Open Dialog", None, "{id}"),
@@ -397,6 +398,35 @@ impl SlideApp {
         self.download(&suggested, bytes)
     }
 
+    /// Save as Picture (the context menu of 3-D models and pictures): the selected object's picture
+    /// to a file the user picks, or downloaded on the web.
+    pub fn save_shape_picture(&mut self) {
+        let r = self.session.execute("shape.saveAsPicture", &json!({}));
+        let (name, bytes) = match r {
+            Ok(v) => (
+                v.get("name").and_then(Value::as_str).unwrap_or("Picture.png").to_string(),
+                v.get("data").and_then(Value::as_str).and_then(deckcraft_engine::cmd::base64_decode).unwrap_or_default(),
+            ),
+            Err(e) => {
+                self.set_status(e.to_string());
+                return;
+            }
+        };
+        if let Some(pick) = self.services.pick_save.as_mut() {
+            let Some(path) = pick(&name) else { return };
+            let r = match self.services.write.as_mut() {
+                Some(w) => w(&path, &bytes),
+                None => Err("no way to write files".into()),
+            };
+            match r {
+                Ok(()) => self.set_status(format!("Saved {path}")),
+                Err(e) => self.set_status(format!("{path}: {e}")),
+            }
+            return;
+        }
+        self.download(&name, Ok(bytes));
+    }
+
     /// Hands `bytes` to the browser as a download (web); false (with the reason in the status
     /// bar) when there are no bytes or no way to download.
     fn download(&mut self, name: &str, bytes: deckcraft_engine::Result<Vec<u8>>) -> bool {
@@ -539,6 +569,7 @@ impl SlideApp {
             "app.insertPictureDialog" => self.pick_and_insert("picture", "insert.picture"),
             "app.insertAudioDialog" => self.pick_and_insert("audio", "insert.audio"),
             "app.insertVideoDialog" => self.pick_and_insert("video", "insert.video"),
+            "app.insertModel3dDialog" => self.pick_and_insert("model3d", "insert.model3d"),
             "app.saveAsDialog" => self.save_as_dialog("deckcraft"),
             "app.exportDialog" => self.dialog = Some(dialogs::Dialog::new("export")),
             "app.dialog" => {
@@ -586,7 +617,14 @@ impl SlideApp {
                 let r = match self.services.read.as_ref().map(|r| r(&path)) {
                     Some(Ok(bytes)) => {
                         let name = std::path::Path::new(&path).file_name().map(|n| n.to_string_lossy().to_string()).unwrap_or_default();
-                        self.session.execute(cmd, &json!({"name": name, "data": deckcraft_engine::cmd::base64_encode(&bytes)}))
+                        let mut p = json!({"name": name, "data": deckcraft_engine::cmd::base64_encode(&bytes)});
+                        // A 3-D model's materials and textures are found next to it.
+                        if cmd == "insert.model3d"
+                            && let Some(o) = p.as_object_mut()
+                        {
+                            o.insert("path".into(), json!(path));
+                        }
+                        self.session.execute(cmd, &p)
                     }
                     _ => self.session.execute(cmd, &json!({"path": path})),
                 };
@@ -679,8 +717,43 @@ impl SlideApp {
     fn drain_inbox(&mut self) {
         let Some(inbox) = self.services.inbox.clone() else { return };
         let files: Vec<(String, Vec<u8>)> = inbox.lock().map(|mut v| std::mem::take(&mut *v)).unwrap_or_default();
-        for (name, bytes) in files {
-            self.open_or_insert_bytes(&name, &bytes);
+        self.open_or_insert_files(files.into_iter().map(|(n, b)| (n, b, None)).collect());
+    }
+
+    /// Files dropped or picked together (name, bytes, path when known): presentations open, media
+    /// and 3-D models are inserted. Files that come with an OBJ, PLY or glTF model are its materials
+    /// and textures, not pictures of their own.
+    pub fn open_or_insert_files(&mut self, files: Vec<(String, Vec<u8>, Option<String>)>) {
+        use deckcraft_engine::cmd::model3d::{is_model_file, uses_companions};
+        let models: Vec<bool> = files.iter().map(|(n, b, _)| is_model_file(n, b)).collect();
+        let with_companions = files.iter().zip(&models).any(|((n, _, _), m)| *m && uses_companions(n));
+        let companions: serde_json::Map<String, Value> = if with_companions {
+            files
+                .iter()
+                .zip(&models)
+                .filter(|(_, m)| !**m)
+                .map(|((n, b, _), _)| (n.clone(), Value::String(deckcraft_engine::cmd::base64_encode(b))))
+                .collect()
+        } else {
+            serde_json::Map::new()
+        };
+        for ((name, bytes, path), model) in files.iter().zip(models) {
+            if !model {
+                if !with_companions {
+                    self.open_or_insert_bytes(name, bytes);
+                }
+                continue;
+            }
+            if self.session.active().is_none() {
+                let _ = self.session.execute("file.new", &json!({}));
+            }
+            let mut p = json!({"name": name, "data": deckcraft_engine::cmd::base64_encode(bytes), "files": companions.clone()});
+            if let (Some(path), Some(o)) = (path, p.as_object_mut()) {
+                o.insert("path".into(), json!(path));
+            }
+            if let Err(e) = self.session.execute("insert.model3d", &p) {
+                self.set_status(e.to_string());
+            }
         }
     }
 
@@ -696,6 +769,8 @@ impl SlideApp {
             || lower.ends_with(".ppsx")
         {
             "file.openBytes"
+        } else if deckcraft_engine::cmd::model3d::is_model_file(name, bytes) {
+            "insert.model3d"
         } else if ct.starts_with("image/") {
             "insert.picture"
         } else if ct.starts_with("audio/") {
@@ -772,11 +847,17 @@ impl SlideApp {
         // On the web, dropped files can only be read asynchronously: the host reads them and
         // delivers them through `Services::inbox`.
         #[cfg(not(target_arch = "wasm32"))]
-        for f in ctx.input(|i| i.raw.dropped_files.clone()) {
-            let name = f.path().file_name().map(|n| n.to_string_lossy().to_string()).unwrap_or_else(|| "dropped file".into());
-            match f.bytes() {
-                Ok(bytes) => self.open_or_insert_bytes(&name, &bytes),
-                Err(e) => self.set_status(e),
+        {
+            let mut files = Vec::new();
+            for f in ctx.input(|i| i.raw.dropped_files.clone()) {
+                let name = f.path().file_name().map(|n| n.to_string_lossy().to_string()).unwrap_or_else(|| "dropped file".into());
+                match f.bytes() {
+                    Ok(bytes) => files.push((name, bytes, Some(f.path().to_string_lossy().to_string()))),
+                    Err(e) => self.set_status(e),
+                }
+            }
+            if !files.is_empty() {
+                self.open_or_insert_files(files);
             }
         }
     }

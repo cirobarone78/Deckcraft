@@ -58,6 +58,12 @@ fn media_of_shapes(shapes: &[Shape], out: &mut Vec<MediaId>) {
                     out.push(p);
                 }
             }
+            deckcraft_model::ShapeKind::Model3d(m) => {
+                out.push(m.media);
+                if let Some(p) = m.preview {
+                    out.push(p);
+                }
+            }
             _ => {}
         }
         if let Some(deckcraft_model::Fill::Picture(pf)) = &s.fill {

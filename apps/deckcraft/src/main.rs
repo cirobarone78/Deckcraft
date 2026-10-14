@@ -100,6 +100,7 @@ fn services() -> Services {
                     &["wav", "mp3", "m4a", "m4b", "aac", "flac", "ogg", "oga", "opus", "aif", "aiff", "aifc", "caf", "wma", "weba", "mka"],
                 ),
                 "video" => d.add_filter("Video", &["mp4", "m4v", "mov", "webm", "mkv", "wmv"]),
+                "model3d" => d.add_filter("3D Models", &["glb", "gltf", "obj", "stl", "ply", "3mf"]),
                 _ => d
                     .add_filter("Presentations", &["deckcraft", "pptx", "potx", "ppsx"])
                     .add_filter("DeckCraft", &["deckcraft"])

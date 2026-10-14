@@ -118,7 +118,15 @@ pub fn animations(imp: &mut Imp, part: &Part, ctx: &IdCtx, timing: &El, _shapes:
         let Some(file_id) = tgt.u32("spid") else { continue };
         let Some(shape) = ctx.lookup(file_id) else { continue };
         let paragraph = tgt.path(&["txEl", "pRg"]).and_then(|p| p.u32("st"));
-        let effect = maps::effect_for_preset(class, preset).unwrap_or_else(|| maps::fallback_effect(class));
+        let mut effect = maps::effect_for_preset(class, preset).unwrap_or_else(|| maps::fallback_effect(class));
+        // The 3-D effects' presets mean them only when they animate a 3-D model's attributes.
+        if deckcraft_anim::is_model_effect(effect) {
+            let mut names = vec![];
+            c.find_all("attrName", &mut names);
+            if !names.iter().any(|n| n.text().starts_with("3d.")) {
+                effect = maps::fallback_effect(class);
+            }
+        }
         let start = match c.attr("nodeType") {
             Some("clickEffect") => AnimStart::OnClick,
             Some("afterEffect") => AnimStart::AfterPrevious,
