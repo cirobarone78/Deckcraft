@@ -206,7 +206,7 @@ fn the_3d_handle_turns_the_model_and_undoes_in_one_step() {
     let id = insert_box(&mut s, [-0.5; 3], [0.5; 3]);
     let x = model(&s, id).1;
     let c = x.center();
-    let ev = |kind, x: f64, y: f64| PointerEvent { kind, x, y, mods: Mods::default(), tol: 3.0 };
+    let ev = |kind, x: f64, y: f64| PointerEvent { kind, x, y, mods: Mods::default(), tol: 3.0, pressure: None };
     assert_eq!(s.hit_test(c, 3.0), Some(Hit::Rotate3d { id }));
     s.pointer(ev(PointerKind::Down, c.x, c.y)).unwrap();
     // A quarter of the frame's width to the right: 45° about the vertical axis.
