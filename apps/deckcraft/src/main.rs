@@ -12,6 +12,8 @@
 #![deny(clippy::unwrap_used, clippy::expect_used, clippy::panic, clippy::unimplemented, clippy::todo, clippy::unreachable)]
 #![forbid(unsafe_code)]
 
+#[cfg(target_os = "macos")]
+mod apple_events;
 mod audio;
 mod control_server;
 #[cfg(any(target_os = "windows", test))]
@@ -21,10 +23,17 @@ mod logging;
 use deckcraft_engine::Session;
 use deckcraft_ui_egui::{Services, SlideApp};
 
-struct App(SlideApp);
+struct App(
+    SlideApp,
+    /// Files opened from Finder and quit requests (see `apple_events`).
+    #[cfg(target_os = "macos")]
+    fmv_macos_events::Inbox,
+);
 
 impl eframe::App for App {
     fn logic(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
+        #[cfg(target_os = "macos")]
+        apple_events::poll(&self.1, &mut self.0, ctx);
         self.0.logic(ctx);
     }
     fn raw_input_hook(&mut self, _ctx: &egui::Context, raw: &mut egui::RawInput) {
@@ -152,6 +161,8 @@ fn main() -> eframe::Result {
                 println!("deckcraft {}", env!("CARGO_PKG_VERSION"));
                 return Ok(());
             }
+            // The process serial number older macOS adds when Finder launches the app.
+            a if a.starts_with("-psn_") => {}
             _ => files.push(a),
         }
     }
@@ -193,6 +204,12 @@ fn main() -> eframe::Result {
     // Before eframe creates the wgpu instance: default Windows to DirectX 12 only (see graphics.rs).
     #[cfg(target_os = "windows")]
     graphics::configure(&mut options, eframe::wgpu::Backends::from_env());
+    // Registered before the event loop starts, so it catches the Finder event that launched us as
+    // well as later ones. Lives until the event loop returns; the app creator only borrows it.
+    #[cfg(target_os = "macos")]
+    let apple_events = apple_events::AppleEvents::install();
+    #[cfg(target_os = "macos")]
+    let apple_events = &apple_events;
     eframe::run_native(
         "DeckCraft",
         options,
@@ -224,7 +241,87 @@ fn main() -> eframe::Result {
             if show {
                 app.start_show(0, false);
             }
-            Ok(Box::new(App(app)))
+            Ok(Box::new(App(
+                app,
+                #[cfg(target_os = "macos")]
+                apple_events.connect(&cc.egui_ctx),
+            )))
         }),
     )
+}
+
+#[cfg(test)]
+mod tests {
+    /// The `<string>` values of every `<array>` that follows a `<key>{key}</key>` line.
+    fn plist_strings(plist: &str, key: &str) -> Vec<String> {
+        let mut out = Vec::new();
+        let mut in_array = false;
+        for line in plist.lines() {
+            let line = line.trim();
+            if line == format!("<key>{key}</key>") {
+                in_array = true;
+                continue;
+            }
+            if in_array {
+                for part in line.split("<string>").skip(1) {
+                    if let Some((s, _)) = part.split_once("</string>") {
+                        out.push(s.to_string());
+                    }
+                }
+                if line.ends_with("</array>") {
+                    in_array = false;
+                }
+            }
+        }
+        out
+    }
+
+    /// Every desktop offers the same file types: macOS (`CFBundleTypeExtensions` and the native
+    /// type's extension in `Info.plist.in`), Windows (`SupportedTypes` in `deckcraft.wxs`) and
+    /// Linux (`MimeType` in the desktop file). A format added to one installer must reach the
+    /// others, and each must be one Finder, Explorer or the file manager can hand to DeckCraft.
+    #[test]
+    fn every_desktop_offers_the_same_file_types() {
+        let plist = include_str!("../../../packaging/macos/Info.plist.in");
+        let wxs = include_str!("../../../packaging/windows/deckcraft.wxs");
+        let desktop = include_str!("../../../packaging/linux/ai.storyteller.deckcraft.desktop");
+
+        let mut mac = plist_strings(plist, "CFBundleTypeExtensions");
+        // The native type is declared by its UTI; its extension is in the exported type.
+        mac.extend(plist_strings(plist, "public.filename-extension").into_iter().filter(|e| e == "deckcraft"));
+        mac.sort();
+        mac.dedup();
+        assert!(mac.iter().any(|e| e == "pptx") && mac.iter().any(|e| e == "deckcraft"), "Info.plist.in: {mac:?}");
+        // Every document type names a content type too, so "Change All" in Finder's Get Info works.
+        let names = plist.matches("<key>CFBundleTypeName</key>").count();
+        let content_types = plist.matches("<key>LSItemContentTypes</key>").count();
+        assert!(names > 0 && names == content_types, "{names} document types, {content_types} with LSItemContentTypes");
+
+        let mut win: Vec<String> = wxs
+            .lines()
+            .filter(|l| l.contains("SupportedTypes\" Name=\"."))
+            .filter_map(|l| l.split("Name=\".").nth(1)?.split('"').next().map(str::to_string))
+            .collect();
+        win.sort();
+
+        let mime_ext = |m: &str| match m {
+            "application/x-deckcraft" => Some("deckcraft"),
+            "application/vnd.openxmlformats-officedocument.presentationml.presentation" => Some("pptx"),
+            "application/vnd.openxmlformats-officedocument.presentationml.template" => Some("potx"),
+            "application/vnd.openxmlformats-officedocument.presentationml.slideshow" => Some("ppsx"),
+            _ => None,
+        };
+        let mut linux: Vec<String> = desktop
+            .lines()
+            .find_map(|l| l.strip_prefix("MimeType="))
+            .unwrap_or_default()
+            .split(';')
+            .filter(|m| !m.is_empty())
+            .map(|m| mime_ext(m).unwrap_or(m).to_string()) // an unknown MIME type shows up in the diff
+            .collect();
+        linux.sort();
+
+        assert_eq!(mac, win, "macOS and Windows offer different file types");
+        assert_eq!(mac, linux, "macOS and Linux offer different file types");
+    }
 }
