@@ -2,6 +2,7 @@
 
 **Stage: alpha** · next: beta, ~20 points and ~120–210 h away
 
+> **Last reviewed:** 2026-10-10 · **Last updated:** 2026-10-14 · **Change:** trivial (progress log: preset outlines dispatch on a `Name` enum, and the Symbol-font layout test skips when the installed face lacks the glyph; previous: trivial, progress log: Hyperlink dialog follows the selection; breadth stays 79%) · **Target:** Microsoft PowerPoint for Mac 16.113 (Microsoft 365)
 > **Last reviewed:** 2026-10-10 · **Last updated:** 2026-10-13 · **Change:** trivial (video-seek race fixed and regression-tested; previous: minor, hours to ~95% per audience added; ready 56% → 55%; stage stays alpha; previous: major, full re-measure against PowerPoint for Mac 16.113.4; restructured to the craftrules progress-docs standard) · **Target:** Microsoft PowerPoint for Mac 16.113 (Microsoft 365)
 > **Last reviewed:** 2026-10-10 · **Last updated:** 2026-10-14 · **Change:** minor (presenter keyboard navigation; hours to ~95% per audience added; ready 56% → 55%; stage stays alpha; previous: major, full re-measure against PowerPoint for Mac 16.113.4; restructured to the craftrules progress-docs standard) · **Target:** Microsoft PowerPoint for Mac 16.113 (Microsoft 365)
 > **Last reviewed:** 2026-10-10 · **Last updated:** 2026-10-12 · **Change:** minor (SmartArt text on its text rectangle; previous: minor, hours to ~95% per audience added; ready 56% → 55%; stage stays alpha; previous: major, full re-measure against PowerPoint for Mac 16.113.4; restructured to the craftrules progress-docs standard) · **Target:** Microsoft PowerPoint for Mac 16.113 (Microsoft 365)
@@ -166,6 +167,7 @@ app's JSON control channel (`deckcraft --control PORT`).
 
 | Date | What landed |
 |---|---|
+| 2026-10-14 | Preset geometry: the `extra` module dispatches its 38 extra outlines on a typed `Name` enum instead of string compares, with a `from_str` parse at the entry point (behaviour unchanged). The symbol-font text test now skips unless the installed Symbol face actually covers U+F0DE, matching when the layout uses it |
 | 2026-10-13 | Eyedropper: Shape Fill, Shape Outline, Font Color and every other colour menu end with an Eyedropper that takes the colour drawn at a point of the slide (hover shows it, a click applies it, Esc cancels); `slide.colorAt` gives the same from scripts and MCP (#367) |
 | 2026-10-13 | Slide show: Honeycomb's hexagons cover the whole slide again — the bottom quarter stayed black until the endpoint (#420) |
 | 2026-10-13 | Copy and Cut from the ribbon, the slide's right-click menu and the menus put the text on the system clipboard, as Ctrl+C and Ctrl+X do (#431) |
@@ -236,6 +238,7 @@ app's JSON control channel (`deckcraft --control PORT`).
 
 | Date | Change | Summary |
 |---|---|---|
+| 2026-10-14 | trivial | Progress log: extra preset outlines dispatch on a `Name` enum; Symbol-font layout test skips without a covering face |
 | 2026-10-13 | trivial | Progress log: Eyedropper in the colour menus, slide.colorAt (#367) |
 | 2026-10-13 | trivial | Progress log: video seek frame-loss race and regression coverage |
 | 2026-10-14 | minor | Presenter keyboard navigation and end-screen controls |

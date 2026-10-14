@@ -48,3 +48,7 @@ sync_github_name = true
 
 [people.Momentum96]
 sync_github_name = true
+
+[people.Bryson14]
+real_name = "Bryson Meiling"
+sync_github_name = true
