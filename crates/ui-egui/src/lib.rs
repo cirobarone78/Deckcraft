@@ -62,6 +62,8 @@ pub struct Services {
     pub clipboard_image: Option<Box<dyn FnMut() -> Option<Vec<u8>>>>,
     /// Audio output for media playback (cpal on desktop); without one media plays silently.
     pub audio_out: Option<Box<dyn deckcraft_media::AudioOut>>,
+    /// Microphone for Record Slide Show (cpal on desktop). Without one, timings and ink are still kept.
+    pub mic: Option<Box<dyn deckcraft_media::MicIn>>,
 }
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
@@ -499,6 +501,7 @@ impl SlideApp {
             }
             "show.presenter" => self.ui.presenter_view = self.flag(p, self.ui.presenter_view),
             "show.end" => {
+                self.stop_mic();
                 self.show = None;
                 self.media.stop_owned(media::Owner::Show);
             }
@@ -552,6 +555,12 @@ impl SlideApp {
             _ => return Err(format!("unknown UI command `{id}`")),
         }
         Ok(Value::Null)
+    }
+
+    pub(crate) fn stop_mic(&mut self) {
+        if let Some(mic) = self.services.mic.as_mut() {
+            mic.stop();
+        }
     }
 
     pub fn start_show(&mut self, from: usize, reading: bool) {
@@ -659,7 +668,12 @@ impl SlideApp {
                     self.dialog = Some(d);
                 }
                 UiRequest::Pane { id } => self.ui.pane = Some(id),
-                UiRequest::StartShow { from } => self.start_show(from, false),
+                UiRequest::StartShow { from, record } => {
+                    self.start_show(from, false);
+                    if let Some(show) = self.show.as_mut() {
+                        show.record = record;
+                    }
+                }
                 UiRequest::Message { text } => self.set_status(text),
                 UiRequest::PickFile { purpose } => {
                     if purpose == "saveAs" {
@@ -755,6 +769,7 @@ impl SlideApp {
         // Closing the window with unsaved changes asks first.
         if ctx.input(|i| i.viewport().close_requested()) && !self.quit_confirmed && self.session.documents().iter().any(|d| d.is_dirty()) {
             ctx.send_viewport_cmd(egui::ViewportCommand::CancelClose);
+            self.stop_mic();
             self.show = None;
             if self.dialog.as_ref().is_none_or(|d| d.id != "quit") {
                 self.dialog = Some(dialogs::Dialog::new("quit"));

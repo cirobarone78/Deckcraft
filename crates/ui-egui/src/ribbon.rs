@@ -1733,8 +1733,12 @@ fn slide_show(app: &mut SlideApp, ui: &mut Ui) {
                 s.rehearse = true;
             }
         }
-        let r = big_button(ui, Icon::Record, "Record", false);
-        let _ = r.on_hover_text("Recording narration needs audio capture (coming soon)");
+        if big_button(ui, Icon::Record, "Record", true)
+            .on_hover_text("Records slide timings, the microphone and pen ink. Laser follows the pointer.")
+            .clicked()
+        {
+            let _ = app.run("show.record", json!({}));
+        }
     });
     group(ui, |ui| {
         rows(ui, |ui| {
@@ -1757,17 +1761,11 @@ fn record(app: &mut SlideApp, ui: &mut Ui) {
         let r = big_button(ui, Icon::Cameo, "Cameo", false);
         let _ = r.on_hover_text("Camera capture is not available yet");
         if big_button(ui, Icon::PlayFromStart, "From\nBeginning", true).clicked() {
-            app.start_show(0, false);
-            if let Some(s) = app.show.as_mut() {
-                s.rehearse = true;
-            }
+            let _ = app.run("show.record", json!({}));
         }
         if big_button(ui, Icon::PlayFromCurrent, "From\nCurrent Slide", true).clicked() {
             let i = app.session.active().map(|d| d.selection.slide).unwrap_or(0);
-            app.start_show(i, false);
-            if let Some(s) = app.show.as_mut() {
-                s.rehearse = true;
-            }
+            let _ = app.run("show.record", json!({"from": i}));
         }
     });
     group(ui, |ui| {
