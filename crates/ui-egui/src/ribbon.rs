@@ -53,6 +53,13 @@ pub fn title_bar(app: &mut SlideApp, ui: &mut Ui) {
         if icon_toggle(&mut child, Icon::Save, "Save (⌘S)", has_doc, false).clicked() {
             app.save();
         }
+        let save_as_tip = format!("Save As… ({})", pretty_shortcut("Cmd+Shift+S"));
+        let save_as = icon_toggle(&mut child, Icon::SaveAs, &save_as_tip, has_doc, false);
+        // The ellipsis keeps this off Export's "Save As" button, which writes the chosen type.
+        save_as.widget_info(|| egui::WidgetInfo::labeled(egui::WidgetType::Button, has_doc, "Save As…"));
+        if save_as.clicked() {
+            app.save_as();
+        }
         if icon_toggle(&mut child, Icon::Undo, "Undo (⌘Z)", enabled(app, "edit.undo"), false).clicked() {
             run(app, "edit.undo", json!({}));
         }

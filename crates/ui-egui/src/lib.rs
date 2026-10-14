@@ -165,7 +165,7 @@ pub const UI_COMMANDS: &[(&str, &str, Option<&str>, &str)] = &[
     ("app.insertPictureDialog", "Picture from File…", None, "{}"),
     ("app.insertAudioDialog", "Audio from File…", None, "{}"),
     ("app.insertVideoDialog", "Video from File…", None, "{}"),
-    ("app.saveAsDialog", "Save As…", None, "{}"),
+    ("app.saveAsDialog", "Save As…", Some("Cmd+Shift+S"), "{}"),
     ("app.exportDialog", "Export…", None, "{}"),
     ("app.dialog", "Open Dialog", None, "{id}"),
     ("app.links", "Community Links", None, "{}"),
@@ -539,7 +539,7 @@ impl SlideApp {
             "app.insertPictureDialog" => self.pick_and_insert("picture", "insert.picture"),
             "app.insertAudioDialog" => self.pick_and_insert("audio", "insert.audio"),
             "app.insertVideoDialog" => self.pick_and_insert("video", "insert.video"),
-            "app.saveAsDialog" => self.save_as_dialog("deckcraft"),
+            "app.saveAsDialog" => self.save_as(),
             "app.exportDialog" => self.dialog = Some(dialogs::Dialog::new("export")),
             "app.dialog" => {
                 let d = p.get("id").and_then(Value::as_str).ok_or("missing `id`")?;
@@ -638,6 +638,19 @@ impl SlideApp {
         true
     }
 
+    /// Save a copy under a new name. The file this presentation already has is left as it
+    /// was; the presentation then is the new file. One that has never been saved is written as
+    /// PowerPoint, as on File › Save As. On the web the copy is downloaded and this presentation
+    /// is left as it was.
+    pub fn save_as(&mut self) {
+        let Some(path) = self.session.active().map(|d| d.path.clone()) else { return };
+        let format = match path.as_deref().map(deckcraft_engine::cmd::file::format_for_path) {
+            Some("deckcraft") => "deckcraft",
+            _ => "pptx",
+        };
+        self.save_as_dialog(format);
+    }
+
     pub fn save(&mut self) {
         if self.session.active().and_then(|d| d.path.clone()).is_some() {
             match self.session.execute("file.save", &json!({})) {
@@ -663,7 +676,7 @@ impl SlideApp {
                 UiRequest::Message { text } => self.set_status(text),
                 UiRequest::PickFile { purpose } => {
                     if purpose == "saveAs" {
-                        self.save_as_dialog("deckcraft");
+                        self.save_as();
                     }
                 }
                 UiRequest::Media { action, shape, ms } => {
@@ -1129,6 +1142,10 @@ fn js_now() -> f64 {
 
 #[cfg(test)]
 mod ime_tests;
+
+#[cfg(test)]
+#[path = "save_as_tests.rs"]
+mod save_as_tests;
 
 #[cfg(test)]
 mod tests {
