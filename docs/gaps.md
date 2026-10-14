@@ -115,11 +115,13 @@ Detail in [file-format-parity.md](file-format-parity.md).
 - **Impact:** handouts and speaker notes are printed in many workplaces.
 - **Estimate:** 5–8 h (print through the PDF path and each OS's print dialog). **Beta blocker.**
 
-### No video or animated GIF export
-- **Evidence:** checklist row missing; PowerPoint exports MP4/MOV and animated GIF.
-- **Impact:** sharing a talk as a video is a common request.
-- **Estimate:** 10–16 h (render the timeline frame by frame; an H.264 encoder is the hard part,
-  FilmCraft has one to copy).
+### No animated GIF export
+- **Evidence:** `file.export` writes MP4/MOV with transitions, in-slide animations on the
+  slide-show timeline, video clips playing their pictures (decoded by `deckcraft-media`), and a
+  sound track (AAC or PCM in .mov); File › Export › Create a Video sets the options and runs it
+  in the background with progress and Cancel. Animated GIF export is PR #177.
+- **Impact:** small; GIF is a niche export.
+- **Estimate:** GIF in #177.
 
 ### Embedded fonts aren't read or written
 - **Evidence:** no `p:embeddedFontLst` handling in `crates/pptx`.
