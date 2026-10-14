@@ -9,12 +9,17 @@
 
 pub mod cmd;
 pub mod connect;
+pub mod drawtable;
 pub mod fonts;
 pub mod guard;
+pub mod icons;
 pub mod keys;
 pub mod links;
 pub mod recovery;
 pub mod sample;
+pub mod sounds;
+pub mod spell;
+pub mod templates;
 pub mod tools;
 
 use std::sync::Arc;
@@ -27,6 +32,7 @@ pub use cmd::{CommandInfo, CommandSpec, command_specs, find_command};
 pub use deckcraft_geom as geom;
 pub use deckcraft_media as media;
 pub use deckcraft_model as model;
+pub use deckcraft_pdf as pdf;
 pub use deckcraft_render as render;
 pub use tools::{Mods, PointerEvent, PointerKind, ToolKind};
 
@@ -100,6 +106,34 @@ pub enum Target {
         master: usize,
         layout: usize,
     },
+    /// The handout master (View ▸ Handout Master), a page at the notes size.
+    Handout,
+    /// The notes master (View ▸ Notes Master), a page at the notes size.
+    NotesMaster,
+}
+
+impl Target {
+    /// A notes-size master page (Handout or Notes Master view).
+    pub fn is_page_master(self) -> bool {
+        matches!(self, Target::Handout | Target::NotesMaster)
+    }
+}
+
+/// The handout or notes master edited in that view.
+pub fn page_master(doc: &Presentation, t: Target) -> Option<&Arc<deckcraft_model::Master>> {
+    match t {
+        Target::Handout => doc.handout_master.as_ref(),
+        Target::NotesMaster => doc.notes_master.as_ref(),
+        _ => None,
+    }
+}
+
+pub fn page_master_mut(doc: &mut Presentation, t: Target) -> Option<&mut Arc<deckcraft_model::Master>> {
+    match t {
+        Target::Handout => doc.handout_master.as_mut(),
+        Target::NotesMaster => doc.notes_master.as_mut(),
+        _ => None,
+    }
 }
 
 #[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
@@ -129,6 +163,12 @@ pub struct History {
     pub undo: Vec<HistoryEntry>,
     pub redo: Vec<HistoryEntry>,
     pub limit: usize,
+    /// Most memory (estimated bytes) the undo steps may keep beyond the current document;
+    /// 0 means [`UNDO_BYTE_BUDGET`].
+    pub byte_limit: usize,
+    /// Estimated bytes each undo step keeps that the document after it doesn't share, by the
+    /// step's document address.
+    pub costs: std::collections::HashMap<usize, usize>,
 }
 
 /// A live pointer interaction: the document before it began (one undo step at the end).
@@ -175,7 +215,14 @@ pub struct DocState {
     pub composition: Option<Composition>,
 }
 
-static NEXT_UID: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(1);
+static NEXT_UID: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+
+/// A document id unique across processes, not just within this one: recovery entries are named
+/// by it in a folder every running instance shares. Ids are this process's random base (see
+/// [`recovery::instance_id`]) plus a counter.
+fn next_uid() -> u64 {
+    recovery::instance_id().wrapping_add(NEXT_UID.fetch_add(1, std::sync::atomic::Ordering::Relaxed)) & recovery::UID_MASK
+}
 
 impl DocState {
     pub fn new(doc: Presentation, path: Option<String>, title: String) -> Self {
@@ -188,7 +235,7 @@ impl DocState {
             path,
             revision: 1,
             interaction: None,
-            uid: NEXT_UID.fetch_add(1, std::sync::atomic::Ordering::Relaxed),
+            uid: next_uid(),
             title,
             missing_fonts: Vec::new(),
             composition: None,
@@ -212,6 +259,7 @@ impl DocState {
         match self.selection.target {
             Target::Slides => self.current_slide().map(|s| s.shapes.as_slice()).unwrap_or(&[]),
             Target::Master { master } => self.doc.masters.get(master).map(|m| m.shapes.as_slice()).unwrap_or(&[]),
+            Target::Handout | Target::NotesMaster => page_master(&self.doc, self.selection.target).map(|m| m.shapes.as_slice()).unwrap_or(&[]),
             Target::Layout { master, layout } => {
                 self.doc.masters.get(master).and_then(|m| m.layouts.get(layout)).map(|l| l.shapes.as_slice()).unwrap_or(&[])
             }
@@ -225,11 +273,28 @@ impl DocState {
     }
 }
 
+/// The page being edited: the slide size, or the notes size in Handout Master view.
+pub fn page_size(st: &DocState) -> deckcraft_geom::Size {
+    if st.selection.target.is_page_master() { st.doc.notes_size } else { st.doc.slide_size }
+}
+
+/// The handout or notes master as a one-master presentation at the notes page size, for drawing
+/// it with the layout renderer.
+pub fn master_page(doc: &Presentation, t: Target) -> Option<Presentation> {
+    let m = page_master(doc, t)?.clone();
+    let mut p = doc.clone();
+    p.slide_size = doc.notes_size;
+    p.masters = vec![m];
+    p.slides.clear();
+    Some(p)
+}
+
 /// Mutable access to the edited shape tree of a presentation.
 pub fn shapes_mut<'a>(doc: &'a mut Presentation, sel: &Selection) -> Option<&'a mut Vec<Shape>> {
     match sel.target {
         Target::Slides => doc.slides.get_mut(sel.slide).map(|s| &mut Arc::make_mut(s).shapes),
         Target::Master { master } => doc.masters.get_mut(master).map(|m| &mut Arc::make_mut(m).shapes),
+        t @ (Target::Handout | Target::NotesMaster) => page_master_mut(doc, t).map(|m| &mut Arc::make_mut(m).shapes),
         Target::Layout { master, layout } => {
             doc.masters.get_mut(master).and_then(|m| Arc::make_mut(m).layouts.get_mut(layout)).map(|l| &mut l.shapes)
         }
@@ -247,6 +312,18 @@ pub struct Prefs {
     pub duplicate_offset: f64,
     pub autocorrect: bool,
     pub smart_quotes: bool,
+    /// AutoCorrect options (Tools ▸ AutoCorrect): fix TWo INitial CApitals, capitalize the first
+    /// letter of sentences and the names of days, fix accidental cAPS lOCK, and replace 1/2, 1/4
+    /// and 3/4 with fraction characters.
+    pub ac_two_initials: bool,
+    pub ac_sentence_caps: bool,
+    pub ac_days: bool,
+    pub ac_caps_lock: bool,
+    pub ac_fractions: bool,
+    /// Your own "replace … with …" entries; they win over the built-in list.
+    pub ac_entries: Vec<(String, String)>,
+    /// Built-in entries you deleted.
+    pub ac_removed: Vec<String>,
     pub author: String,
     pub undo_limit: usize,
     /// Minutes between AutoRecover saves of unsaved presentations.
@@ -262,6 +339,13 @@ impl Default for Prefs {
             duplicate_offset: 12.0,
             autocorrect: true,
             smart_quotes: true,
+            ac_two_initials: true,
+            ac_sentence_caps: true,
+            ac_days: true,
+            ac_caps_lock: true,
+            ac_fractions: true,
+            ac_entries: Vec::new(),
+            ac_removed: Vec::new(),
             author: "Presenter".into(),
             undo_limit: 500,
             recovery_minutes: 1.0,
@@ -319,6 +403,9 @@ pub struct Clipboard {
     pub media: Vec<deckcraft_model::MediaItem>,
     pub text: Option<deckcraft_model::TextBody>,
     pub plain: String,
+    /// The copied shapes' theme colours (colour map applied) and fonts, for Paste Special ›
+    /// Keep Source Formatting.
+    pub source_theme: Option<(deckcraft_color::ColorScheme, deckcraft_model::theme::FontScheme)>,
     /// How many times the shapes were pasted (each paste offsets further).
     pub pastes: u32,
 }
@@ -351,6 +438,8 @@ pub struct Session {
     /// ends) instead of Windows and Linux (Ctrl+arrows by word or paragraph). Defaults to the
     /// platform DeckCraft was built for.
     pub mac_keys: bool,
+    /// Command panics caught by the guard (the document was rolled back); soak tests require 0.
+    pub panics_caught: u64,
 }
 
 impl Default for Session {
@@ -379,6 +468,7 @@ impl Session {
             media_status: Default::default(),
             gif_paused: Default::default(),
             mac_keys: cfg!(target_os = "macos"),
+            panics_caught: 0,
         }
     }
     /// A session with one new presentation open.
@@ -452,7 +542,23 @@ impl Session {
         self.depth += 1;
         let r = (spec.run)(self, params);
         self.depth -= 1;
-        let r = r?;
+        let r = match r {
+            Ok(r) => r,
+            Err(e) => {
+                // A command made of several edits can fail after some of them went through; the
+                // outermost one puts the presentation back, so a failed command changes nothing.
+                if outer
+                    && let (Some((uid, old, sel)), Some(st)) = (before, self.active_mut())
+                    && st.uid == uid
+                    && !Arc::ptr_eq(&old, &st.doc)
+                {
+                    st.doc = old;
+                    st.selection = sel;
+                    st.revision += 1;
+                }
+                return Err(e);
+            }
+        };
         if let Some(st) = self.active_mut() {
             clamp_selection(st);
         }
@@ -509,9 +615,15 @@ impl Session {
         if let Some(t) = st.selection.text.as_mut() {
             t.line_end = None;
         }
+        let owner = |sel: &Selection| sel.text.as_ref().map(|t| (sel.slide, sel.target, t.shape, t.cell, t.notes));
+        let before = owner(&st.selection);
         f(&doc, &mut st.selection);
         clamp_selection(st);
         st.revision += 1;
+        // A composition belongs to the text body it began in: leaving that body settles it.
+        if st.composition.is_some() && owner(&st.selection) != before {
+            self.end_composition();
+        }
         Ok(())
     }
 }
@@ -536,6 +648,7 @@ fn clamp_selection(st: &mut DocState) {
     st.selection.slides = slides;
     match st.selection.target {
         Target::Master { master } if master >= st.doc.masters.len() => st.selection.target = Target::Slides,
+        t @ (Target::Handout | Target::NotesMaster) if page_master(&st.doc, t).is_none() => st.selection.target = Target::Slides,
         Target::Layout { master, layout } if st.doc.masters.get(master).is_none_or(|m| layout >= m.layouts.len()) => {
             st.selection.target = Target::Slides
         }
@@ -543,14 +656,72 @@ fn clamp_selection(st: &mut DocState) {
     }
 }
 
+/// Default for [`History::byte_limit`].
+pub const UNDO_BYTE_BUDGET: usize = 256 << 20;
+
+/// A rough size of a shape in memory: the struct, its text and kept XML, its children.
+fn shape_cost(sh: &deckcraft_model::Shape, depth: usize) -> usize {
+    let text: usize =
+        sh.text.as_ref().map_or(0, |t| t.paragraphs.iter().map(|p| 96 + p.runs.iter().map(|r| 128 + r.text.len()).sum::<usize>()).sum());
+    let kids: usize = if depth < 64 { sh.children().iter().map(|c| shape_cost(c, depth + 1)).sum() } else { 0 };
+    768 + text + sh.raw_ext.as_ref().map_or(0, String::len) + kids
+}
+
+fn shapes_cost(shapes: &[deckcraft_model::Shape]) -> usize {
+    shapes.iter().map(|s| shape_cost(s, 0)).sum()
+}
+
+/// Estimated bytes `doc` keeps alive that `newer` doesn't share: its slides, masters and media
+/// that aren't the same allocations (undo steps share everything an edit didn't touch).
+pub fn undo_cost(doc: &Presentation, newer: &Presentation) -> usize {
+    use std::collections::HashSet;
+    let slides: HashSet<*const deckcraft_model::Slide> = newer.slides.iter().map(Arc::as_ptr).collect();
+    let masters: HashSet<*const deckcraft_model::Master> = newer.masters.iter().map(Arc::as_ptr).collect();
+    let media: HashSet<*const Vec<u8>> = newer.media.iter().map(|m| Arc::as_ptr(&m.data)).collect();
+    let mut n = 64 * doc.slides.len();
+    for s in doc.slides.iter().filter(|s| !slides.contains(&Arc::as_ptr(s))) {
+        n += 512 + shapes_cost(&s.shapes);
+    }
+    for m in doc.masters.iter().filter(|m| !masters.contains(&Arc::as_ptr(m))) {
+        n += 4096 + shapes_cost(&m.shapes) + m.layouts.iter().map(|l| 512 + shapes_cost(&l.shapes)).sum::<usize>();
+    }
+    for m in doc.media.iter().filter(|m| !media.contains(&Arc::as_ptr(&m.data))) {
+        n += m.data.len();
+    }
+    n
+}
+
 pub(crate) fn push_undo(st: &mut DocState, e: HistoryEntry) {
-    st.history.undo.push(e);
-    st.history.redo.clear();
-    if st.history.undo.len() > st.history.limit.max(1) {
-        st.history.undo.remove(0);
+    let h = &mut st.history;
+    h.costs.insert(Arc::as_ptr(&e.doc) as usize, undo_cost(&e.doc, &st.doc));
+    h.undo.push(e);
+    h.redo.clear();
+    if h.undo.len() > h.limit.max(1) {
+        h.undo.remove(0);
+    }
+    // Memory too: drop the oldest steps while the kept ones pass the budget (the newest always
+    // stays, however big). A deck-wide edit keeps a copy of every slide, so 500 of them on a big
+    // deck could hold hundreds of copies.
+    let budget = if h.byte_limit == 0 { UNDO_BYTE_BUDGET } else { h.byte_limit };
+    let cost = |h: &History, e: &HistoryEntry| h.costs.get(&(Arc::as_ptr(&e.doc) as usize)).copied().unwrap_or(0);
+    let mut total: usize = h.undo.iter().map(|e| cost(h, e)).sum();
+    let mut drop = 0;
+    while total > budget && drop + 1 < h.undo.len() {
+        total -= cost(h, &h.undo[drop]);
+        drop += 1;
+    }
+    if drop > 0 {
+        h.undo.drain(..drop);
+    }
+    // Costs of steps that are gone (dropped, or redo steps cleared above).
+    if h.costs.len() > h.undo.len() + 16 {
+        let live: std::collections::HashSet<usize> = h.undo.iter().chain(h.redo.iter()).map(|e| Arc::as_ptr(&e.doc) as usize).collect();
+        h.costs.retain(|k, _| live.contains(k));
     }
 }
 
+#[cfg(test)]
+mod soak_tests;
 #[cfg(test)]
 mod tests;
 #[cfg(test)]

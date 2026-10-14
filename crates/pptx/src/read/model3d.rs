@@ -3,6 +3,7 @@
 //!
 //! Lengths in the 3-D scene are EMU at 36 000 000 per metre, angles 60 000ths of a degree.
 
+use deckcraft_model::MediaId;
 use deckcraft_model::model3d::{Camera3d, Light3d, LightKind, Model3d};
 
 use super::{Imp, Part};
@@ -72,8 +73,35 @@ fn light(e: &El) -> Option<Light3d> {
     })
 }
 
+/// A model that comes without a scene (`p:contentPart`): set up as PowerPoint inserts one, seen
+/// so that it fills as much of its `w` × `h` point frame as it can.
+pub fn unplaced(imp: &Imp, media: MediaId, w: f64, h: f64) -> Model3d {
+    let scene = imp.media.iter().find(|it| it.id == media).and_then(|it| deckcraft_mesh::load("model.glb", &it.data, &deckcraft_mesh::no_files).ok());
+    let Some((scene, (lo, hi))) = scene.and_then(|sc| sc.bounds().map(|b| (sc, b))) else {
+        log::warn!("pptx: 3-D model {media:?} can't be read; shown as inserted");
+        return Model3d { media, ..Default::default() };
+    };
+    let mut m = Model3d::fitted(media, lo, hi);
+    // The view's height on the slide (`viewport` frame heights) that brings the outline to the
+    // frame's nearer edges.
+    if let Some((hx, hy)) = deckcraft_mesh::extent(&scene, &m.model_view(), m.is_ortho())
+        && hx > 0.0
+        && hy > 0.0
+        && w > 0.0
+        && h > 0.0
+    {
+        let focal = (w / (2.0 * hx)).min(h / (2.0 * hy));
+        let half = (m.camera.fov.clamp(0.1, 179.0) / 2.0).to_radians().tan();
+        let v = 2.0 * focal * half / h;
+        if v.is_finite() && v > 0.0 {
+            m.viewport = v;
+        }
+    }
+    m
+}
+
 /// The model of a graphic frame `frame_h` points tall. `None` when its model part is missing (the
-/// frame is then kept as an object with its preview picture).
+/// frame is then kept as an object with its picture).
 pub fn model3d(imp: &mut Imp, part: &Part, el: &El, frame_h: f64) -> Option<Model3d> {
     let rel = part.rels.get(el.attr("r:embed")?)?;
     if rel.external {
@@ -98,14 +126,14 @@ pub fn model3d(imp: &mut Imp, part: &Part, el: &El, frame_h: f64) -> Option<Mode
     let tr = el.child("trans");
     let scale = tr.and_then(|t| t.child("scale"));
     let rot = tr.and_then(|t| t.child("rot"));
-    let preview = el.path(&["raster", "blip"]).and_then(|b| super::dml::media_ref(imp, part, b));
+    let poster = el.path(&["raster", "blip"]).and_then(|b| super::dml::media_ref(imp, part, b));
     let viewport = el.child("objViewport").and_then(|v| v.f64("viewportSz")).filter(|v| v.is_finite() && *v > 0.0);
     let lights: Vec<&El> = el.elements().filter(|c| c.local().ends_with("Light")).collect();
     let typed: Vec<Light3d> = lights.iter().take(64).filter_map(|l| light(l)).collect();
     let h = if frame_h.is_finite() && frame_h > 1e-6 { frame_h } else { 1.0 };
     Some(Model3d {
         media,
-        preview,
+        poster,
         meter_per_unit: ratio(tr.and_then(|t| t.child("meterPerModelUnit")), 1.0),
         pre: vector(tr.and_then(|t| t.child("preTrans"))),
         scale: ["sx", "sy", "sz"].map(|k| ratio(scale.and_then(|s| s.child(k)), 1.0)),

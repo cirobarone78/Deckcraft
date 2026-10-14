@@ -6,7 +6,6 @@ use deckcraft_model::model3d::{LightKind, Model3d};
 use crate::xml::{A, W};
 
 pub const NS_AM3D: &str = "http://schemas.microsoft.com/office/drawing/2017/model3d";
-pub const RT_MODEL3D: &str = "http://schemas.microsoft.com/office/2017/06/relationships/model3d";
 const EMU_PER_M: f64 = 36_000_000.0;
 
 fn emu(m: f64) -> i64 {
@@ -43,8 +42,8 @@ fn scrgb(w: &mut W, c: [f64; 3]) {
 }
 
 /// The `am3d:model3d` element for model `m` in a frame `cx` × `cy` EMU (`h_pt` points tall), its
-/// model part at relationship `model_rid` and its picture at `raster_rid`.
-pub fn model3d(w: &mut W, m: &Model3d, model_rid: &str, raster_rid: &str, cx: i64, cy: i64, h_pt: f64) {
+/// model part at relationship `model_rid` and its picture, if any, at `raster_rid`.
+pub fn model3d(w: &mut W, m: &Model3d, model_rid: &str, raster_rid: Option<&str>, cx: i64, cy: i64, h_pt: f64) {
     w.open("am3d:model3d", A::new().a("r:embed", model_rid));
     w.open0("am3d:spPr");
     w.open0("a:xfrm");
@@ -88,9 +87,11 @@ pub fn model3d(w: &mut W, m: &Model3d, model_rid: &str, raster_rid: &str, cx: i6
     vector(w, "am3d:postTrans", m.post);
     w.close("am3d:trans");
 
-    w.open("am3d:raster", A::new().a("rName", "DeckCraft").a("rVer", env!("CARGO_PKG_VERSION")));
-    w.empty("am3d:blip", A::new().a("r:embed", raster_rid));
-    w.close("am3d:raster");
+    if let Some(rid) = raster_rid {
+        w.open("am3d:raster", A::new().a("rName", "DeckCraft").a("rVer", env!("CARGO_PKG_VERSION")));
+        w.empty("am3d:blip", A::new().a("r:embed", rid));
+        w.close("am3d:raster");
+    }
     if m.auto_fit {
         let size = deckcraft_geom::pt_to_emu(m.span(h_pt)).max(1);
         w.empty("am3d:objViewport", A::new().a("viewportSz", size));

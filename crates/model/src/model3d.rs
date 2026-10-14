@@ -83,8 +83,9 @@ pub fn default_lights() -> Vec<Light3d> {
 pub struct Model3d {
     /// The model, a glTF binary (`model/gltf.binary`).
     pub media: MediaId,
-    /// A picture of the model (PowerPoint's raster), shown when the model can't be drawn.
-    pub preview: Option<MediaId>,
+    /// A picture of the model (PowerPoint's raster, the fallback picture older readers show),
+    /// shown when the model can't be drawn.
+    pub poster: Option<MediaId>,
     /// Model units to metres (`meterPerModelUnit`).
     pub meter_per_unit: f64,
     /// Moves the scaled model, in metres: its centre to the origin (`preTrans`).
@@ -110,7 +111,7 @@ impl Default for Model3d {
     fn default() -> Self {
         Model3d {
             media: MediaId(0),
-            preview: None,
+            poster: None,
             meter_per_unit: 1.0,
             pre: [0.0; 3],
             scale: [1.0; 3],

@@ -18,6 +18,17 @@ pub const EXTENSION: &str = "deckcraft";
 pub const VERSION: u32 = 1;
 /// Largest entry we will inflate (guards against zip bombs).
 const MAX_ENTRY: u64 = 2 << 30;
+/// All embedded media together, inflated (#393).
+const MAX_TOTAL_MEDIA: u64 = 4 << 30;
+/// Media items one file may list.
+const MAX_MEDIA_ITEMS: usize = 100_000;
+
+/// What one load may inflate.
+#[derive(Clone, Copy)]
+struct Budget {
+    total: u64,
+    items: usize,
+}
 
 #[derive(Debug, thiserror::Error)]
 pub enum FormatError {
@@ -87,17 +98,38 @@ pub fn sniff(bytes: &[u8]) -> bool {
 }
 
 fn read_entry(z: &mut zip::ZipArchive<Cursor<&[u8]>>, name: &str) -> Result<Vec<u8>> {
+    read_entry_max(z, name, MAX_ENTRY)
+}
+
+/// Read one member, refusing it before inflating if it declares more than `max` bytes, and
+/// stopping at `max` if it inflates further than it declared.
+fn read_entry_max(z: &mut zip::ZipArchive<Cursor<&[u8]>>, name: &str, max: u64) -> Result<Vec<u8>> {
     let f = z.by_name(name).map_err(|e| FormatError::Damaged(format!("{name}: {e}")))?;
-    if f.size() > MAX_ENTRY {
+    if f.size() > max {
         return Err(FormatError::Damaged(format!("{name} is too large")));
     }
     let mut out = Vec::with_capacity(f.size().min(64 << 20) as usize);
-    f.take(MAX_ENTRY).read_to_end(&mut out).map_err(|e| FormatError::Damaged(format!("{name}: {e}")))?;
+    let mut f = f.take(max.saturating_add(1));
+    f.read_to_end(&mut out).map_err(|e| FormatError::Damaged(format!("{name}: {e}")))?;
+    if out.len() as u64 > max {
+        return Err(FormatError::Damaged(format!("{name} is too large")));
+    }
     Ok(out)
 }
 
-/// Read a presentation.
+/// Read a presentation. Embedded media that is missing or damaged is left empty; use
+/// [`load_checked`] to learn which.
 pub fn load(bytes: &[u8]) -> Result<Presentation> {
+    load_checked(bytes).map(|(p, _)| p)
+}
+
+/// Read a presentation and list the embedded media that couldn't be read (missing, too large
+/// or failing its CRC), one message each. Linked media saved without its bytes isn't damage.
+pub fn load_checked(bytes: &[u8]) -> Result<(Presentation, Vec<String>)> {
+    load_within(bytes, Budget { total: MAX_TOTAL_MEDIA, items: MAX_MEDIA_ITEMS })
+}
+
+fn load_within(bytes: &[u8], budget: Budget) -> Result<(Presentation, Vec<String>)> {
     let mut z = zip::ZipArchive::new(Cursor::new(bytes)).map_err(|e| FormatError::NotOurs(e.to_string()))?;
     let json = read_entry(&mut z, "presentation.json").map_err(|_| FormatError::NotOurs("no presentation.json".into()))?;
     let m: Manifest = serde_json::from_slice(&json).map_err(|e| FormatError::Damaged(e.to_string()))?;
@@ -105,13 +137,32 @@ pub fn load(bytes: &[u8]) -> Result<Presentation> {
         return Err(FormatError::NotOurs(m.format));
     }
     let mut p = m.presentation;
+    let mut damaged = vec![];
+    if p.media.len() > budget.items {
+        return Err(FormatError::Damaged(format!("{} media items (at most {})", p.media.len(), budget.items)));
+    }
+    // A repeated id names the same member: keep the first item, so the member is inflated once
+    // and the deck can be saved again (a zip can't hold two `media/<id>`).
+    let mut seen = std::collections::HashSet::new();
+    p.media.retain(|m| seen.insert(m.id));
+    let mut left = budget.total;
     for item in &mut p.media {
-        if let Ok(data) = read_entry(&mut z, &format!("media/{}", item.id.0)) {
-            item.data = Arc::new(data);
+        let name = format!("media/{}", item.id.0);
+        let linked_only = item.link.is_some() && z.index_for_name(&name).is_none();
+        if z.by_name(&name).is_ok_and(|f| f.size() > left) {
+            return Err(FormatError::Damaged("embedded media is larger than DeckCraft can open".into()));
+        }
+        match read_entry_max(&mut z, &name, left.min(MAX_ENTRY)) {
+            Ok(data) => {
+                left -= data.len() as u64;
+                item.data = Arc::new(data);
+            }
+            Err(_) if linked_only => {}
+            Err(e) => damaged.push(e.to_string()),
         }
     }
     repair(&mut p);
-    Ok(p)
+    Ok((p, damaged))
 }
 
 /// Make a loaded presentation safe to edit: a master exists, every slide's layout exists,
@@ -140,25 +191,55 @@ pub fn repair(p: &mut Presentation) {
             }
         }
     }
-    if !(p.slide_size.width.is_finite() && p.slide_size.width >= 1.0 && p.slide_size.height.is_finite() && p.slide_size.height >= 1.0) {
-        p.slide_size = defaults::WIDE;
+    p.slide_size = sane_slide_size(p.slide_size);
+    // The notes page only lays out notes, but its size divides too.
+    if !(p.notes_size.width.is_finite() && p.notes_size.width > 0.0 && p.notes_size.height.is_finite() && p.notes_size.height > 0.0) {
+        p.notes_size = Presentation::default().notes_size;
     }
-    p.slide_size.width = p.slide_size.width.min(4000.0);
-    p.slide_size.height = p.slide_size.height.min(4000.0);
+}
+
+/// Smallest and largest slide side, in points: PowerPoint's 1–56 in, as Design › Slide Size allows.
+pub const SLIDE_SIDE: std::ops::RangeInclusive<f64> = 72.0..=4032.0;
+
+/// A slide size the views and renderer can always lay out: a missing, zero, negative or
+/// non-finite side gives the 16:9 default, and each side is brought into [`SLIDE_SIDE`].
+pub fn sane_slide_size(s: deckcraft_model::Size) -> deckcraft_model::Size {
+    let ok = |v: f64| v.is_finite() && v > 0.0;
+    if !(ok(s.width) && ok(s.height)) {
+        return defaults::WIDE;
+    }
+    deckcraft_model::Size::new(s.width.clamp(*SLIDE_SIDE.start(), *SLIDE_SIDE.end()), s.height.clamp(*SLIDE_SIDE.start(), *SLIDE_SIDE.end()))
+}
+
+/// Slides read from an outline: each title with its body paragraphs (level 0–8, text).
+type OutlineSlides = Vec<(String, Vec<(u8, String)>)>;
+
+/// Append a Title and Content slide per outline entry; the number made.
+fn add_outline_slides(p: &mut Presentation, slides: OutlineSlides) -> usize {
+    let Some(lay) = defaults::layout_of_kind(p, LayoutType::TitleAndContent) else { return 0 };
+    let made = slides.len();
+    for (title, body) in slides {
+        let mut s = defaults::new_slide(p, lay);
+        if let Some(t) = s.shapes.first_mut() {
+            t.text = Some(TextBody::from_text(&title));
+        }
+        if let Some(b) = s.shapes.get_mut(1) {
+            for (level, line) in body {
+                let tb = b.text.get_or_insert_with(TextBody::default);
+                let mut para = Paragraph::new(&line);
+                para.level = level.min(8);
+                tb.paragraphs.push(para);
+            }
+        }
+        p.slides.push(Arc::new(s));
+    }
+    made
 }
 
 /// Outline text: one slide per unindented line; tab-indented lines become body bullets at their
 /// level (Insert ▸ Slides from Outline, View ▸ Outline copy).
 pub fn outline_to_slides(p: &mut Presentation, text: &str) -> usize {
-    let Some(lay) = defaults::layout_of_kind(p, LayoutType::TitleAndContent) else { return 0 };
-    let mut made = 0;
-    let mut cur: Option<deckcraft_model::Slide> = None;
-    let flush = |p: &mut Presentation, s: Option<deckcraft_model::Slide>, made: &mut usize| {
-        if let Some(s) = s {
-            p.slides.push(Arc::new(s));
-            *made += 1;
-        }
-    };
+    let mut slides: OutlineSlides = Vec::new();
     for raw in text.lines() {
         if raw.trim().is_empty() {
             continue;
@@ -166,25 +247,69 @@ pub fn outline_to_slides(p: &mut Presentation, text: &str) -> usize {
         let tabs = raw.chars().take_while(|c| *c == '\t').count();
         let spaces = raw.chars().take_while(|c| *c == ' ').count() / 2;
         let level = tabs.max(spaces);
-        let line = raw.trim().trim_start_matches(['-', '*', '•']).trim();
+        let line = raw.trim().trim_start_matches(['-', '*', '•']).trim().to_string();
         if level == 0 {
-            flush(p, cur.take(), &mut made);
-            let mut s = defaults::new_slide(p, lay);
-            if let Some(t) = s.shapes.first_mut() {
-                t.text = Some(TextBody::from_text(line));
-            }
-            cur = Some(s);
-        } else if let Some(s) = cur.as_mut()
-            && let Some(body) = s.shapes.get_mut(1)
-        {
-            let tb = body.text.get_or_insert_with(TextBody::default);
-            let mut para = Paragraph::new(line);
-            para.level = (level - 1).min(8) as u8;
-            tb.paragraphs.push(para);
+            slides.push((line, Vec::new()));
+        } else if let Some((_, body)) = slides.last_mut() {
+            body.push(((level - 1).min(8) as u8, line));
         }
     }
-    flush(p, cur, &mut made);
-    made
+    add_outline_slides(p, slides)
+}
+
+/// An ATX heading's text (CommonMark: up to three spaces, one to six `#`, then a space or the end;
+/// a closing run of `#` is dropped).
+fn md_heading(line: &str) -> Option<&str> {
+    let t = line.strip_prefix("   ").or_else(|| line.strip_prefix("  ")).or_else(|| line.strip_prefix(' ')).unwrap_or(line);
+    let hashes = t.chars().take_while(|c| *c == '#').count();
+    let rest = t.get(hashes..)?;
+    if !(1..=6).contains(&hashes) || !(rest.is_empty() || rest.starts_with([' ', '\t'])) {
+        return None;
+    }
+    let rest = rest.trim();
+    let closed = rest.trim_end_matches('#');
+    Some(if closed.is_empty() || closed.ends_with([' ', '\t']) { closed.trim_end() } else { rest })
+}
+
+/// A list item's nesting level (two spaces or a tab each) and text: `-`, `*` or `+`, or digits
+/// then `.` or `)`, followed by a space.
+fn md_list_item(line: &str) -> Option<(u8, &str)> {
+    let indent: usize = line.chars().take_while(|c| matches!(c, ' ' | '\t')).map(|c| if c == '\t' { 2 } else { 1 }).sum();
+    let t = line.trim_start();
+    let rest = match t.strip_prefix(['-', '*', '+']) {
+        Some(r) => r,
+        None => {
+            let digits = t.chars().take_while(char::is_ascii_digit).count();
+            if digits == 0 || digits > 9 {
+                return None;
+            }
+            t.get(digits..)?.strip_prefix(['.', ')'])?
+        }
+    };
+    rest.starts_with([' ', '\t']).then(|| ((indent / 2).min(8) as u8, rest.trim()))
+}
+
+/// Markdown outline text (`.md`): each heading starts a slide with its text as the title; list
+/// items under it become bullets nested by their indentation, other lines body paragraphs. Text
+/// before the first heading is skipped, as indented lines before the first title are in the
+/// plain format. A file without headings is read as a plain outline ([`outline_to_slides`]).
+pub fn markdown_to_slides(p: &mut Presentation, text: &str) -> usize {
+    if !text.lines().any(|l| md_heading(l).is_some()) {
+        return outline_to_slides(p, text);
+    }
+    let mut slides: OutlineSlides = Vec::new();
+    for line in text.lines() {
+        if line.trim().is_empty() {
+            continue;
+        }
+        if let Some(title) = md_heading(line) {
+            slides.push((title.to_string(), Vec::new()));
+        } else if let Some((_, body)) = slides.last_mut() {
+            let (level, text) = md_list_item(line).unwrap_or((0, line.trim()));
+            body.push((level, text.to_string()));
+        }
+    }
+    add_outline_slides(p, slides)
 }
 
 /// The deck as outline text (titles unindented, body paragraphs tab-indented by level).
@@ -218,6 +343,89 @@ pub fn slides_to_outline(p: &Presentation) -> String {
 mod tests {
     use super::*;
 
+    /// The same package without the entries `drop` names.
+    fn without(bytes: &[u8], drop: &str) -> Vec<u8> {
+        let mut z = zip::ZipArchive::new(Cursor::new(bytes)).unwrap();
+        let mut out = zip::ZipWriter::new(Cursor::new(Vec::new()));
+        for i in 0..z.len() {
+            let f = z.by_index(i).unwrap();
+            if f.name() != drop {
+                out.raw_copy_file(f).unwrap();
+            }
+        }
+        out.finish().unwrap().into_inner()
+    }
+
+    #[test]
+    fn missing_or_corrupt_media_is_reported() {
+        let mut p = Presentation::default();
+        let id = p.add_media("a.png", "image/png", b"PICTURE-BYTES-0123456789".to_vec());
+        let good = save(&p).unwrap();
+        assert!(load_checked(&good).unwrap().1.is_empty());
+        // Missing member.
+        let (q, damaged) = load_checked(&without(&good, &format!("media/{}", id.0))).unwrap();
+        assert_eq!(damaged.len(), 1, "{damaged:?}");
+        assert!(q.media(id).is_some_and(|m| m.data.is_empty()));
+        // Bad CRC: PNGs are stored, so their bytes sit in the file as they are.
+        let mut bad = good.clone();
+        let at = bad.windows(13).position(|w| w == b"PICTURE-BYTES").unwrap();
+        bad[at] ^= 0xff;
+        let (_, damaged) = load_checked(&bad).unwrap();
+        assert_eq!(damaged.len(), 1, "{damaged:?}");
+        // Linked media saved without its bytes isn't damage.
+        let mut l = Presentation::default();
+        let lid = l.add_media("v.mp4", "video/mp4", vec![]);
+        if let Some(m) = l.media.iter_mut().find(|m| m.id == lid) {
+            m.link = Some("file:///movies/v.mp4".into());
+        }
+        assert!(load_checked(&save(&l).unwrap()).unwrap().1.is_empty());
+    }
+
+    #[test]
+    fn media_budget_is_cumulative() {
+        let mut p = Presentation::default();
+        p.add_media("a.bin", "application/octet-stream", vec![1; 600]);
+        p.add_media("b.bin", "application/octet-stream", vec![2; 600]);
+        let bytes = save(&p).unwrap();
+        // Exactly at the limit opens; one byte under is refused, though each item fits.
+        assert!(load_within(&bytes, Budget { total: 1200, items: 2 }).is_ok());
+        assert!(load_within(&bytes, Budget { total: 1199, items: 2 }).is_err());
+        assert!(load_within(&bytes, Budget { total: 1200, items: 1 }).is_err());
+    }
+
+    #[test]
+    fn repeated_media_ids_are_read_once() {
+        use std::io::Write;
+        let mut p = Presentation::default();
+        p.add_media("a.bin", "application/octet-stream", vec![7; 1000]);
+        let good = save(&p).unwrap();
+        // The same file with its media item listed 51 times.
+        let mut z = zip::ZipArchive::new(Cursor::new(good.as_slice())).unwrap();
+        let mut out = zip::ZipWriter::new(Cursor::new(Vec::new()));
+        for i in 0..z.len() {
+            let mut f = z.by_index(i).unwrap();
+            if f.name() == "presentation.json" {
+                let mut json = vec![];
+                f.read_to_end(&mut json).unwrap();
+                let mut v: serde_json::Value = serde_json::from_slice(&json).unwrap();
+                let media = &mut v["presentation"]["media"];
+                let one = media[0].clone();
+                *media = serde_json::Value::Array(vec![one; 51]);
+                out.start_file("presentation.json", zip::write::SimpleFileOptions::default()).unwrap();
+                out.write_all(&serde_json::to_vec(&v).unwrap()).unwrap();
+            } else {
+                out.raw_copy_file(f).unwrap();
+            }
+        }
+        let bytes = out.finish().unwrap().into_inner();
+        // 51 references to one 1000-byte member fit a 1000-byte budget: it's inflated once.
+        let q = load_within(&bytes, Budget { total: 1000, items: 51 }).unwrap().0;
+        assert_eq!(q.media.len(), 1);
+        assert_eq!(q.media[0].data.len(), 1000);
+        // And the deck saves again.
+        assert!(save(&q).is_ok());
+    }
+
     #[test]
     fn roundtrip_with_media() {
         let mut p = Presentation::default();
@@ -242,6 +450,59 @@ mod tests {
     }
 
     #[test]
+    fn degenerate_slide_sizes_are_repaired() {
+        use deckcraft_model::Size;
+        let cases = [
+            ((0.0, 0.0), (960.0, 540.0)),
+            ((-5.0, 540.0), (960.0, 540.0)),
+            ((f64::NAN, 540.0), (960.0, 540.0)),
+            ((f64::INFINITY, 1.0), (960.0, 540.0)),
+            ((1.0, 1.0), (72.0, 72.0)),
+            ((0.5, 4000.0), (72.0, 4000.0)),
+            ((1e9, 20.0), (4032.0, 72.0)),
+            ((720.0, 540.0), (720.0, 540.0)),
+        ];
+        for ((w, h), want) in cases {
+            let mut p = Presentation { slide_size: Size::new(w, h), notes_size: Size::new(0.0, f64::NAN), ..Default::default() };
+            repair(&mut p);
+            assert_eq!((p.slide_size.width, p.slide_size.height), want, "{w}x{h}");
+            assert_eq!(p.notes_size, Presentation::default().notes_size);
+        }
+    }
+
+    /// A file whose slide size is null, a string or missing a side (written by hand or by
+    /// another tool; NaN is also saved as null) opens with the default size rather than failing
+    /// as damaged.
+    #[test]
+    fn files_with_unreadable_slide_sizes_still_open() {
+        let saved = save(&Presentation::default()).unwrap();
+        let mut z = zip::ZipArchive::new(Cursor::new(&saved[..])).unwrap();
+        let json: serde_json::Value = serde_json::from_slice(&read_entry(&mut z, "presentation.json").unwrap()).unwrap();
+        for size in [
+            serde_json::json!({"width": null, "height": 540}),
+            serde_json::json!({"width": "big", "height": 540}),
+            serde_json::json!({"height": 0}),
+            serde_json::json!(null),
+            serde_json::json!(7),
+        ] {
+            let mut m = json.clone();
+            m["presentation"]["slideSize"] = size.clone();
+            let mut buf = Cursor::new(Vec::new());
+            {
+                let mut w = zip::ZipWriter::new(&mut buf);
+                let o = zip::write::SimpleFileOptions::default();
+                w.start_file("mimetype", o).unwrap();
+                w.write_all(MIMETYPE.as_bytes()).unwrap();
+                w.start_file("presentation.json", o).unwrap();
+                w.write_all(&serde_json::to_vec(&m).unwrap()).unwrap();
+                w.finish().unwrap();
+            }
+            let p = load(buf.get_ref()).unwrap_or_else(|e| panic!("{size}: {e}"));
+            assert_eq!((p.slide_size.width, p.slide_size.height), (960.0, 540.0), "{size}");
+        }
+    }
+
+    #[test]
     fn repair_fixes_missing_layout_and_size() {
         let mut p = Presentation::default();
         Arc::make_mut(&mut p.slides[0]).layout = deckcraft_model::LayoutId(99999);
@@ -258,5 +519,24 @@ mod tests {
         assert_eq!(n, 2);
         let o = slides_to_outline(&p);
         assert!(o.contains("Intro\n\tPoint one\n\t\tSub point\nSecond"), "{o}");
+    }
+
+    #[test]
+    fn markdown_headings_and_list_items() {
+        assert_eq!(md_heading("# Intro"), Some("Intro"));
+        assert_eq!(md_heading("   ### Deep ###  "), Some("Deep"));
+        assert_eq!(md_heading("## C# and F#"), Some("C# and F#"));
+        assert_eq!(md_heading("#"), Some(""));
+        assert_eq!(md_heading("## Ünïcödé"), Some("Ünïcödé"));
+        for not in ["#5 priority", "####### seven", "    # code", "text", "", "é#"] {
+            assert_eq!(md_heading(not), None, "{not:?}");
+        }
+        assert_eq!(md_list_item("- a"), Some((0, "a")));
+        assert_eq!(md_list_item("    * b"), Some((2, "b")));
+        assert_eq!(md_list_item("\t+ c"), Some((1, "c")));
+        assert_eq!(md_list_item("12) d"), Some((0, "d")));
+        for not in ["-x", "1.x", "1", "1234567890. long", "• bullet", "é. x", ""] {
+            assert_eq!(md_list_item(not), None, "{not:?}");
+        }
     }
 }

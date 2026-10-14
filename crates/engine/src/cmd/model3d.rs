@@ -265,7 +265,7 @@ fn reset(s: &mut Session, p: &Value) -> Result<Value> {
         let ShapeKind::Model3d(m) = &sh.kind else { continue };
         let Some(scene) = scene_of(&st.doc, sh) else { continue };
         let Some((lo, hi)) = scene.bounds() else { continue };
-        let mut n = Model3d { lights: m.lights.clone(), lights_xml: m.lights_xml.clone(), preview: m.preview, ..Model3d::fitted(m.media, lo, hi) };
+        let mut n = Model3d { lights: m.lights.clone(), lights_xml: m.lights_xml.clone(), poster: m.poster, ..Model3d::fitted(m.media, lo, hi) };
         let Some((w, h)) = initial_frame(&mut n, &scene, default_span(size)) else { continue };
         let c = xfrm_of(&st.doc, &st.selection, sh).center();
         fresh.push((sh.id, n, Xfrm::new(c.x - w / 2.0, c.y - h / 2.0, w, h)));

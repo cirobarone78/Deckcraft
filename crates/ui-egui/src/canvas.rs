@@ -38,7 +38,10 @@ fn mods(ui: &Ui) -> Mods {
 /// The slide's rect on screen for the current zoom.
 pub fn layout(app: &SlideApp, avail: Rect) -> (Rect, f32) {
     let Some(d) = app.session.active() else { return (avail, 1.0) };
-    let (sw, sh) = (d.doc.slide_size.width as f32, d.doc.slide_size.height as f32);
+    let page = deckcraft_engine::page_size(d);
+    // Loaded sizes are repaired; a zero or non-finite side would still make the fit infinite.
+    let side = |v: f64| if v.is_finite() { (v as f32).max(1.0) } else { 1.0 };
+    let (sw, sh) = (side(page.width), side(page.height));
     let margin = 28.0;
     let fit = ((avail.width() - margin * 2.0) / sw).min((avail.height() - margin * 2.0) / sh).max(0.05);
     let scale = app.ui.zoom.unwrap_or(fit);
@@ -66,19 +69,31 @@ pub fn show(app: &mut SlideApp, ui: &mut Ui) {
         }
         return;
     }
-    let (content_rect, scale) = layout(app, avail);
     // Scroll when zoomed beyond the window.
     let scroll_id = ui.id().with("canvas_scroll");
+    let last_id = scroll_id.with("last");
     let mut offset: egui::Vec2 = ui.data_mut(|d| d.get_temp(scroll_id).unwrap_or_default());
-    let overflow = vec2((content_rect.width() + 56.0 - avail.width()).max(0.0), (content_rect.height() + 56.0 - avail.height()).max(0.0));
+    let last: Option<(Rect, f32)> = ui.data_mut(|d| d.get_temp(last_id));
     let resp = ui.allocate_rect(avail, Sense::click_and_drag());
-    let (wheel, zoom_delta, pinch_pos) = ui.input(|i| (i.smooth_scroll_delta, i.zoom_delta(), i.pointer.hover_pos()));
-    if resp.hovered() {
-        if (zoom_delta - 1.0).abs() > 1e-3 {
-            let cur = app.ui.zoom.unwrap_or(scale);
-            app.ui.zoom = Some((cur * zoom_delta).clamp(0.1, 4.0));
-            let _ = pinch_pos;
-        } else if overflow != egui::Vec2::ZERO {
+    let (wheel, zoom_delta, hover) = ui.input(|i| (i.smooth_scroll_delta, i.zoom_delta(), i.pointer.hover_pos()));
+    let zooming = resp.hovered() && (zoom_delta - 1.0).abs() > 1e-3;
+    if zooming {
+        let cur = app.ui.zoom.unwrap_or_else(|| layout(app, avail).1);
+        app.ui.zoom = Some((cur * zoom_delta).clamp(0.1, 4.0));
+    }
+    let (content_rect, scale) = layout(app, avail);
+    // A new zoom keeps the slide point under the pointer (wheel, pinch) or under the middle of the
+    // canvas (Zoom In/Out, the slider) where it was, instead of growing from the corner (#106).
+    if let Some((last_rect, last_scale)) = last
+        && (scale - last_scale).abs() > 1e-6
+    {
+        let anchor = if zooming { hover.unwrap_or(avail.center()) } else { avail.center() };
+        let at = (anchor - last_rect.min) / last_scale;
+        offset = content_rect.min + at * scale - anchor;
+    }
+    let overflow = vec2((content_rect.width() + 56.0 - avail.width()).max(0.0), (content_rect.height() + 56.0 - avail.height()).max(0.0));
+    if resp.hovered() && !zooming {
+        if overflow != egui::Vec2::ZERO {
             offset -= wheel;
         } else if wheel.y.abs() > 18.0 && app.session.tool.marquee.is_none() && !app.session.tool.dragging() {
             // Wheel over a fitted slide pages through slides (like PowerPoint).
@@ -94,8 +109,11 @@ pub fn show(app: &mut SlideApp, ui: &mut Ui) {
     }
     offset.x = offset.x.clamp(0.0, overflow.x);
     offset.y = offset.y.clamp(0.0, overflow.y);
-    ui.data_mut(|d| d.insert_temp(scroll_id, offset));
     let slide_rect = content_rect.translate(-offset);
+    ui.data_mut(|d| {
+        d.insert_temp(scroll_id, offset);
+        d.insert_temp(last_id, (slide_rect, scale));
+    });
     app.slide_rect = Some(slide_rect);
     app.canvas_scale = scale;
     let xf = Xf { origin: slide_rect.min, scale };
@@ -106,7 +124,7 @@ pub fn show(app: &mut SlideApp, ui: &mut Ui) {
     let px = ((slide_rect.width() * ppp).round().max(1.0) as u32, (slide_rect.height() * ppp).round().max(1.0) as u32);
     let now = ui.input(|i| i.time);
     let gifs = match app.session.active() {
-        Some(d) if d.selection.target == Target::Slides => app.media.gifs(&d.doc, d.selection.slide, now, &app.session.gif_paused),
+        Some(d) if d.selection.target == Target::Slides => app.media.gifs(d.uid, &d.doc, d.selection.slide, now, &app.session.gif_paused),
         _ => vec![],
     };
     crate::media::gif_repaint(ui.ctx(), &gifs);
@@ -123,6 +141,9 @@ pub fn show(app: &mut SlideApp, ui: &mut Ui) {
         }
         Some((Target::Master { master }, d)) => master_tex(ui.ctx(), &d.doc, master, None, px, visible),
         Some((Target::Layout { master, layout }, d)) => master_tex(ui.ctx(), &d.doc, master, Some(layout), px, visible),
+        Some((t @ (Target::Handout | Target::NotesMaster), d)) => {
+            deckcraft_engine::master_page(&d.doc, t).and_then(|p| master_tex(ui.ctx(), &p, 0, None, px, visible))
+        }
         None => None,
     };
     if let Some((tex, region)) = tex {
@@ -135,6 +156,45 @@ pub fn show(app: &mut SlideApp, ui: &mut Ui) {
     }
     app.perf.render_ms = app.textures.last_render_ms;
     media_frames(app, &painter, xf);
+    // Notes Master view: the current slide inside the slide-image placeholder, as in PowerPoint.
+    let notes_preview = app.session.active().filter(|d| d.selection.target == Target::NotesMaster).and_then(|d| {
+        let frame = d.doc.notes_master.as_ref()?.shapes.iter().find(|s| s.ph_type() == Some(deckcraft_model::PhType::SlideImage))?.xfrm?;
+        Some((d.doc.clone(), d.selection.slide.min(d.doc.slides.len().saturating_sub(1)), frame))
+    });
+    if let Some((doc, idx, f)) = notes_preview
+        && f.w > 1.0
+        && f.h > 1.0
+    {
+        let aspect = doc.slide_size.width / doc.slide_size.height.max(1.0);
+        let (w, h) = if f.w / f.h > aspect { (f.h * aspect, f.h) } else { (f.w, f.w / aspect) };
+        let (x, y) = (f.x + (f.w - w) / 2.0, f.y + (f.h - h) / 2.0);
+        let r = Rect::from_min_size(
+            pos2(slide_rect.min.x + x as f32 * scale, slide_rect.min.y + y as f32 * scale),
+            vec2(w as f32 * scale, h as f32 * scale),
+        );
+        let mut budget = 2;
+        if let Some(tex) = app.textures.thumb(ui.ctx(), &doc, idx, (r.width() * ppp).round().max(1.0) as u32, &mut budget) {
+            painter.image(tex.id(), r, Rect::from_min_max(pos2(0.0, 0.0), pos2(1.0, 1.0)), Color32::WHITE);
+        }
+    }
+    if let Some(d) = app.session.active().filter(|d| d.selection.target == Target::Handout) {
+        // Where the slides go on a printed handout, as in PowerPoint's preview.
+        let (n, s) = (d.doc.notes_size, d.doc.slide_size);
+        let aspect = s.width / s.height.max(1.0);
+        for b in deckcraft_engine::pdf::handout_boxes(app.ui.handout_per_page, (n.width, n.height), aspect) {
+            let r = Rect::from_min_max(
+                pos2(slide_rect.min.x + b.x0 as f32 * scale, slide_rect.min.y + b.y0 as f32 * scale),
+                pos2(slide_rect.min.x + b.x1 as f32 * scale, slide_rect.min.y + b.y1 as f32 * scale),
+            );
+            let dash = egui::Shape::dashed_line(
+                &[r.left_top(), r.right_top(), r.right_bottom(), r.left_bottom(), r.left_top()],
+                Stroke::new(1.0, Color32::from_gray(140)),
+                4.0,
+                3.0,
+            );
+            painter.extend(dash);
+        }
+    }
     if app.ui.gridlines {
         let step = 72.0 / 2.0 * scale;
         let mut x = slide_rect.min.x + step;
@@ -167,6 +227,12 @@ pub fn show(app: &mut SlideApp, ui: &mut Ui) {
     ime_output(app, ui, xf);
     media_bar(app, ui, xf);
     gif_buttons(app, ui, xf, &gifs);
+    if resp.secondary_clicked()
+        && let Some(p) = resp.interact_pointer_pos()
+    {
+        let word = app.session.active().and_then(|st| app.squiggles.word_at(st, xf.to_slide(p), 4.0 / xf.scale.max(0.01) as f64));
+        app.squiggles.menu_word = word;
+    }
     context_menu(app, &resp);
 }
 
@@ -276,6 +342,7 @@ fn media_frames(app: &SlideApp, painter: &egui::Painter, xf: Xf) {
 /// selection or hover).
 fn media_bar(app: &mut SlideApp, ui: &mut Ui, xf: Xf) {
     let Some(d) = app.session.active() else { return };
+    let uid = d.uid;
     if d.selection.target != Target::Slides || d.selection.text.is_some() || app.session.tool.dragging() {
         return;
     }
@@ -294,11 +361,11 @@ fn media_bar(app: &mut SlideApp, ui: &mut Ui, xf: Xf) {
     let bar = Rect::from_min_size(pos2(r.center().x - w / 2.0, r.max.y + 6.0), vec2(w, 26.0));
     let status = app.media.status(id);
     match crate::media::control_bar(ui, bar, status.as_ref(), &clip) {
-        Some(crate::media::BarAction::Toggle) => app.media.toggle(&doc, id, &clip, crate::media::Owner::Editor),
-        Some(crate::media::BarAction::Seek(t)) => app.media.seek(&doc, id, &clip, t, crate::media::Owner::Editor),
+        Some(crate::media::BarAction::Toggle) => app.media.toggle(uid, &doc, id, &clip, crate::media::Owner::Editor),
+        Some(crate::media::BarAction::Seek(t)) => app.media.seek(uid, &doc, id, &clip, t, crate::media::Owner::Editor),
         Some(crate::media::BarAction::Nudge(dt)) => {
             let pos = status.map(|s| s.position).unwrap_or(0.0);
-            app.media.seek(&doc, id, &clip, (pos + dt).max(0.0), crate::media::Owner::Editor);
+            app.media.seek(uid, &doc, id, &clip, (pos + dt).max(0.0), crate::media::Owner::Editor);
         }
         None => {}
     }
@@ -367,6 +434,9 @@ fn ruler(p: &egui::Painter, avail: Rect, slide: Rect, scale: f32, t: &Tokens) {
 }
 
 fn pointer(app: &mut SlideApp, ui: &Ui, resp: &egui::Response, xf: Xf) {
+    if crate::eyedropper::canvas(app, ui, resp, xf) {
+        return;
+    }
     let tol = (4.0 / xf.scale) as f64;
     let m = mods(ui);
     let Some(pos) = resp.interact_pointer_pos().or(resp.hover_pos()) else { return };
@@ -376,7 +446,11 @@ fn pointer(app: &mut SlideApp, ui: &Ui, resp: &egui::Response, xf: Xf) {
     if resp.hovered() && !app.session.tool.dragging() {
         let _ = app.session.pointer(ev(PointerKind::Move));
     }
-    let r = if resp.triple_clicked() {
+    let secondary = resp.hovered() && ui.input(|i| i.pointer.button_pressed(egui::PointerButton::Secondary));
+    let r = if secondary && !app.session.tool.dragging() {
+        // Select what's under the pointer before the context menu opens (on release).
+        app.session.pointer(ev(PointerKind::ContextClick))
+    } else if resp.triple_clicked() {
         app.session.pointer(ev(PointerKind::TripleClick))
     } else if resp.double_clicked() {
         app.session.pointer(ev(PointerKind::DoubleClick))
@@ -431,6 +505,14 @@ fn poly(p: &egui::Painter, pts: [Pos2; 4], stroke: Stroke) {
 }
 
 fn overlays(app: &mut SlideApp, ui: &Ui, painter: &egui::Painter, xf: Xf, t: &Tokens) {
+    // Spelling squiggles under misspelt words (checked in the background).
+    if let Some(st) = app.session.active() {
+        let lines = app.squiggles.update(st, Some(ui.ctx()));
+        let scale = (xf.to_screen(Point::new(1.0, 0.0)) - xf.to_screen(Point::new(0.0, 0.0))).length();
+        for (a, b) in lines {
+            crate::squiggles::paint(painter, xf.to_screen(a), xf.to_screen(b), scale);
+        }
+    }
     let Some(st) = app.session.active() else { return };
     let sel_stroke = Stroke::new(1.0, t.selection);
     let editing = st.selection.text.clone();
@@ -453,6 +535,35 @@ fn overlays(app: &mut SlideApp, ui: &Ui, painter: &egui::Painter, xf: Xf, t: &To
             continue;
         }
         let editing_this = editing.as_ref().is_some_and(|e| e.shape == *id && !e.notes);
+        if app.session.tool.editing_points(st) == Some(sh.id) {
+            // Edit Points: the outline's vertices are the handles.
+            // No selection box: the outline and its vertices are what's edited.
+            if let Some((path, index)) = app.session.tool.edit_vertex
+                && let Some((hin, hout, v)) = deckcraft_engine::cmd::points::slide_handles(&st.doc, &st.selection, sh, path, index)
+            {
+                for h in [hin, hout].into_iter().flatten() {
+                    painter.line_segment([xf.to_screen(v), xf.to_screen(h)], sel_stroke);
+                    painter.rect(
+                        egui::Rect::from_center_size(xf.to_screen(h), egui::vec2(6.0, 6.0)),
+                        0.0,
+                        Color32::WHITE,
+                        Stroke::new(1.0, t.selection),
+                        egui::StrokeKind::Middle,
+                    );
+                }
+            }
+            for q in deckcraft_engine::cmd::points::slide_vertices(&st.doc, &st.selection, sh).into_iter().flatten() {
+                let c = xf.to_screen(q);
+                painter.rect(
+                    egui::Rect::from_center_size(c, egui::vec2(7.0, 7.0)),
+                    0.0,
+                    Color32::BLACK,
+                    Stroke::new(1.0, Color32::WHITE),
+                    egui::StrokeKind::Middle,
+                );
+            }
+            continue;
+        }
         if editing_this {
             // Dashed box while editing text.
             for i in 0..4 {
@@ -532,6 +643,17 @@ fn overlays(app: &mut SlideApp, ui: &Ui, painter: &egui::Painter, xf: Xf, t: &To
         let a = x.affine();
         let pts = [Point::new(x0, y0), Point::new(x0 + w, y0), Point::new(x0 + w, y0 + h), Point::new(x0, y0 + h)].map(|q| xf.to_screen(a * q));
         poly(painter, pts, Stroke::new(2.0, t.accent));
+        // The composition is in the cell text; underline it where that text is drawn (#101).
+        for (a, b, thick) in deckcraft_engine::cmd::text::composition_underlines(st) {
+            painter.line_segment([xf.to_screen(a), xf.to_screen(b)], Stroke::new(if thick { 2.0 } else { 1.0 }, t.caret));
+        }
+        if !ts.is_range() {
+            let blink = (ui.input(|i| i.time) * 1.6).fract() < 0.6;
+            ui.ctx().request_repaint_after(std::time::Duration::from_millis(300));
+            if blink && let Some((top, bot)) = deckcraft_engine::cmd::text::caret_line(st, ts) {
+                painter.line_segment([xf.to_screen(top), xf.to_screen(bot)], Stroke::new(1.5, t.caret));
+            }
+        }
     }
     // Smart guides, marquee, previews.
     for g in &app.session.tool.guides {
@@ -624,6 +746,16 @@ fn draw_preview(app: &SlideApp, p: &egui::Painter, xf: Xf, x: Xfrm, t: &Tokens) 
         ToolKind::Shape { preset } => preset.clone(),
         _ => "rect".into(),
     };
+    if preset == deckcraft_engine::tools::DRAW_TABLE {
+        // A border inside a table (flat), or the outline of a new table.
+        let (a, b) = (xf.to_screen(Point::new(x.x, x.y)), xf.to_screen(Point::new(x.x + x.w, x.y + x.h)));
+        if x.w < 0.5 || x.h < 0.5 {
+            p.line_segment([a, b], Stroke::new(1.5, t.accent));
+        } else {
+            p.rect_stroke(Rect::from_two_pos(a, b), 0.0, Stroke::new(1.0, t.accent), egui::StrokeKind::Inside);
+        }
+        return;
+    }
     if deckcraft_geom::preset::is_line_like(&preset) {
         let a = x.affine();
         p.line_segment([xf.to_screen(a * Point::new(0.0, 0.0)), xf.to_screen(a * Point::new(x.w, x.h))], Stroke::new(1.5, t.accent));
@@ -688,7 +820,106 @@ fn model3d_menu(app: &mut SlideApp, ui: &mut Ui) {
 }
 
 fn context_menu(app: &mut SlideApp, resp: &egui::Response) {
+    // Right-clicking a vertex in Edit Points picks it for the point menu.
+    if resp.secondary_clicked()
+        && let Some(Hit::Vertex { path, index, .. }) = app.session.tool.hover.clone()
+    {
+        app.session.tool.edit_vertex = Some((path, index));
+    }
     resp.context_menu(|ui| {
+        let editing = app.session.active().and_then(|d| app.session.tool.editing_points(d).and_then(|id| d.shape(id).cloned()));
+        if let Some(sh) = editing {
+            if let Some((path, index)) = app.session.tool.edit_vertex {
+                let cur = deckcraft_engine::cmd::points::kind_of(&sh, path, index);
+                for (l, k) in [("Smooth Point", "smooth"), ("Straight Point", "straight"), ("Corner Point", "corner")] {
+                    if ui.radio(cur == Some(k), l).clicked() {
+                        let _ = app.run("shape.pointType", json!({"path": path, "index": index, "type": k}));
+                        ui.close();
+                    }
+                }
+                if ui.button("Delete Point").clicked() {
+                    let _ = app.run("shape.deletePoint", json!({"path": path, "index": index}));
+                    app.session.tool.edit_vertex = None;
+                    ui.close();
+                }
+                ui.separator();
+            }
+            if ui.button("Exit Edit Points").clicked() {
+                let _ = app.run("shape.editPoints", json!({"on": false}));
+                ui.close();
+            }
+            return;
+        }
+        // A misspelt word under the pointer: its suggestions, then Ignore All and Add to Dictionary.
+        if let Some(w) = app.squiggles.menu_word.clone() {
+            if let Some(from) = w.delete_from {
+                if ui.button(egui::RichText::new("Delete Repeated Word").strong()).clicked() {
+                    let cut: String = format!("{}{}", " ".repeat(w.start - from), w.word);
+                    // The gap is spaces; take it from the text so tabs or no-break spaces match.
+                    let gap = app
+                        .session
+                        .active()
+                        .and_then(|st| match w.tag {
+                            crate::squiggles::Tag::Shape { id, para } => st.shape(id)?.text.as_ref()?.paragraphs.get(para).map(|p| p.text()),
+                            crate::squiggles::Tag::Cell { id, row, col, para } => match &st.shape(id)?.kind {
+                                deckcraft_model::ShapeKind::Table(tb) => tb.cell(row, col)?.text.paragraphs.get(para).map(|p| p.text()),
+                                _ => None,
+                            },
+                            crate::squiggles::Tag::Notes { .. } => None,
+                        })
+                        .map(|t| t.chars().skip(from).take(w.start + w.word.chars().count() - from).collect::<String>())
+                        .unwrap_or(cut);
+                    let mut p = json!({"para": 0, "start": from, "word": gap, "to": ""});
+                    if let Some(o) = p.as_object_mut() {
+                        match w.tag {
+                            crate::squiggles::Tag::Shape { id, para } => {
+                                o.insert("shape".into(), json!(id));
+                                o.insert("para".into(), json!(para));
+                            }
+                            crate::squiggles::Tag::Cell { id, row, col, para } => {
+                                o.insert("shape".into(), json!(id));
+                                o.insert("row".into(), json!(row));
+                                o.insert("col".into(), json!(col));
+                                o.insert("para".into(), json!(para));
+                            }
+                            crate::squiggles::Tag::Notes { .. } => {}
+                        }
+                    }
+                    let _ = app.run("review.spellingChange", p);
+                    app.squiggles.menu_word = None;
+                    ui.close();
+                }
+            } else if w.suggestions.is_empty() {
+                ui.label(egui::RichText::new("(no spelling suggestions)").weak());
+            }
+            for to in &w.suggestions {
+                if ui.button(egui::RichText::new(to).strong()).clicked() {
+                    let p = match w.tag {
+                        crate::squiggles::Tag::Shape { id, para } => json!({"shape": id, "para": para, "start": w.start, "word": w.word, "to": to}),
+                        crate::squiggles::Tag::Cell { id, row, col, para } => {
+                            json!({"shape": id, "row": row, "col": col, "para": para, "start": w.start, "word": w.word, "to": to})
+                        }
+                        crate::squiggles::Tag::Notes { .. } => json!({}),
+                    };
+                    let _ = app.run("review.spellingChange", p);
+                    app.squiggles.menu_word = None;
+                    ui.close();
+                }
+            }
+            if ui.button("Ignore All").clicked() {
+                app.squiggles.ignore(&w.word);
+                app.squiggles.menu_word = None;
+                ui.close();
+            }
+            if ui.button("Add to Dictionary").clicked() {
+                if let Err(e) = app.session.execute("review.addToDictionary", &json!({"word": w.word})) {
+                    app.set_status(e.to_string());
+                }
+                app.squiggles.menu_word = None;
+                ui.close();
+            }
+            ui.separator();
+        }
         use deckcraft_model::ShapeKind;
         let (has_sel, models, text) = app
             .session
@@ -718,11 +949,40 @@ fn context_menu(app: &mut SlideApp, resp: &egui::Response) {
             }
         }
         ui.separator();
-        if models {
+        // Right-clicking the text being edited keeps it (`PointerKind::ContextClick`): text items.
+        let editing = app.session.active().is_some_and(|d| d.selection.text.as_ref().is_some_and(|t| !t.notes));
+        if editing {
+            if ui.button("Paragraph…").clicked() {
+                app.dialog = Some(crate::dialogs::Dialog::new("paragraph"));
+                ui.close();
+            }
+            for (l, id) in [("Bullets", "format.bullets"), ("Numbering", "format.numbering")] {
+                if ui.add_enabled(crate::ribbon::enabled(app, id), egui::Button::new(l)).clicked() {
+                    let _ = app.run(id, json!({}));
+                    ui.close();
+                }
+            }
+            if ui.button("Link…").clicked() {
+                app.dialog = Some(crate::dialogs::Dialog::new("hyperlink"));
+                ui.close();
+            }
+            ui.separator();
+            if ui.button("Format Shape…").clicked() {
+                let _ = app.run("view.pane", json!({"pane": "format"}));
+                ui.close();
+            }
+        } else if models {
             model3d_menu(app, ui);
         } else if has_sel {
             if text && ui.button("Edit Text").clicked() {
                 let _ = app.run("text.edit", json!({}));
+                ui.close();
+            }
+            if crate::ribbon::enabled(app, "shape.editPoints")
+                && app.session.active().is_some_and(|d| d.selection.shapes.len() == 1 && d.selected_shapes().iter().all(|s| !s.is_line()))
+                && ui.button("Edit Points").clicked()
+            {
+                let _ = app.run("shape.editPoints", json!({"on": true}));
                 ui.close();
             }
             ui.menu_button("Bring to Front", |ui| {
@@ -752,6 +1012,10 @@ fn context_menu(app: &mut SlideApp, resp: &egui::Response) {
             }
             if ui.button("Set as Default Shape").clicked() {
                 let _ = app.run("shape.setDefault", json!({}));
+                ui.close();
+            }
+            if ui.button("Size and Position…").clicked() {
+                let _ = app.run("shape.sizePosition", json!({}));
                 ui.close();
             }
             if ui.button("Format Shape…").clicked() {
@@ -790,4 +1054,97 @@ fn context_menu(app: &mut SlideApp, resp: &egui::Response) {
 
 #[cfg(test)]
 #[path = "canvas_tests.rs"]
-mod tests;
+mod menu_tests;
+
+#[cfg(test)]
+mod tests {
+    #![allow(clippy::unwrap_used, clippy::expect_used)]
+
+    use deckcraft_engine::Session;
+    use egui::{Event, Modifiers, MouseWheelUnit, Pos2, TouchPhase, pos2, vec2};
+    use egui_kittest::Harness;
+
+    use crate::{Services, SlideApp};
+
+    fn harness() -> Harness<'static, SlideApp> {
+        let mut h = Harness::builder().with_size(egui::vec2(1200.0, 800.0)).build_ui_state(
+            |ui, app: &mut SlideApp| {
+                app.logic(ui.ctx());
+                app.ui(ui);
+            },
+            SlideApp::new(Session::with_new(), Services::default()),
+        );
+        h.run_steps(3);
+        h
+    }
+
+    /// The slide point (in slide points) under screen position `p`.
+    fn slide_point(h: &Harness<'_, SlideApp>, p: Pos2) -> Pos2 {
+        let (r, s) = (h.state().slide_rect.unwrap(), h.state().canvas_scale);
+        pos2((p.x - r.min.x) / s, (p.y - r.min.y) / s)
+    }
+
+    fn ctrl_wheel(h: &mut Harness<'_, SlideApp>, lines: f32) {
+        let wheel = Event::MouseWheel { unit: MouseWheelUnit::Line, delta: vec2(0.0, lines), phase: TouchPhase::Move, modifiers: Modifiers::COMMAND };
+        h.event(wheel);
+        // egui spreads a wheel notch over several frames.
+        h.run_steps(30);
+    }
+
+    fn assert_near(a: Pos2, b: Pos2, what: &str) {
+        assert!((a - b).length() < 0.5, "{what}: {a:?} moved to {b:?}");
+    }
+
+    /// #106: wheel and pinch zoom zoomed toward the slide's corner instead of the pointer.
+    #[test]
+    fn wheel_and_pinch_zoom_keep_the_point_under_the_pointer() {
+        let mut h = harness();
+        let fit = h.state().canvas_scale;
+        let r = h.state().slide_rect.unwrap();
+        let p = r.min + vec2(r.width() * 0.8, r.height() * 0.7);
+        h.event(Event::PointerMoved(p));
+        h.run_steps(1);
+        let under = slide_point(&h, p);
+
+        h.event(Event::Zoom(2.0));
+        h.run_steps(2);
+        assert!((h.state().canvas_scale - fit * 2.0).abs() < 1e-3);
+        assert_near(under, slide_point(&h, p), "pinch in");
+
+        ctrl_wheel(&mut h, 1.0);
+        assert!(h.state().canvas_scale > fit * 2.1, "Ctrl/Cmd + wheel up zooms in");
+        assert_near(under, slide_point(&h, p), "wheel in");
+
+        ctrl_wheel(&mut h, -1.0);
+        ctrl_wheel(&mut h, -1.0);
+        assert!(h.state().canvas_scale < fit * 2.0, "Ctrl/Cmd + wheel down zooms out");
+        assert_near(under, slide_point(&h, p), "wheel out");
+
+        h.event(Event::Zoom(0.8));
+        h.run_steps(2);
+        assert_near(under, slide_point(&h, p), "pinch out");
+
+        // Zoomed out below the window size, the slide is centred again.
+        h.event(Event::Zoom(0.25));
+        h.run_steps(2);
+        assert!(h.state().canvas_scale < fit);
+        let (canvas, slide) = (h.state().canvas_rect.unwrap(), h.state().slide_rect.unwrap());
+        assert!((canvas.center() - slide.center()).length() < 1.0, "{canvas:?} {slide:?}");
+    }
+
+    /// Zoom In/Out (keys, buttons, slider) keeps the middle of the view where it is.
+    #[test]
+    fn zoom_commands_keep_the_middle_of_the_view() {
+        let mut h = harness();
+        let c = h.state().canvas_rect.unwrap().center();
+        let mid = slide_point(&h, c);
+        for _ in 0..4 {
+            h.state_mut().run("view.zoomIn", serde_json::json!({})).unwrap();
+            h.run_steps(2);
+            assert_near(mid, slide_point(&h, c), "zoom in");
+        }
+        h.state_mut().run("view.zoomOut", serde_json::json!({})).unwrap();
+        h.run_steps(2);
+        assert_near(mid, slide_point(&h, c), "zoom out");
+    }
+}

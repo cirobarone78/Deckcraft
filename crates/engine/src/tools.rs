@@ -21,6 +21,9 @@ pub enum PointerKind {
     Move,
     DoubleClick,
     TripleClick,
+    /// Secondary-button press (right click), before the context menu opens: selects what's under
+    /// the pointer the way PowerPoint does, without editing text or starting a drag.
+    ContextClick,
 }
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
@@ -80,6 +83,19 @@ pub enum Hit {
         id: ShapeId,
         index: usize,
     },
+    /// A control handle (`out`: the outgoing one) of the selected vertex in Edit Points.
+    Handle {
+        id: ShapeId,
+        path: usize,
+        index: usize,
+        out: bool,
+    },
+    /// A vertex of a shape whose points are being edited.
+    Vertex {
+        id: ShapeId,
+        path: usize,
+        index: usize,
+    },
     /// Line end 0/1 of a line-like shape.
     LineEnd {
         id: ShapeId,
@@ -134,6 +150,17 @@ enum Drag {
         index: usize,
         orig: Xfrm,
     },
+    Vertex {
+        id: ShapeId,
+        path: usize,
+        index: usize,
+    },
+    Handle {
+        id: ShapeId,
+        path: usize,
+        index: usize,
+        out: bool,
+    },
     Marquee {
         start: Point,
         add: bool,
@@ -158,6 +185,10 @@ enum Drag {
 
 /// Shape-gallery names that draw a freeform path instead of a preset.
 pub const FREEFORM_TOOLS: [(&str, &str); 3] = [("curve", "Curve"), ("freeform", "Freeform: Shape"), ("scribble", "Freeform: Scribble")];
+
+/// Draw Table's pencil and eraser, as `ToolKind::Shape` presets (Insert › Table › Draw Table).
+pub const DRAW_TABLE: &str = "drawTable";
+pub const TABLE_ERASER: &str = "tableEraser";
 
 pub fn is_freeform_tool(name: &str) -> bool {
     FREEFORM_TOOLS.iter().any(|f| f.0 == name)
@@ -193,11 +224,22 @@ pub struct ToolState {
     pub path_preview: Vec<Point>,
     pub path_smooth: bool,
     pub path_closing: bool,
+    /// The shape in Edit Points: its vertices are handles instead of the box's.
+    pub edit_points: Option<ShapeId>,
+    /// The vertex (path, index) whose control handles show in Edit Points.
+    pub edit_vertex: Option<(usize, usize)>,
+    /// The point type last chosen for a vertex (path, index, type): handle drags follow it.
+    pub vertex_kind: Option<(usize, usize, String)>,
 }
 
 impl ToolState {
     pub fn dragging(&self) -> bool {
         self.drag.is_some()
+    }
+
+    /// The shape in Edit Points, while it is still the one selected shape.
+    pub fn editing_points(&self, st: &crate::DocState) -> Option<ShapeId> {
+        self.edit_points.filter(|id| st.selection.shapes.as_slice() == [*id] && st.selection.text.is_none() && st.shape(*id).is_some())
     }
 
     /// A freeform path is being drawn (Enter/Escape/double-click finish it).
@@ -242,6 +284,23 @@ impl Session {
     /// What's under `p` on the current slide.
     pub fn hit_test(&self, p: Point, tol: f64) -> Option<Hit> {
         let st = self.active()?;
+        // In Edit Points, the edited shape's vertices come first.
+        if let Some(id) = self.tool.editing_points(st)
+            && let Some(sh) = st.shape(id)
+        {
+            if let Some((path, index)) = self.tool.edit_vertex
+                && let Some((hin, hout, _)) = cmd::points::slide_handles(&st.doc, &st.selection, sh, path, index)
+            {
+                for (h, out) in [(hout, true), (hin, false)] {
+                    if h.is_some_and(|q| (q - p).hypot() <= tol * 1.6) {
+                        return Some(Hit::Handle { id, path, index, out });
+                    }
+                }
+            }
+            if let Some((path, index)) = cmd::points::vertex_at(&st.doc, &st.selection, sh, p, tol * 1.6) {
+                return Some(Hit::Vertex { id, path, index });
+            }
+        }
         // Handles of selected shapes first.
         if st.selection.text.is_none() || st.selection.shapes.len() == 1 {
             for id in st.selection.shapes.iter().rev() {
@@ -329,6 +388,7 @@ impl Session {
             PointerKind::Drag => self.drag(p, ev.mods, tol),
             PointerKind::Up => self.up(p, ev.mods),
             PointerKind::DoubleClick => self.double_click(p, tol),
+            PointerKind::ContextClick => self.context_click(p, tol),
             PointerKind::TripleClick => {
                 if self.active().is_some_and(|d| d.selection.text.is_some()) {
                     self.execute("text.selectParagraph", &json!({}))
@@ -376,6 +436,10 @@ impl Session {
                 self.tool.path_closing = false;
                 return Ok(Value::Null);
             }
+            ToolKind::Shape { preset } if preset == TABLE_ERASER => {
+                // Click a border to merge the cells on either side; elsewhere does nothing.
+                return Ok(self.execute("table.eraseLine", &json!({"at": [p.x, p.y], "tol": tol.max(4.0)})).unwrap_or(Value::Null));
+            }
             ToolKind::Shape { .. } | ToolKind::TextBox => {
                 self.tool.drag = Some(Drag::Create { start: p });
                 self.tool.preview = Some(Xfrm::new(p.x, p.y, 0.0, 0.0));
@@ -417,6 +481,35 @@ impl Session {
             }
         }
         let hit = self.hit_test(p, tol);
+        // Edit Points: drag a vertex, Ctrl-click one to delete it or the outline to add one;
+        // a click anywhere else leaves Edit Points.
+        if let Some(eid) = self.doc().ok().and_then(|st| self.tool.editing_points(st)) {
+            if let Some(Hit::Vertex { id, path, index }) = hit {
+                if mods.cmd {
+                    return self.execute("shape.deletePoint", &json!({"id": id, "path": path, "index": index}));
+                }
+                self.tool.edit_vertex = Some((path, index));
+                self.begin("Edit Points");
+                self.tool.drag = Some(Drag::Vertex { id, path, index });
+                return Ok(json!({"vertex": [path, index]}));
+            }
+            if let Some(Hit::Handle { id, path, index, out }) = hit {
+                self.begin("Edit Points");
+                self.tool.drag = Some(Drag::Handle { id, path, index, out });
+                return Ok(json!({"handle": [path, index]}));
+            }
+            let st = self.doc()?;
+            if let Some(sh) = st.shape(eid)
+                && let Some((path, seg, t)) = cmd::points::segment_at(&st.doc, &st.selection, sh, p, tol * 1.6)
+            {
+                if mods.cmd {
+                    return self.execute("shape.addPoint", &json!({"id": eid, "path": path, "segment": seg, "t": t}));
+                }
+                return Ok(Value::Null);
+            }
+            self.tool.edit_points = None;
+            self.tool.edit_vertex = None;
+        }
         let st = self.doc()?;
         match hit {
             Some(Hit::Resize { id, handle }) => {
@@ -450,6 +543,8 @@ impl Session {
                 self.begin("Rotate");
                 self.tool.drag = Some(Drag::Rotate { ids, center, start, origs });
             }
+            // Only reached outside Edit Points (handled above).
+            Some(Hit::Vertex { .. } | Hit::Handle { .. }) => {}
             Some(Hit::Adjust { id, index }) => {
                 let orig = st.shape(id).map(|s| xfrm_of(&st.doc, &st.selection, s)).unwrap_or_default();
                 self.begin("Adjust Shape");
@@ -681,6 +776,19 @@ impl Session {
                     Ok(())
                 })?;
             }
+            Drag::Vertex { id, path, index } => {
+                self.tool.drag = Some(Drag::Vertex { id, path, index });
+                self.edit_vertex(id, path, index, p)?;
+                return Ok(Value::Null);
+            }
+            Drag::Handle { id, path, index, out } => {
+                self.tool.drag = Some(Drag::Handle { id, path, index, out });
+                let side = if out { "out" } else { "in" };
+                if let Err(e) = self.execute_inner_move_handle(id, path, index, side, p) {
+                    log::debug!("edit handle: {e}");
+                }
+                return Ok(Value::Null);
+            }
             Drag::Marquee { start, .. } => {
                 self.tool.marquee = Some(Rect::from_points(start, p));
             }
@@ -693,6 +801,13 @@ impl Session {
                     }
                     let s0 = self.glue_at(start, tol).map(|g| g.2).unwrap_or(start);
                     line_xfrm(s0, q, 0.0)
+                } else if matches!(&self.tool.kind, ToolKind::Shape { preset } if preset == DRAW_TABLE)
+                    && crate::cmd::table::table_at(self, &Value::Null, (start.x, start.y)).is_some()
+                {
+                    // The pencil inside a table draws a straight border, across or down.
+                    let q = if (p.x - start.x).abs() >= (p.y - start.y).abs() { Point::new(p.x, start.y) } else { Point::new(start.x, p.y) };
+                    let r = Rect::from_points(start, q);
+                    Xfrm::new(r.x0, r.y0, r.width(), r.height())
                 } else {
                     let mut r = Rect::from_points(start, p);
                     if mods.shift {
@@ -739,6 +854,20 @@ impl Session {
             }
         }
         Ok(Value::Null)
+    }
+
+    /// Moves a vertex during a drag (one undo step for the whole drag).
+    fn edit_vertex(&mut self, id: ShapeId, path: usize, index: usize, p: Point) -> Result<()> {
+        let r = cmd::points::move_point_raw(self, id, path, index, p);
+        if let Err(e) = r {
+            log::debug!("edit point: {e}");
+        }
+        Ok(())
+    }
+
+    fn execute_inner_move_handle(&mut self, id: ShapeId, path: usize, index: usize, side: &str, p: Point) -> Result<Value> {
+        let kind = self.tool.vertex_kind.clone().filter(|(pp, i, _)| (*pp, *i) == (path, index)).map(|k| k.2);
+        cmd::points::move_handle_raw(self, &json!({"id": id.0, "path": path, "index": index, "side": side, "x": p.x, "y": p.y, "type": kind}))
     }
 
     fn up(&mut self, p: Point, mods: Mods) -> Result<Value> {
@@ -788,6 +917,16 @@ impl Session {
                 let preview = self.tool.preview.take();
                 let dragged = (p - start).hypot() > 2.0;
                 let res = match &kind {
+                    ToolKind::Shape { preset } if preset == DRAW_TABLE => {
+                        // Inside a table: split cells along the line. Elsewhere: a one-cell table.
+                        if crate::cmd::table::table_at(self, &Value::Null, (start.x, start.y)).is_some() {
+                            self.execute("table.drawLine", &json!({"from": [start.x, start.y], "to": [p.x, p.y]})).unwrap_or(Value::Null)
+                        } else if let Some(x) = preview.filter(|x| dragged && x.w >= 8.0 && x.h >= 8.0) {
+                            self.execute("insert.table", &json!({"rows": 1, "cols": 1, "rect": [x.x, x.y, x.w, x.h]}))?
+                        } else {
+                            Value::Null
+                        }
+                    }
                     ToolKind::Shape { preset } => {
                         let line = deckcraft_geom::preset::is_line_like(preset);
                         let rect = match preview.filter(|_| dragged) {
@@ -821,7 +960,8 @@ impl Session {
                     }
                     _ => Value::Null,
                 };
-                if !self.tool.sticky {
+                // The table pencil stays on until you pick another tool, as in PowerPoint.
+                if !self.tool.sticky && !matches!(&kind, ToolKind::Shape { preset } if preset == DRAW_TABLE) {
                     self.tool.kind = ToolKind::Select;
                 }
                 out = res;
@@ -895,7 +1035,18 @@ impl Session {
                         self.execute("text.edit", &json!({"id": id, "at": [pos.0, pos.1]}))?;
                         self.execute("text.selectWord", &json!({}))
                     }
-                    ShapeKind::Group { .. } => Ok(Value::Null),
+                    ShapeKind::Group { .. } => {
+                        // A group is a single selection unit, but its text stays editable:
+                        // double-click reaches the text-holding member under the cursor.
+                        match text_member_at(st, &sh, p, tol).and_then(|mid| st.shape(mid).cloned().map(|m| (mid, m))) {
+                            Some((mid, msh)) if !msh.is_line() => {
+                                let pos = text_pos(st, &msh, p);
+                                self.execute("text.edit", &json!({"id": mid, "at": [pos.0, pos.1]}))?;
+                                self.execute("text.selectWord", &json!({}))
+                            }
+                            _ => Ok(Value::Null),
+                        }
+                    }
                     _ => {
                         self.ui_requests.push(crate::UiRequest::Pane { id: "format".into() });
                         Ok(Value::Null)
@@ -904,6 +1055,54 @@ impl Session {
             }
             _ => Ok(Value::Null),
         }
+    }
+
+    /// Right-button press: the selection the context menu will act on, as in PowerPoint. In the
+    /// box being edited, the caret and text selection stay (the menu then acts on the text). On a
+    /// selected shape (or its handles) the selection stays, multiple selection included; on
+    /// another shape, that shape alone is selected; on empty slide, nothing is. Never edits text,
+    /// starts a drag or adds an undo step.
+    fn context_click(&mut self, p: Point, tol: f64) -> Result<Value> {
+        if !matches!(self.tool.kind, ToolKind::Select) || self.tool.drag.is_some() {
+            return Ok(Value::Null);
+        }
+        let st = self.doc()?;
+        // The same zone in which a left press places the caret (`down`).
+        if let Some(t) = &st.selection.text
+            && !t.notes
+            && t.cell.is_none()
+            && let Some(sh) = st.shape(t.shape)
+            && xfrm_of(&st.doc, &st.selection, sh).bounds().inflate(tol, tol).contains(p)
+        {
+            return Ok(json!({"hit": {"kind": "text", "id": t.shape}, "selected": [t.shape], "editing": true}));
+        }
+        let hit = self.hit_test(p, tol);
+        let id = match &hit {
+            Some(
+                Hit::Shape { id, .. }
+                | Hit::Resize { id, .. }
+                | Hit::Rotate { id }
+                | Hit::Rotate3d { id }
+                | Hit::Adjust { id, .. }
+                | Hit::LineEnd { id, .. }
+                | Hit::Handle { id, .. }
+                | Hit::Vertex { id, .. },
+            ) => Some(*id),
+            None => None,
+        };
+        if !id.is_some_and(|id| st.selection.shapes.contains(&id)) {
+            self.select(|_, sel| {
+                sel.text = None;
+                sel.cells = None;
+                sel.shapes = id.into_iter().collect();
+            })?;
+        }
+        let st = self.doc()?;
+        Ok(json!({
+            "hit": serde_json::to_value(&hit).unwrap_or_default(),
+            "selected": st.selection.shapes,
+            "editing": st.selection.text.is_some(),
+        }))
     }
 
     fn is_picture(&self, id: ShapeId) -> bool {
@@ -1177,6 +1376,39 @@ impl Session {
 
 fn is_text_first(st: &crate::DocState, id: ShapeId) -> bool {
     st.shape(id).is_some_and(|s| s.ph.is_some() || s.text_box)
+}
+
+/// The topmost text-holding shape under `p` inside group `sh`, recursing into nested groups.
+/// Group children live in the group's child space (`ShapeKind::Group::child`), so the point is
+/// mapped through `group_child_affine`, exactly as `hit_shape` does for group hit-testing.
+fn text_member_at(st: &crate::DocState, sh: &Shape, p: Point, tol: f64) -> Option<ShapeId> {
+    let ShapeKind::Group { children, child } = &sh.kind else { return None };
+    let x = xfrm_of(&st.doc, &st.selection, sh);
+    let ch = Rect::new(child.x, child.y, child.x + child.w, child.y + child.h);
+    member_at(children, deckcraft_geom::group_child_affine(&x, ch), p, tol)
+}
+
+/// Depth-first (topmost-first) search of `children` for a text-holding shape under `p`.
+/// `to_abs` maps this level's child space to slide space.
+fn member_at(children: &[Shape], to_abs: Affine, p: Point, tol: f64) -> Option<ShapeId> {
+    let q = to_abs.inverse() * p;
+    for c in children.iter().rev() {
+        let Some(cx) = c.xfrm else { continue };
+        let local = cx.affine().inverse() * q;
+        if local.x < -tol || local.y < -tol || local.x > cx.w + tol || local.y > cx.h + tol {
+            continue;
+        }
+        if let ShapeKind::Group { children: gc, child: gch } = &c.kind {
+            let gch = Rect::new(gch.x, gch.y, gch.x + gch.w, gch.y + gch.h);
+            let nested = to_abs * deckcraft_geom::group_child_affine(&cx, gch);
+            if let Some(id) = member_at(gc, nested, p, tol) {
+                return Some(id);
+            }
+        } else if matches!(c.kind, ShapeKind::Shape | ShapeKind::Connector { .. }) && !c.is_line() {
+            return Some(c.id);
+        }
+    }
+    None
 }
 
 fn contains_rect(outer: Rect, inner: Rect) -> bool {

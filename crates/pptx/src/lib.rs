@@ -7,7 +7,9 @@
 #![deny(clippy::unwrap_used, clippy::expect_used, clippy::panic, clippy::unimplemented, clippy::todo, clippy::unreachable)]
 #![forbid(unsafe_code)]
 
+mod cfb;
 mod custgeom;
+mod dgm;
 mod maps;
 mod opc;
 mod png;
@@ -20,6 +22,9 @@ use deckcraft_model::Presentation;
 
 /// Extension URI of the PowerPoint 2010 section list in `presentation.xml`.
 pub(crate) const SECTION_EXT_URI: &str = "{521415D9-36F7-43E2-AB2F-B90AF26B5E84}";
+
+/// Extension URI of the modern-comments anchor in a slide (names the threaded comment part).
+pub(crate) const COMMENTS_EXT_URI: &str = "{6950BFC3-D8DA-4A85-94F7-54DA5524770B}";
 
 #[derive(Debug, thiserror::Error)]
 pub enum PptxError {
@@ -44,21 +49,42 @@ pub fn sniff(bytes: &[u8]) -> bool {
     zip::ZipArchive::new(std::io::Cursor::new(bytes)).map(|z| z.index_for_name("[Content_Types].xml").is_some()).unwrap_or(false)
 }
 
+/// Is this a password-protected presentation (an encrypted package inside a compound file)?
+pub fn is_encrypted(bytes: &[u8]) -> bool {
+    cfb::is_encrypted(bytes)
+}
+
 /// Read a `.pptx` / `.potx` / `.ppsx` package.
 pub fn import(bytes: &[u8]) -> Result<Presentation, PptxError> {
     read::import(bytes)
 }
 
-/// Write a `.pptx` package. 3-D models get their stored preview picture (or none) as the fallback
-/// picture older readers show; [`export_with_previews`] draws fresh ones.
-pub fn export(p: &Presentation) -> Result<Vec<u8>, PptxError> {
-    write::export(p, &|_, _, _| None)
+/// Read the theme of a `.thmx` file, or of a `.pptx` / `.potx`'s first master, with its media.
+pub fn import_theme(bytes: &[u8]) -> Result<(deckcraft_model::theme::Theme, Vec<deckcraft_model::MediaItem>), PptxError> {
+    read::import_theme(bytes)
 }
 
-/// Write a `.pptx` package, drawing each 3-D model's fallback picture with `model_preview` (PNG
-/// bytes for the model and its frame's width and height in points).
-pub fn export_with_previews(p: &Presentation, model_preview: ModelPreview) -> Result<Vec<u8>, PptxError> {
-    write::export(p, model_preview)
+/// Write a `.pptx` package. 3-D models get their stored poster picture (or none) as the fallback
+/// picture older readers show; [`export_with_previews`] draws fresh ones.
+pub fn export(p: &Presentation) -> Result<Vec<u8>, PptxError> {
+    export_as(p, "pptx")
+}
+
+/// Write a package for `ext`: `potx` (template) and `ppsx` (slide show) differ from `pptx` only in
+/// the main part's content type.
+pub fn export_as(p: &Presentation, ext: &str) -> Result<Vec<u8>, PptxError> {
+    export_with_previews(p, ext, &|_, _, _| None)
+}
+
+/// [`export_as`], drawing each 3-D model's fallback picture with `model_preview` (PNG bytes for the
+/// model and its frame's width and height in points).
+pub fn export_with_previews(p: &Presentation, ext: &str, model_preview: ModelPreview) -> Result<Vec<u8>, PptxError> {
+    let ct = match ext {
+        "potx" => write::CT_TEMPLATE,
+        "ppsx" => write::CT_SHOW,
+        _ => write::CT_PRES,
+    };
+    write::export(p, ct, model_preview)
 }
 
 /// Draws a 3-D model's fallback picture: PNG bytes for the model and its frame's width and height
@@ -96,5 +122,59 @@ pub(crate) fn mime_for(name: &str) -> &'static str {
         "fntdata" => "application/x-fontdata",
         "glb" => CT_GLB,
         _ => "application/octet-stream",
+    }
+}
+
+#[cfg(test)]
+mod import_theme_tests {
+    use std::io::{Read, Write};
+
+    use deckcraft_model::Presentation;
+
+    fn custom() -> Presentation {
+        let mut p = Presentation::default();
+        let m = std::sync::Arc::make_mut(&mut p.masters[0]);
+        m.theme.name = "Harbour".into();
+        m.theme.fonts.major.latin = "Lato".into();
+        m.theme.fonts.minor.latin = "Source Sans 3".into();
+        m.theme.colors.set(deckcraft_color::SchemeSlot::Accent1, deckcraft_color::Rgba::rgb(0x12, 0x34, 0x56));
+        p
+    }
+
+    /// A `.thmx`: the deck's theme part as the package's main document.
+    fn thmx(pptx: &[u8]) -> Vec<u8> {
+        let mut z = zip::ZipArchive::new(std::io::Cursor::new(pptx)).unwrap();
+        let mut theme = String::new();
+        z.by_name("ppt/theme/theme1.xml").unwrap().read_to_string(&mut theme).unwrap();
+        let mut out = zip::ZipWriter::new(std::io::Cursor::new(Vec::new()));
+        let o = zip::write::SimpleFileOptions::default();
+        out.start_file("[Content_Types].xml", o).unwrap();
+        out.write_all(br#"<?xml version="1.0" encoding="UTF-8"?><Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="xml" ContentType="application/xml"/><Override PartName="/theme/theme/theme1.xml" ContentType="application/vnd.openxmlformats-officedocument.theme+xml"/></Types>"#).unwrap();
+        out.start_file("_rels/.rels", o).unwrap();
+        out.write_all(br#"<?xml version="1.0" encoding="UTF-8"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="theme/theme/theme1.xml"/></Relationships>"#).unwrap();
+        out.start_file("theme/theme/theme1.xml", o).unwrap();
+        out.write_all(theme.as_bytes()).unwrap();
+        out.finish().unwrap().into_inner()
+    }
+
+    #[test]
+    fn reads_the_theme_of_a_pptx_and_of_a_thmx() {
+        let pptx = crate::export(&custom()).unwrap();
+        for bytes in [pptx.clone(), thmx(&pptx)] {
+            let (t, _) = crate::import_theme(&bytes).unwrap();
+            assert_eq!(t.name, "Harbour");
+            assert_eq!(t.fonts.major.latin, "Lato");
+            assert_eq!(t.fonts.minor.latin, "Source Sans 3");
+            assert_eq!(t.colors.get(deckcraft_color::SchemeSlot::Accent1), deckcraft_color::Rgba::rgb(0x12, 0x34, 0x56));
+        }
+    }
+
+    #[test]
+    fn non_theme_packages_are_errors() {
+        assert!(crate::import_theme(b"not a zip").is_err());
+        let mut out = zip::ZipWriter::new(std::io::Cursor::new(Vec::new()));
+        out.start_file("[Content_Types].xml", zip::write::SimpleFileOptions::default()).unwrap();
+        out.write_all(b"<Types/>").unwrap();
+        assert!(crate::import_theme(&out.finish().unwrap().into_inner()).is_err());
     }
 }

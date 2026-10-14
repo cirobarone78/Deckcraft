@@ -237,7 +237,7 @@ pub fn model_png(pres: &Presentation, m: &Model3d, w: f64, h: f64, scale: f64) -
 
 /// Draw model `m` into its `w` × `h` frame under `tr` (frame-local points → output pixels), posed
 /// by the 3-D effect `anim` playing on it: the model clipped to its frame (or, while an effect
-/// plays, to the area it may move over), or its preview picture, or a placeholder when it can't be
+/// plays, to the area it may move over), or its poster picture, or a placeholder when it can't be
 /// read.
 pub fn draw(ctx: &mut RenderContext, pres: &Presentation, m: &Model3d, w: f64, h: f64, tr: Affine, anim: &ModelAnim) {
     let bounds = Rect::new(0.0, 0.0, w, h);
@@ -263,7 +263,7 @@ pub fn draw(ctx: &mut RenderContext, pres: &Presentation, m: &Model3d, w: f64, h
             ctx.set_transform(tr);
             ctx.pop_layer();
         }
-        None => match m.preview.filter(|p| pres.media(*p).is_some()) {
+        None => match m.poster.filter(|p| pres.media(*p).is_some()) {
             Some(p) => {
                 ctx.set_transform(tr);
                 crate::paint::picture(ctx, pres, &PictureFill { media: p, ..Default::default() }, bounds, tr, None);
