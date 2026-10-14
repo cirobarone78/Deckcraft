@@ -101,6 +101,9 @@ pub fn title_bar(app: &mut SlideApp, ui: &mut Ui) {
         if icon_toggle(&mut right, Icon::CommentsBubble, "Comments", has_doc, app.ui.pane.as_deref() == Some("comments")).clicked() {
             let _ = app.run("view.pane", json!({"pane": "comments", "toggle": true}));
         }
+        if icon_toggle(&mut right, Icon::Sparkle, "Craft AI", true, app.ui.pane.as_deref() == Some("craftAi")).clicked() {
+            let _ = app.run("view.pane", json!({"pane": "craftAi", "toggle": true}));
+        }
         if icon_toggle(
             &mut right,
             if app.ui.brightness == theme::Brightness::Dark { Icon::Sparkle } else { Icon::Palette },

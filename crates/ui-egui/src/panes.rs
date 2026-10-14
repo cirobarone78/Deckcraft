@@ -27,6 +27,7 @@ pub fn show(app: &mut SlideApp, ui: &mut Ui) {
                 "selection" => "Selection",
                 "comments" => "Comments",
                 "designer" => "Design Ideas",
+                "craftAi" => "Craft AI",
                 _ => "Pane",
             };
             let title = crate::i18n::t(title);
@@ -51,6 +52,7 @@ pub fn show(app: &mut SlideApp, ui: &mut Ui) {
                 "selection" => crate::selpane::show(app, ui),
                 "comments" => comments(app, ui),
                 "designer" => designer(app, ui),
+                "craftAi" => crate::craft_ai::show(app, ui),
                 _ => {}
             });
         });

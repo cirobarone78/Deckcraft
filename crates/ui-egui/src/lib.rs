@@ -9,6 +9,7 @@
 pub mod backstage;
 pub mod canvas;
 pub mod control;
+pub mod craft_ai;
 pub mod credits;
 pub mod dialogs;
 pub mod fillui;
@@ -150,7 +151,7 @@ pub const UI_COMMANDS: &[(&str, &str, Option<&str>, &str)] = &[
     ("view.zoomOut", "Zoom Out", Some("Cmd+-"), "{}"),
     ("view.zoom", "Zoom…", None, "{percent}"),
     ("view.fit", "Fit to Window", None, "{}"),
-    ("view.pane", "Task Pane", None, "{pane: format|animation|selection|comments|designer|background|null}"),
+    ("view.pane", "Task Pane", None, "{pane: format|animation|selection|comments|designer|background|craftAi|null}"),
     ("view.tab", "Ribbon Tab", None, "{tab}"),
     ("view.collapseRibbon", "Collapse the Ribbon", Some("Cmd+F1"), "{}"),
     ("view.dark", "Dark Mode", None, "{on?: bool}"),
