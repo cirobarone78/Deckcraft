@@ -102,6 +102,7 @@ pub struct UiState {
     /// Format Shape pane: tab (`fill`, `effects`, `size`, `picture`, `text`).
     pub format_tab: String,
     pub grayscale: bool,
+    pub system_theme: bool,
 }
 
 impl Default for UiState {
@@ -127,6 +128,7 @@ impl Default for UiState {
             ui_scale: 1.0,
             format_tab: "fill".into(),
             grayscale: false,
+            system_theme: false,
         }
     }
 }
@@ -488,8 +490,13 @@ impl SlideApp {
             }
             "view.collapseRibbon" => self.ui.ribbon_collapsed = !self.ui.ribbon_collapsed,
             "view.dark" => {
-                let on = self.flag(p, self.ui.brightness == theme::Brightness::Dark);
-                self.ui.brightness = if on { theme::Brightness::Dark } else { theme::Brightness::Light };
+                if p.get("on").and_then(Value::as_str) == Some("system") {
+                    self.ui.system_theme = true;
+                } else {
+                    let on = self.flag(p, self.ui.brightness == theme::Brightness::Dark);
+                    self.ui.brightness = if on { theme::Brightness::Dark } else { theme::Brightness::Light };
+                    self.ui.system_theme = false;
+                }
                 self.restyle = true;
             }
             "view.grayscale" => self.ui.grayscale = self.flag(p, self.ui.grayscale),
@@ -729,6 +736,14 @@ impl SlideApp {
             self.restyle = true;
         } else {
             self.fonts_ready = true;
+        }
+        if self.ui.system_theme {
+            let sys_dark = ctx.input(|i| i.raw.system_theme == Some(egui::Theme::Dark));
+            let target_b = if sys_dark { theme::Brightness::Dark } else { theme::Brightness::Light };
+            if self.ui.brightness != target_b {
+                self.ui.brightness = target_b;
+                self.restyle = true;
+            }
         }
         if self.restyle {
             theme::apply(ctx, &theme::Tokens::for_brightness(self.ui.brightness));
