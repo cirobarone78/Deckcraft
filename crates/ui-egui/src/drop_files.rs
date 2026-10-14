@@ -3,6 +3,9 @@
 //! A picture dropped on the slide is centred on the pointer. Anywhere else in the window (the
 //! ribbon, the thumbnail pane) it keeps the centred insert. A presentation still opens.
 
+// The web build has no desktop drop. These helpers are only called from the native path.
+#![cfg_attr(target_arch = "wasm32", allow(dead_code))]
+
 use egui::{Pos2, Rect};
 
 /// Cocoa reports the pointer from the bottom-left of the main display, in screen points.
