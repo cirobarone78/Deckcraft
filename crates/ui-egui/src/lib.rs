@@ -16,6 +16,7 @@ pub mod icons;
 pub mod media;
 pub mod menus;
 pub mod panes;
+pub mod recent_docs;
 pub mod ribbon;
 pub mod selpane;
 pub mod show;
@@ -576,6 +577,7 @@ impl SlideApp {
         self.ui.recent.retain(|p| p != path);
         self.ui.recent.insert(0, path.to_string());
         self.ui.recent.truncate(12);
+        recent_docs::note_system_recent(path);
         self.ui.view = ViewMode::Normal;
         Ok(())
     }
@@ -609,7 +611,8 @@ impl SlideApp {
                     Ok(_) => {
                         self.set_status(format!("Saved {path}"));
                         self.ui.recent.retain(|p| *p != path);
-                        self.ui.recent.insert(0, path);
+                        self.ui.recent.insert(0, path.clone());
+                        recent_docs::note_system_recent(&path);
                     }
                     Err(e) => self.set_status(e.to_string()),
                 }
@@ -639,9 +642,12 @@ impl SlideApp {
     }
 
     pub fn save(&mut self) {
-        if self.session.active().and_then(|d| d.path.clone()).is_some() {
+        if let Some(path) = self.session.active().and_then(|d| d.path.clone()) {
             match self.session.execute("file.save", &json!({})) {
-                Ok(_) => self.set_status("Saved"),
+                Ok(_) => {
+                    self.set_status("Saved");
+                    recent_docs::note_system_recent(&path);
+                }
                 Err(e) => self.set_status(e.to_string()),
             }
         } else {
