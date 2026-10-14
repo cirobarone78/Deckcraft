@@ -29,7 +29,7 @@ PowerPoint opens and saves; Viewer = opens only).
 | PNG / JPEG slide images | export | n/a | yes (`file.export`, `deckcraft-cli render`) | Matches the editor's renderer | render tests |
 | TIFF / BMP / GIF slide images | export | n/a | no | Easy (the `image` crate writes them) | none |
 | Animated GIF of the deck | export | n/a | no | | none |
-| MP4 / MOV video of the deck | export | n/a | no | Needs timeline render + H.264 encode | none |
+| MP4 / MOV video of the deck | export | n/a | yes | `file.export` mp4/mov: transitions then each slide for its timing, 480p–4K, own H.264 encoder (intra + skip); in-slide animations on the show timeline; sound (media, narration, transition sounds) as AAC or PCM in .mov; video clips show their poster frame | none |
 | Print | yes | n/a | no | PR #66 (browser) open | none |
 
 ## Pictures and media inside decks

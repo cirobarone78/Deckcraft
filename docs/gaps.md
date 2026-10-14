@@ -115,11 +115,13 @@ Detail in [file-format-parity.md](file-format-parity.md).
 - **Impact:** handouts and speaker notes are printed in many workplaces.
 - **Estimate:** 5–8 h (print through the PDF path and each OS's print dialog). **Beta blocker.**
 
-### No video or animated GIF export
-- **Evidence:** checklist row missing; PowerPoint exports MP4/MOV and animated GIF.
-- **Impact:** sharing a talk as a video is a common request.
-- **Estimate:** 10–16 h (render the timeline frame by frame; an H.264 encoder is the hard part,
-  FilmCraft has one to copy).
+### No animated GIF export; video clips are stills in exported video
+- **Evidence:** `file.export` writes MP4/MOV with each transition, the in-slide animations played on
+  the slide-show timeline (`secondsPerClick` pause before each click), and a sound track (embedded
+  audio, narration clips, transition sounds) as AAC (`crates/aac`, ported from FilmCraft) or 16-bit
+  PCM in .mov. Video clips show only their poster frame, and animated GIF export is PR #177.
+- **Impact:** decks with embedded video lose that motion in the exported video.
+- **Estimate:** 3–5 h (decode clip frames into the render, an Export dialog page).
 
 ### Embedded fonts aren't read or written
 - **Evidence:** no `p:embeddedFontLst` handling in `crates/pptx`.
