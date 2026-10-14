@@ -10,6 +10,8 @@
 pub mod cmd;
 pub mod connect;
 pub mod fonts;
+#[cfg(not(target_arch = "wasm32"))]
+pub mod fsx;
 pub mod guard;
 pub mod keys;
 pub mod links;

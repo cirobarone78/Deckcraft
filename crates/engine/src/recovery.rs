@@ -29,6 +29,15 @@ fn files(dir: &Path, uid: u64) -> (PathBuf, PathBuf) {
     (dir.join(format!("{uid}.deckcraft")), dir.join(format!("{uid}.json")))
 }
 
+#[cfg(not(target_arch = "wasm32"))]
+fn write(p: &Path, bytes: &[u8]) -> Result<()> {
+    crate::fsx::write_atomic(p, bytes)
+}
+#[cfg(target_arch = "wasm32")]
+fn write(p: &Path, bytes: &[u8]) -> Result<()> {
+    std::fs::write(p, bytes).map_err(|e| EngineError::Other(format!("{}: {e}", p.display())))
+}
+
 fn now_secs() -> u64 {
     #[cfg(not(target_arch = "wasm32"))]
     {
@@ -52,21 +61,32 @@ pub fn discard(dir: &Path, uid: u64) {
 pub fn save(s: &Session, dir: &Path) -> Result<usize> {
     std::fs::create_dir_all(dir).map_err(|e| EngineError::Other(format!("{}: {e}", dir.display())))?;
     let mut n = 0;
+    // One presentation that fails to write (too big for the disk, say) doesn't stop the rest.
+    let mut first_err = None;
     for d in s.documents() {
         if !d.is_dirty() {
             discard(dir, d.uid);
             continue;
         }
         let (doc, meta) = files(dir, d.uid);
-        let bytes = deckcraft_format::save(&d.doc).map_err(|e| EngineError::Other(e.to_string()))?;
-        // Write then rename, so a crash mid-write never leaves a torn file.
-        let tmp = doc.with_extension("tmp");
-        std::fs::write(&tmp, &bytes).and_then(|_| std::fs::rename(&tmp, &doc)).map_err(|e| EngineError::Other(format!("{}: {e}", doc.display())))?;
-        let m = json!({"path": d.path, "title": d.title(), "saved": now_secs()});
-        std::fs::write(&meta, m.to_string()).map_err(|e| EngineError::Other(format!("{}: {e}", meta.display())))?;
-        n += 1;
+        let written = deckcraft_format::save(&d.doc).map_err(|e| EngineError::Other(e.to_string())).and_then(|bytes| {
+            // Each file whole or not at all, flushed to the disk.
+            write(&doc, &bytes)?;
+            let m = json!({"path": d.path, "title": d.title(), "saved": now_secs()});
+            write(&meta, m.to_string().as_bytes())
+        });
+        match written {
+            Ok(()) => n += 1,
+            Err(e) => {
+                log::warn!("AutoRecover: {e}");
+                first_err.get_or_insert(e);
+            }
+        }
     }
-    Ok(n)
+    match first_err {
+        Some(e) if n == 0 => Err(e),
+        _ => Ok(n),
+    }
 }
 
 /// Entries in `dir`: (uid, metadata).
