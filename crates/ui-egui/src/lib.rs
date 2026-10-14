@@ -279,6 +279,21 @@ impl SlideApp {
         self.status = Some((msg.into(), now_ms()));
     }
 
+    /// Show a failed command in the status bar — unless the password dialog is up, in which case
+    /// the message belongs under its field: a rejected password is the answer to the prompt the
+    /// user is looking at, and a prompt that has just opened *is* the error.
+    fn report_error(&mut self, e: String) {
+        if let Some(d) = self.dialog.as_mut().filter(|d| d.id == "password") {
+            let name = d.params.get("name").and_then(Value::as_str).unwrap_or_default().to_string();
+            if dialogs::password_rejected(&name, &e) {
+                d.fields.insert("error".into(), dialogs::INCORRECT_PASSWORD.into());
+                d.fields.remove("focused");
+            }
+            return;
+        }
+        self.set_status(e);
+    }
+
     /// Run a command by id (UI commands here, everything else in the engine). Errors show in the
     /// status bar and are returned.
     pub fn run(&mut self, id: &str, params: Value) -> Result<Value, String> {
@@ -287,10 +302,24 @@ impl SlideApp {
         } else {
             self.session.execute(id, &params).map_err(|e| e.to_string())
         };
-        if let Err(e) = &r {
-            self.set_status(e.clone());
-        }
         self.drain_requests();
+        if let Err(e) = &r {
+            self.report_error(e.clone());
+        } else {
+            // A successful open has answered the password prompt: dismiss it rather than leaving a
+            // stale dialog over the deck that just opened.
+            if matches!(id, "file.open" | "file.openBytes") && self.dialog.as_ref().is_some_and(|d| d.id == "password") {
+                self.dialog = None;
+            }
+            if id == "file.open"
+                && let Some(path) = params.get("path").and_then(Value::as_str)
+            {
+                self.ui.recent.retain(|p| p != path);
+                self.ui.recent.insert(0, path.to_string());
+                self.ui.recent.truncate(12);
+                self.ui.view = ViewMode::Normal;
+            }
+        }
         r
     }
 
@@ -572,7 +601,12 @@ impl SlideApp {
     }
 
     pub fn open_path(&mut self, path: &str) -> Result<(), String> {
-        self.session.execute("file.open", &json!({"path": path})).map_err(|e| e.to_string())?;
+        let r = self.session.execute("file.open", &json!({"path": path})).map_err(|e| e.to_string());
+        self.drain_requests();
+        if let Err(e) = r {
+            self.report_error(e.clone());
+            return Err(e);
+        }
         self.ui.recent.retain(|p| p != path);
         self.ui.recent.insert(0, path.to_string());
         self.ui.recent.truncate(12);
@@ -712,8 +746,10 @@ impl SlideApp {
         if self.session.active().is_none() && cmd != "file.openBytes" {
             let _ = self.session.execute("file.new", &json!({}));
         }
-        if let Err(e) = self.session.execute(cmd, &p) {
-            self.set_status(e.to_string());
+        let r = self.session.execute(cmd, &p);
+        self.drain_requests();
+        if let Err(e) = r {
+            self.report_error(e.to_string());
         }
     }
 
@@ -944,8 +980,13 @@ impl SlideApp {
         self.keyboard(&ctx);
         self.sync_backstage();
         ribbon::title_bar(self, ui);
-        if self.backstage.is_none() && self.session.active().is_some() {
+        let editing = self.backstage.is_none() && self.session.active().is_some();
+        if editing {
             ribbon::show(self, ui);
+        }
+        if editing || self.status.is_some() {
+            // The start screen normally has no status bar, so draw it there while there is a
+            // message to show: a failed Open on the start screen has nowhere else to be seen.
             status::status_bar(self, ui);
         }
         egui::CentralPanel::default().frame(egui::Frame::NONE.fill(t.chrome)).show(ui, |ui| {
@@ -1407,5 +1448,86 @@ mod tests {
         let n = app.textures.canvas_renders;
         harness.run_steps(3);
         assert_eq!(harness.state().textures.canvas_renders, n, "an unchanged slide isn't rendered again");
+    }
+
+    /// An encrypted package from the pptx crate's fixtures (see its `make.py`).
+    const ENCRYPTED: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/../pptx/tests/fixtures/standard-aes128-sha1.pptx");
+    const PASSWORD: &str = "DeckCraft-Test-Passw0rd!";
+
+    fn harness() -> egui_kittest::Harness<'static, SlideApp> {
+        let mut h = egui_kittest::Harness::builder().with_size(egui::vec2(1200.0, 800.0)).build_ui_state(
+            |ui, app: &mut SlideApp| {
+                app.logic(ui.ctx());
+                app.ui(ui);
+            },
+            SlideApp::new(Session::new(), Services::default()),
+        );
+        h.run_steps(2);
+        h
+    }
+
+    /// Opening a password-protected deck asks for the password, a rejected password keeps the
+    /// dialog (and the text the user typed), and the right one opens the deck.
+    #[test]
+    fn opening_an_encrypted_deck_prompts_for_its_password() {
+        let mut h = harness();
+        assert!(h.state_mut().open_path(ENCRYPTED).is_err(), "an encrypted deck cannot open unprompted");
+        h.run_steps(2);
+
+        let d = h.state().dialog.as_ref().expect("the password dialog is open");
+        assert_eq!(d.id, "password");
+        assert_eq!(d.params.get("path").and_then(Value::as_str), Some(ENCRYPTED));
+        assert_eq!(d.params.get("name").and_then(Value::as_str), Some(ENCRYPTED));
+        assert!(h.state().session.documents().is_empty(), "nothing is opened yet");
+        // The prompt is the message: it must not also land in the status bar behind it.
+        assert!(h.state().status.is_none(), "the prompt is not an error to report");
+
+        // A wrong password keeps the dialog, keeps the typed text and explains itself.
+        let err = h.state_mut().run("file.open", json!({"path": ENCRYPTED, "password": "nope"})).unwrap_err();
+        h.run_steps(2);
+        let d = h.state().dialog.as_ref().expect("the dialog stays open after a bad password");
+        assert_eq!(d.id, "password");
+        assert_eq!(d.fields.get("error").map(String::as_str), Some("Incorrect password. Please try again."), "{err}");
+        assert!(h.state().session.documents().is_empty());
+
+        // The right password opens it and closes the dialog.
+        h.state_mut().run("file.open", json!({"path": ENCRYPTED, "password": PASSWORD})).unwrap();
+        h.run_steps(2);
+        assert!(h.state().dialog.is_none(), "the dialog closes once the deck opens");
+        let doc = h.state().session.active().expect("the deck opened");
+        assert_eq!(doc.doc.slides.len(), 3);
+        assert_eq!(doc.doc.slides[0].title(), "Encrypted fixture");
+        assert_eq!(doc.path.as_deref(), Some(ENCRYPTED), "an opened deck remembers where it came from");
+        // DeckCraft cannot save it back encrypted, so the user is told rather than surprised.
+        let (status, _) = h.state().status.clone().expect("the save caveat is reported");
+        assert!(status.contains("can't encrypt on save"), "{status}");
+    }
+
+    /// A deck that is not encrypted is not made to look like one: a legacy `.ppt` (an OLE compound
+    /// file without encryption streams) reports its own reason instead of asking for a password.
+    #[test]
+    fn a_legacy_ppt_is_not_mistaken_for_an_encrypted_deck() {
+        let mut h = harness();
+        let mut bytes = vec![0xD0u8, 0xCF, 0x11, 0xE0, 0xA1, 0xB1, 0x1A, 0xE1];
+        bytes.resize(4096, 0);
+        let data = deckcraft_engine::cmd::base64_encode(&bytes);
+        h.state_mut().run("file.openBytes", json!({"name": "lecture.ppt", "data": data})).expect_err("a legacy .ppt is still unsupported");
+        h.run_steps(2);
+        assert!(h.state().dialog.is_none(), "a legacy .ppt must not prompt for a password");
+        let (msg, _) = h.state().status.clone().expect("the failure is reported");
+        assert!(msg.contains("legacy binary PowerPoint"), "{msg}");
+    }
+
+    /// The password dialog needs no real file: opening data always shows it and the retry message
+    /// belongs to the dialog rather than the status bar.
+    #[test]
+    fn the_password_error_belongs_to_the_dialog() {
+        let mut h = harness();
+        let bytes = std::fs::read(ENCRYPTED).expect("the fixture");
+        let data = deckcraft_engine::cmd::base64_encode(&bytes);
+        h.state_mut().run("file.openBytes", json!({"name": "secret.pptx", "data": data})).expect_err("a password is required");
+        h.run_steps(2);
+        assert_eq!(h.state().dialog.as_ref().map(|d| d.id.as_str()), Some("password"));
+        assert!(h.state().status.is_none(), "asking for a password is not an error");
     }
 }

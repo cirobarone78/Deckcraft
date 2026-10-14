@@ -835,3 +835,70 @@ fn slide_ranges_parse_like_powerpoints_print_box() {
     let opts = cmd::file::pdf_options(&json!({"slides": [0, 7, 1]}), 2).unwrap();
     assert_eq!(opts.slides, Some(vec![0, 1]), "indices past the end are dropped");
 }
+
+/// An encrypted package from `crates/pptx/tests/fixtures` (see its `make.py`).
+const ENCRYPTED_FIXTURE: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/../pptx/tests/fixtures/standard-aes128-sha1.pptx");
+/// The password that fixture was encrypted with.
+const PASSWORD: &str = "DeckCraft-Test-Passw0rd!";
+
+fn encrypted_bytes() -> Vec<u8> {
+    std::fs::read(ENCRYPTED_FIXTURE).expect("the encrypted fixture")
+}
+
+#[test]
+fn opening_an_encrypted_file_asks_for_a_password() {
+    let mut s = session();
+    let data = cmd::base64_encode(&encrypted_bytes());
+    let err = s.execute("file.openBytes", &json!({"name": "secret.pptx", "data": data})).unwrap_err();
+    assert!(matches!(err, EngineError::PasswordRequired(_)), "{err}");
+    assert_eq!(s.ui_requests, vec![UiRequest::Dialog { id: "password".into(), params: json!({"name": "secret.pptx", "data": data}) }]);
+
+    // And the same by path, so the File ▸ Open route prompts too.
+    let mut s = session();
+    let err = s.execute("file.open", &json!({"path": ENCRYPTED_FIXTURE})).unwrap_err();
+    assert!(matches!(err, EngineError::PasswordRequired(_)), "{err}");
+    assert_eq!(
+        s.ui_requests,
+        vec![UiRequest::Dialog { id: "password".into(), params: json!({"name": ENCRYPTED_FIXTURE, "path": ENCRYPTED_FIXTURE}) }]
+    );
+}
+
+#[test]
+fn a_rejected_password_is_reported_without_replacing_the_open_dialog() {
+    let mut s = session();
+    let data = cmd::base64_encode(&encrypted_bytes());
+    let err = s.execute("file.openBytes", &json!({"name": "secret.pptx", "data": data, "password": "wrong"})).unwrap_err();
+    assert!(matches!(err, EngineError::WrongPassword(_)), "{err}");
+    // The open dialog holds the text the user typed: it must not be pushed aside by a new prompt.
+    assert!(s.ui_requests.is_empty(), "{:?}", s.ui_requests);
+}
+
+#[test]
+fn the_right_password_opens_the_presentation() {
+    let mut s = session();
+    let before = s.documents().len();
+    let data = cmd::base64_encode(&encrypted_bytes());
+    s.execute("file.openBytes", &json!({"name": "secret.pptx", "data": data, "password": PASSWORD})).unwrap();
+    assert_eq!(s.documents().len(), before + 1, "the deck is opened as a new document");
+    assert_eq!(s.doc().unwrap().doc.slides.len(), 3);
+    assert_eq!(s.doc().unwrap().doc.slides[0].title(), "Encrypted fixture");
+    // DeckCraft cannot write an encrypted package back, so the user is told before they save.
+    let warned = s.ui_requests.iter().any(|r| matches!(r, UiRequest::Message { text } if text.contains("can't encrypt on save")));
+    assert!(warned, "opening a protected deck should warn about saving: {:?}", s.ui_requests);
+    assert!(!s.ui_requests.iter().any(|r| matches!(r, UiRequest::Dialog { .. })), "no further prompt is needed");
+}
+
+#[test]
+fn a_legacy_compound_file_is_unsupported_and_not_a_password_prompt() {
+    // A legacy binary `.ppt` is an OLE compound file too, but carries no encryption streams.
+    let mut bytes = vec![0xD0, 0xCF, 0x11, 0xE0, 0xA1, 0xB1, 0x1A, 0xE1];
+    bytes.resize(4096, 0);
+    let res = cmd::file::open_presentation("legacy.ppt", &bytes);
+    assert!(matches!(res, Err(EngineError::Other(_))), "{res:?}");
+
+    let mut s = session();
+    let data = cmd::base64_encode(&bytes);
+    let err = s.execute("file.openBytes", &json!({"name": "legacy.ppt", "data": data})).unwrap_err();
+    assert!(matches!(err, EngineError::Other(_)), "{err}");
+    assert!(s.ui_requests.is_empty(), "a legacy file must not ask for a password");
+}

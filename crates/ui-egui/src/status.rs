@@ -8,11 +8,27 @@ use crate::icons::{self, Icon};
 use crate::theme::{self, Tokens};
 use crate::{SlideApp, ViewMode};
 
+/// The transient message. It is drawn wherever the bar is drawn, document or not: on the start
+/// screen a failed Open has nowhere else to report itself, and silence reads as "nothing happened".
+fn message(app: &mut SlideApp, ui: &mut Ui, x: f32, y: f32) {
+    let Some((msg, at)) = app.status.clone() else { return };
+    if crate::now_ms() - at < 6000.0 {
+        let t = Tokens::get(ui.ctx());
+        ui.painter().text(pos2(x, y), Align2::LEFT_CENTER, &msg, theme::font(12.0), t.accent);
+        ui.ctx().request_repaint_after(std::time::Duration::from_millis(500));
+    } else {
+        app.status = None;
+    }
+}
+
 pub fn status_bar(app: &mut SlideApp, ui: &mut Ui) {
     let t = Tokens::get(ui.ctx());
     egui::Panel::bottom("status").exact_size(28.0).frame(egui::Frame::NONE.fill(t.chrome)).show(ui, |ui| {
         let rect = ui.max_rect();
-        let Some(st) = app.session.active() else { return };
+        let Some(st) = app.session.active() else {
+            message(app, ui, rect.min.x + 14.0, rect.center().y);
+            return;
+        };
         let n = st.doc.slides.len();
         let left = match st.selection.target {
             deckcraft_engine::Target::Slides => format!("Slide {} of {}", (st.selection.slide + 1).min(n.max(1)), n),
@@ -21,15 +37,7 @@ pub fn status_bar(app: &mut SlideApp, ui: &mut Ui) {
         let p = ui.painter();
         p.text(pos2(rect.min.x + 14.0, rect.center().y), Align2::LEFT_CENTER, &left, theme::font(12.0), t.text_dim);
         p.text(pos2(rect.min.x + 120.0, rect.center().y), Align2::LEFT_CENTER, "English (United States)", theme::font(12.0), t.text_dim);
-        // Transient status message.
-        if let Some((msg, at)) = app.status.clone() {
-            if crate::now_ms() - at < 6000.0 {
-                p.text(pos2(rect.min.x + 290.0, rect.center().y), Align2::LEFT_CENTER, &msg, theme::font(12.0), t.accent);
-                ui.ctx().request_repaint_after(std::time::Duration::from_millis(500));
-            } else {
-                app.status = None;
-            }
-        }
+        message(app, ui, rect.min.x + 290.0, rect.center().y);
         let mut right = ui.new_child(
             egui::UiBuilder::new()
                 .max_rect(Rect::from_min_max(pos2(rect.max.x - 560.0, rect.min.y), pos2(rect.max.x - 8.0, rect.max.y)))

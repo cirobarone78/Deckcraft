@@ -55,6 +55,7 @@ fn title(id: &str) -> &'static str {
         "chartData" => "Chart Data",
         "trim" => "Trim Media",
         "smartart" => "Choose a SmartArt Graphic",
+        "password" => "Password",
         "quit" => "DeckCraft",
         _ => "DeckCraft",
     }
@@ -95,6 +96,21 @@ fn buttons(ui: &mut Ui, ok_label: &str) -> (bool, bool) {
         }
     });
     (ok, cancel)
+}
+
+/// The message shown under a rejected password field.
+pub(crate) const INCORRECT_PASSWORD: &str = "Incorrect password. Please try again.";
+
+/// Was this failure a rejected password? The engine reports one as `<name>: incorrect password`;
+/// any other failure (an unreadable file, a corrupt container) is not the password's fault.
+pub(crate) fn password_rejected(name: &str, err: &str) -> bool {
+    err.strip_prefix(name).and_then(|rest| rest.strip_prefix(": ")) == Some("incorrect password")
+}
+
+/// The message to show under a rejected password field: our own wording for a bad password, the
+/// engine's own for anything else.
+fn rejected_password(name: &str, err: &str) -> String {
+    if password_rejected(name, err) { INCORRECT_PASSWORD.into() } else { err.to_string() }
 }
 
 fn field(ui: &mut Ui, d: &mut Dialog, label: &str, key: &str, default: &str) {
@@ -381,6 +397,49 @@ fn body(app: &mut SlideApp, ui: &mut Ui, d: &mut Dialog) -> bool {
                 }
             }
             ok || cancel
+        }
+        "password" => {
+            let name = d.params.get("name").and_then(Value::as_str).unwrap_or("Presentation").to_string();
+            let file_label = std::path::Path::new(&name).file_name().map(|n| n.to_string_lossy().to_string()).unwrap_or_else(|| name.clone());
+            ui.label(format!("“{file_label}” is protected by a password."));
+            ui.add_space(4.0);
+            let mut pwd = d.get("password", "");
+            ui.horizontal(|ui| {
+                ui.add_sized(vec2(80.0, 20.0), egui::Label::new("Password:"));
+                let resp = ui.add(egui::TextEdit::singleline(&mut pwd).password(true).desired_width(200.0));
+                if !d.fields.contains_key("focused") {
+                    resp.request_focus();
+                    d.fields.insert("focused".into(), "1".into());
+                }
+            });
+            d.fields.insert("password".into(), pwd.clone());
+
+            if let Some(err) = d.fields.get("error").cloned() {
+                ui.add_space(4.0);
+                ui.label(egui::RichText::new(err).color(Color32::from_rgb(0xD9, 0x38, 0x3A)));
+            }
+
+            let (ok, cancel) = buttons(ui, "Open");
+            if ok {
+                let path = d.params.get("path").and_then(Value::as_str).map(String::from);
+                let data = d.params.get("data").and_then(Value::as_str).map(String::from);
+                let res = match (path, data) {
+                    (Some(path), _) => app.run("file.open", json!({"path": path, "password": pwd})),
+                    (None, Some(data)) => app.run("file.openBytes", json!({"name": name, "data": data, "password": pwd})),
+                    (None, None) => Err("missing file path or data".into()),
+                };
+                match res {
+                    Ok(_) => return true,
+                    Err(e) => {
+                        // A rejected password is the expected retry; anything else (an unreadable
+                        // file, a corrupt container) is shown as the engine reported it.
+                        d.fields.insert("error".into(), rejected_password(&name, &e));
+                        d.fields.remove("focused");
+                        return false;
+                    }
+                }
+            }
+            cancel
         }
         "paragraph" => {
             field(ui, d, "Before text (in):", "left", "0");
