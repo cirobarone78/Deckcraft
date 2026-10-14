@@ -1,6 +1,6 @@
 # UI parity with PowerPoint
 
-> **Last reviewed:** 2026-10-14 · **Last updated:** 2026-10-14 · **Change:** minor (Insert › Icons is a Lucide stroke gallery; ribbon icons stay original drawings; previous: File tab / Backstage, #76) · **Target:** Microsoft PowerPoint for Mac 16.113 (Microsoft 365)
+> **Last reviewed:** 2026-10-14 · **Last updated:** 2026-10-14 · **Change:** minor (Insert › Icons is the full Lucide set, with colour, fill and convert to shapes; ribbon icons stay original drawings; previous: minor, a smaller Lucide stroke gallery) · **Target:** Microsoft PowerPoint for Mac 16.113 (Microsoft 365)
 
 > **Last reviewed:** 2026-10-12 · **Last updated:** 2026-10-12 · **Change:** minor (text editing keys observed in PowerPoint for Windows, #268) · **Target:** Microsoft PowerPoint for Mac 16.113 (Microsoft 365)
 
@@ -128,8 +128,9 @@ Alt+Shift+arrows in text are handled elsewhere (#78, #93).
 
 Colours, spacing, ribbon card and tab geometry follow the observations in
 `plan/powerpoint/01-observed-ui.md`; the ribbon and menu icons are original (~240, drawn in code)
-and must not imitate Microsoft's. Insert › Icons places Lucide stroke icons (ISC, release 1.56.0)
-on the slide as shapes. No pixel comparison against PowerPoint screenshots has been run since
+and must not imitate Microsoft's. Insert › Icons places the Lucide 1.56.0 set (ISC) on the slide
+as shapes, with a colour, an optional fill and convert to a shape group. No pixel comparison
+against PowerPoint screenshots has been run since
 2026-10-07. Cross-app icon consistency is open (#73, #56).
 
 ## Estimates
@@ -149,6 +150,7 @@ on the slide as shapes. No pixel comparison against PowerPoint screenshots has b
 
 | Date | Change | Summary |
 |---|---|---|
+| 2026-10-14 | minor | Insert › Icons grows to the full Lucide 1.56.0 set, with colour, fill and convert to shapes. Ribbon chrome stays original drawings |
 | 2026-10-14 | minor | Insert › Icons is a searchable gallery of Lucide stroke icons inserted as shapes. Ribbon chrome stays original drawings |
 | 2026-10-12 | minor | File tab (Backstage) observed in PowerPoint for Windows and matched (#76); the start screen is File › Home |
 | 2026-10-12 | minor | Off-slide objects drawn and editable around the slide in Normal view (#270) |
