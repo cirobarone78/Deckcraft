@@ -73,6 +73,11 @@ pub fn open_presentation(name: &str, bytes: &[u8]) -> Result<Presentation> {
         deckcraft_format::repair(&mut p);
         return Ok(p);
     }
+    if deckcraft_pptx::sniff_odp(bytes) {
+        let mut p = deckcraft_pptx::import_odp(bytes).map_err(|e| EngineError::Other(e.to_string()))?;
+        deckcraft_format::repair(&mut p);
+        return Ok(p);
+    }
     let lower = name.to_ascii_lowercase();
     if lower.ends_with(".txt") || lower.ends_with(".md") {
         let text = String::from_utf8_lossy(bytes);
