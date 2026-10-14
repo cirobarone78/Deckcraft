@@ -446,7 +446,7 @@ fn overlays(app: &mut SlideApp, ui: &Ui, painter: &egui::Painter, xf: Xf, t: &To
             };
             for (q, g) in [p0, p1].into_iter().zip(glued) {
                 // Glued ends are filled with the accent, like attached connector ends.
-                let fill = if g { t.accent } else { t.handle_fill };
+                let fill = if g { t.editor_accent } else { t.handle_fill };
                 painter.circle(q, 4.5, fill, Stroke::new(1.0, if g { t.handle_fill } else { t.handle_stroke }));
             }
             continue;
@@ -527,7 +527,7 @@ fn overlays(app: &mut SlideApp, ui: &Ui, painter: &egui::Painter, xf: Xf, t: &To
         let (w, h) = (tb.cols.get(c).copied().unwrap_or(0.0), heights.get(r).copied().unwrap_or(0.0));
         let a = x.affine();
         let pts = [Point::new(x0, y0), Point::new(x0 + w, y0), Point::new(x0 + w, y0 + h), Point::new(x0, y0 + h)].map(|q| xf.to_screen(a * q));
-        poly(painter, pts, Stroke::new(2.0, t.accent));
+        poly(painter, pts, Stroke::new(2.0, t.editor_accent));
     }
     // Smart guides, marquee, previews.
     for g in &app.session.tool.guides {
@@ -563,11 +563,11 @@ fn overlays(app: &mut SlideApp, ui: &Ui, painter: &egui::Painter, xf: Xf, t: &To
         } else {
             path.clone()
         };
-        painter.add(egui::Shape::line(pts.iter().map(|q| xf.to_screen(*q)).collect(), Stroke::new(1.5, t.accent)));
+        painter.add(egui::Shape::line(pts.iter().map(|q| xf.to_screen(*q)).collect(), Stroke::new(1.5, t.editor_accent)));
         if app.session.tool.path_closing
             && let Some(s0) = path.first()
         {
-            painter.circle(xf.to_screen(*s0), 5.0, t.accent, Stroke::new(1.5, t.handle_fill));
+            painter.circle(xf.to_screen(*s0), 5.0, t.editor_accent, Stroke::new(1.5, t.handle_fill));
         }
     }
     // Connection sites of the shape under a connector end, and the site it would glue to.
@@ -576,7 +576,7 @@ fn overlays(app: &mut SlideApp, ui: &Ui, painter: &egui::Painter, xf: Xf, t: &To
         painter.circle(c, 3.5, t.handle_fill, Stroke::new(1.0, t.handle_stroke));
     }
     if let Some(g) = app.session.tool.glue {
-        painter.circle(xf.to_screen(g), 5.0, t.accent, Stroke::new(1.5, t.handle_fill));
+        painter.circle(xf.to_screen(g), 5.0, t.editor_accent, Stroke::new(1.5, t.handle_fill));
     }
     if app.session.tool.ink_preview.len() > 1
         && let ToolKind::Ink { color, width, mode } = &app.session.tool.kind
@@ -610,14 +610,14 @@ fn draw_preview(app: &SlideApp, p: &egui::Painter, xf: Xf, x: Xfrm, t: &Tokens) 
     };
     if deckcraft_geom::preset::is_line_like(&preset) {
         let a = x.affine();
-        p.line_segment([xf.to_screen(a * Point::new(0.0, 0.0)), xf.to_screen(a * Point::new(x.w, x.h))], Stroke::new(1.5, t.accent));
+        p.line_segment([xf.to_screen(a * Point::new(0.0, 0.0)), xf.to_screen(a * Point::new(x.w, x.h))], Stroke::new(1.5, t.editor_accent));
         return;
     }
     let r = Rect::from_two_pos(xf.to_screen(Point::new(x.x, x.y)), xf.to_screen(Point::new(x.x + x.w, x.y + x.h)));
     if r.width() < 1.0 || r.height() < 1.0 {
         return;
     }
-    crate::ribbon::paint_preset(p, r, &preset, t.accent.gamma_multiply(0.25), t.accent);
+    crate::ribbon::paint_preset(p, r, &preset, t.editor_accent.gamma_multiply(0.25), t.editor_accent);
 }
 
 fn context_menu(app: &mut SlideApp, resp: &egui::Response) {

@@ -31,9 +31,11 @@ pub struct Tokens {
     pub hover: Color32,
     pub pressed: Color32,
     pub selected: Color32,
-    /// DeckCraft's accent (tabs underline, selected thumbnail, primary buttons).
+    /// Shared interface accent (tabs underline, selected thumbnail, primary buttons).
     pub accent: Color32,
     pub accent_text: Color32,
+    /// DeckCraft's slide editing marks, distinct from the interface accent.
+    pub editor_accent: Color32,
     pub contextual: Color32,
     pub selection: Color32,
     pub handle_fill: Color32,
@@ -63,6 +65,7 @@ impl Tokens {
             selected: Color32::from_rgb(0xE6, 0xE6, 0xE6),
             accent: Color32::from_rgb(0xD9, 0x5A, 0x1A),
             accent_text: Color32::WHITE,
+            editor_accent: Color32::from_rgb(0xD9, 0x5A, 0x1A),
             contextual: Color32::from_rgb(0xC2, 0x4E, 0x14),
             selection: Color32::from_rgb(0x7A, 0x7A, 0x7A),
             handle_fill: Color32::WHITE,
@@ -93,6 +96,7 @@ impl Tokens {
             selected: suite.selection,
             accent: suite.accent,
             accent_text: suite.on_accent,
+            editor_accent: Color32::from_rgb(0xF2, 0x6B, 0x1D),
             contextual: Color32::from_rgb(0xF5, 0x8A, 0x4B),
             selection: Color32::from_rgb(0xAA, 0xAA, 0xAA),
             handle_fill: Color32::WHITE,
@@ -262,6 +266,7 @@ mod tests {
         }
         // Editing marks belong to the slide, independently of UI row selection.
         assert_eq!(dark.contextual, egui::Color32::from_rgb(0xf5, 0x8a, 0x4b));
+        assert_eq!(dark.editor_accent, egui::Color32::from_rgb(0xf2, 0x6b, 0x1d));
         assert_eq!(dark.selection, egui::Color32::from_rgb(0xaa, 0xaa, 0xaa));
         assert_eq!(dark.handle_fill, egui::Color32::WHITE);
         assert_eq!(dark.handle_stroke, egui::Color32::from_rgb(0x6e, 0x6e, 0x6e));
@@ -276,6 +281,7 @@ mod tests {
         assert_eq!(visuals.widgets.hovered.bg_stroke, egui::Stroke::new(1.0, suite.focus));
         assert_eq!(visuals.widgets.inactive.bg_stroke, egui::Stroke::NONE);
         let light = super::Tokens::light();
+        assert_eq!(light.editor_accent, light.accent);
         super::apply(&ctx, &light);
         let visuals = ctx.global_style().visuals.clone();
         assert_eq!(visuals.selection.bg_fill, light.accent.gamma_multiply(0.85));
