@@ -12,6 +12,7 @@ pub mod control;
 pub mod credits;
 pub mod dialogs;
 pub mod fillui;
+pub mod i18n;
 pub mod icons;
 pub mod media;
 pub mod menus;
@@ -102,6 +103,8 @@ pub struct UiState {
     /// Format Shape pane: tab (`fill`, `effects`, `size`, `picture`, `text`).
     pub format_tab: String,
     pub grayscale: bool,
+    /// Interface language. `system` follows the OS; missing older preferences stay on System.
+    pub language: i18n::LanguageChoice,
 }
 
 impl Default for UiState {
@@ -127,6 +130,7 @@ impl Default for UiState {
             ui_scale: 1.0,
             format_tab: "fill".into(),
             grayscale: false,
+            language: i18n::LanguageChoice::System,
         }
     }
 }
@@ -161,6 +165,7 @@ pub const UI_COMMANDS: &[(&str, &str, Option<&str>, &str)] = &[
     ("app.about", "About DeckCraft", None, "{}"),
     ("app.palette", "Command Palette", Some("Cmd+Shift+P"), "{}"),
     ("app.preferences", "Preferences…", Some("Cmd+,"), "{}"),
+    ("app.language", "Interface Language", None, "{language: system|en|vi}"),
     ("app.openDialog", "Open…", None, "{purpose?}"),
     ("app.insertPictureDialog", "Picture from File…", None, "{}"),
     ("app.insertAudioDialog", "Audio from File…", None, "{}"),
@@ -443,6 +448,11 @@ impl SlideApp {
         }
     }
 
+    /// The language the shell is drawn in.
+    pub fn lang(&self) -> i18n::Resolved {
+        self.ui.language.resolve(i18n::system_tag().as_deref())
+    }
+
     fn flag(&mut self, params: &Value, cur: bool) -> bool {
         params.get("on").and_then(Value::as_bool).unwrap_or(!cur)
     }
@@ -535,6 +545,13 @@ impl SlideApp {
             "app.about" => self.dialog = Some(dialogs::Dialog::new("about")),
             "app.palette" => self.palette = Some((String::new(), 0)),
             "app.preferences" => self.dialog = Some(dialogs::Dialog::new("preferences")),
+            "app.language" => {
+                let code = p.get("language").and_then(Value::as_str).ok_or("missing `language`")?;
+                let choice = i18n::LanguageChoice::parse(code).ok_or_else(|| format!("unknown language `{code}`; use system, en or vi"))?;
+                self.ui.language = choice;
+                let resolved = choice.resolve(i18n::system_tag().as_deref());
+                return Ok(json!({"language": choice.code(), "resolved": resolved.code()}));
+            }
             "app.openDialog" => self.pick_and_open(),
             "app.insertPictureDialog" => self.pick_and_insert("picture", "insert.picture"),
             "app.insertAudioDialog" => self.pick_and_insert("audio", "insert.audio"),
@@ -1407,5 +1424,43 @@ mod tests {
         let n = app.textures.canvas_renders;
         harness.run_steps(3);
         assert_eq!(harness.state().textures.canvas_renders, n, "an unchanged slide isn't rendered again");
+    }
+
+    /// Vietnamese renames the shell. The ribbon groups stay in English.
+    #[test]
+    fn vietnamese_renames_the_file_tab_and_preferences() {
+        use egui_kittest::kittest::Queryable;
+        let mut harness = egui_kittest::Harness::builder().with_size(egui::vec2(1200.0, 800.0)).build_ui_state(
+            |ui, app: &mut SlideApp| {
+                app.logic(ui.ctx());
+                app.ui(ui);
+            },
+            SlideApp::new(Session::with_new(), Services::default()),
+        );
+        harness.run_steps(2);
+        assert!(harness.query_by_label("File").is_some());
+        harness.state_mut().run("app.language", json!({"language": "vi-VN"})).unwrap();
+        harness.run_steps(2);
+        assert_eq!(harness.state().ui.language, i18n::LanguageChoice::Vi);
+        assert!(harness.query_by_label("Tệp").is_some(), "the File tab follows the language");
+        assert!(harness.query_by_label("Chèn").is_some());
+        assert!(harness.query_by_label("File").is_none());
+        harness.state_mut().run("app.preferences", json!({})).unwrap();
+        harness.run_steps(2);
+        assert!(harness.query_by_label_contains("Ngôn ngữ giao diện").is_some());
+        assert!(harness.query_by_label_contains("Tùy chọn").is_some());
+        let err = harness.state_mut().run("app.language", json!({"language": "tr"})).unwrap_err();
+        assert!(err.contains("vi"), "{err}");
+        assert_eq!(harness.state().ui.language, i18n::LanguageChoice::Vi, "a rejected code leaves the choice");
+        harness.state_mut().run("app.language", json!({"language": "en"})).unwrap();
+        harness.run_steps(2);
+        assert!(harness.query_by_label("File").is_some());
+    }
+
+    #[test]
+    fn an_older_ui_state_without_a_language_stays_on_system() {
+        let ui: UiState = serde_json::from_str(r#"{"tab":"Home"}"#).unwrap();
+        assert_eq!(ui.language, i18n::LanguageChoice::System);
+        assert_eq!(ui.language.resolve(Some("vi-VN")), i18n::Resolved::Vi);
     }
 }
