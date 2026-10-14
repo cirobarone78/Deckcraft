@@ -1041,8 +1041,9 @@ fn insert(app: &mut SlideApp, ui: &mut Ui) {
                 app.session.set_tool(deckcraft_engine::ToolKind::Shape { preset: p.to_string() });
             }
         });
-        let r = big_button(ui, Icon::Icons, "Icons", enabled(app, "shape.insert"));
-        egui::Popup::menu(&r).width(260.0).show(|ui| icon_library(app, ui));
+        let r = big_button(ui, Icon::Icons, "Icons", enabled(app, "insert.icon"));
+        // CloseOnClickOutside: the category pager, swatches and Filled checkbox stay up. A cell calls ui.close().
+        egui::Popup::menu(&r).width(380.0).close_behavior(egui::PopupCloseBehavior::CloseOnClickOutside).show(|ui| icon_library(app, ui));
         big(app, ui, Icon::SmartArt, "SmartArt", "app.dialog", json!({"id": "smartart"}));
         let r = big_button(ui, Icon::Chart, "Chart", enabled(app, "insert.chart"));
         egui::Popup::menu(&r).show(|ui| {
@@ -1122,51 +1123,168 @@ pub fn table_grid_picker(ui: &mut Ui) -> Option<(usize, usize)> {
     if resp.clicked() && hover.0 > 0 { Some(hover) } else { None }
 }
 
-/// A small built-in icon library: our own simple pictograms built from preset shapes.
+/// How many icon cells the gallery draws at once. The library is the full Lucide set; parsing and
+/// laying out every icon in one popup would stall the first open.
+const ICON_PAGE: usize = 96;
+
+/// Lucide stroke icons (Insert › Icons). One category at a time, search across the set, a colour
+/// and an optional fill. A click inserts; the footer recolours or converts the selection.
 fn icon_library(app: &mut SlideApp, ui: &mut Ui) {
     let t = Tokens::get(ui.ctx());
-    let items: [(&str, &str); 24] = [
-        ("star5", "Star"),
-        ("heart", "Heart"),
-        ("lightningBolt", "Lightning"),
-        ("sun", "Sun"),
-        ("moon", "Moon"),
-        ("cloud", "Cloud"),
-        ("smileyFace", "Smile"),
-        ("noSmoking", "Not allowed"),
-        ("mathPlus", "Plus"),
-        ("mathMultiply", "Multiply"),
-        ("mathEqual", "Equals"),
-        ("chevron", "Chevron"),
-        ("rightArrow", "Arrow"),
-        ("quadArrow", "Move"),
-        ("uturnArrow", "Return"),
-        ("flowChartDecision", "Decision"),
-        ("flowChartMagneticDisk", "Database"),
-        ("flowChartDocument", "Document"),
-        ("wedgeRoundRectCallout", "Speech"),
-        ("cloudCallout", "Thought"),
-        ("teardrop", "Pin"),
-        ("donut", "Ring"),
-        ("irregularSeal1", "Burst"),
-        ("ribbon2", "Banner"),
+    let hover = t.hover;
+    let qid = ui.id().with("icon-query");
+    let cid = ui.id().with("icon-cat");
+    let fid = ui.id().with("icon-fill");
+    let sid = ui.id().with("icon-swatch");
+    let mut query = ui.data_mut(|d| d.get_temp::<String>(qid).unwrap_or_default());
+    ui.add(egui::TextEdit::singleline(&mut query).hint_text("Search icons").desired_width(ui.available_width()));
+    let q = query.trim().to_lowercase();
+    ui.data_mut(|d| d.insert_temp(qid, query));
+
+    let cats = deckcraft_engine::icons::categories();
+    let mut cat_i = ui.data_mut(|d| d.get_temp::<usize>(cid).unwrap_or(0));
+    if cats.is_empty() {
+        ui.label("No icons.");
+        return;
+    }
+    if cat_i >= cats.len() {
+        cat_i = 0;
+    }
+    ui.horizontal(|ui| {
+        if ui.button("‹").clicked() {
+            cat_i = if cat_i == 0 { cats.len() - 1 } else { cat_i - 1 };
+        }
+        ui.label(egui::RichText::new(cats[cat_i]).strong());
+        if ui.button("›").clicked() {
+            cat_i = (cat_i + 1) % cats.len();
+        }
+    });
+    ui.data_mut(|d| d.insert_temp(cid, cat_i));
+
+    let scheme = scheme(app);
+    let swatches = [
+        ("tx1", "Text", deckcraft_color::SchemeSlot::Tx1),
+        ("accent1", "Accent 1", deckcraft_color::SchemeSlot::Accent1),
+        ("accent2", "Accent 2", deckcraft_color::SchemeSlot::Accent2),
+        ("accent3", "Accent 3", deckcraft_color::SchemeSlot::Accent3),
+        ("accent4", "Accent 4", deckcraft_color::SchemeSlot::Accent4),
+        ("accent5", "Accent 5", deckcraft_color::SchemeSlot::Accent5),
+        ("accent6", "Accent 6", deckcraft_color::SchemeSlot::Accent6),
     ];
-    ui.horizontal_wrapped(|ui| {
-        for (preset, label) in items {
-            let (r, resp) = ui.allocate_exact_size(vec2(36.0, 36.0), Sense::click());
-            if resp.hovered() {
-                ui.painter().rect_filled(r, CornerRadius::same(4), t.hover);
+    let mut swatch = ui.data_mut(|d| d.get_temp::<String>(sid).unwrap_or_else(|| "tx1".into()));
+    if !swatches.iter().any(|(name, _, _)| *name == swatch) {
+        swatch = "tx1".into();
+    }
+    let mut filled = ui.data_mut(|d| d.get_temp::<bool>(fid).unwrap_or(false));
+    ui.horizontal(|ui| {
+        for (name, label, slot) in swatches {
+            let rgba = scheme.get(slot);
+            let (r, resp) = ui.allocate_exact_size(vec2(18.0, 18.0), Sense::click());
+            ui.painter().rect_filled(r.shrink(2.0), CornerRadius::same(3), Color32::from_rgb(rgba.r, rgba.g, rgba.b));
+            if name == swatch {
+                ui.painter().rect_stroke(r, CornerRadius::same(3), Stroke::new(1.5, t.accent), egui::StrokeKind::Inside);
             }
-            paint_preset(ui.painter(), r.shrink(6.0), preset, t.text, t.text);
             if resp.on_hover_text(label).clicked() {
-                let size = app.session.active().map(|d| d.doc.slide_size).unwrap_or(deckcraft_model::defaults::WIDE);
-                let _ = app.run("shape.insert", json!({"preset": preset, "rect": [size.width / 2.0 - 48.0, size.height / 2.0 - 48.0, 96, 96]}));
-                let _ = app.run("shape.fill", json!({"color": "tx1"}));
-                let _ = app.run("shape.line", json!({"none": true}));
-                ui.close();
+                swatch = name.into();
+            }
+        }
+        ui.checkbox(&mut filled, "Filled");
+    });
+    ui.data_mut(|d| d.insert_temp(sid, swatch.clone()));
+    ui.data_mut(|d| d.insert_temp(fid, filled));
+    let paint = swatches
+        .iter()
+        .find(|(name, _, _)| *name == swatch)
+        .map(|(_, _, slot)| scheme.get(*slot))
+        .unwrap_or(scheme.get(deckcraft_color::SchemeSlot::Tx1));
+    let color = Color32::from_rgb(paint.r, paint.g, paint.b);
+
+    let icons = deckcraft_engine::icons::icons();
+    let cat = cats[cat_i];
+    let pool: Vec<&deckcraft_engine::icons::Icon> = if q.is_empty() {
+        icons.iter().filter(|i| i.category == cat).collect()
+    } else {
+        icons.iter().filter(|i| deckcraft_engine::icons::matches(i, &q)).collect()
+    };
+    if pool.is_empty() {
+        ui.label("No icons match.");
+    } else {
+        if pool.len() > ICON_PAGE {
+            ui.label(egui::RichText::new(format!("Showing {ICON_PAGE} of {}", pool.len())).small().weak());
+        }
+        egui::ScrollArea::vertical().id_salt("icon-scroll").max_height(280.0).show(ui, |ui| {
+            ui.horizontal_wrapped(|ui| {
+                for icon in pool.iter().take(ICON_PAGE) {
+                    icon_cell(app, ui, icon, color, hover, &swatch, filled);
+                }
+            });
+        });
+    }
+
+    let icon_sel = selection_has_icon(app);
+    ui.horizontal(|ui| {
+        if ui.add_enabled(icon_sel, egui::Button::new("Apply to selection")).clicked() {
+            let _ = app.run("insert.iconStyle", json!({"color": swatch, "fill": filled}));
+        }
+        if ui.add_enabled(icon_sel, egui::Button::new("Convert to shapes")).clicked() {
+            let _ = app.run("insert.iconToShapes", json!({}));
+            ui.close();
+        }
+    });
+}
+
+fn selection_has_icon(app: &SlideApp) -> bool {
+    app.session
+        .active()
+        .is_some_and(|st| st.selection.shapes.iter().any(|id| st.shape(*id).is_some_and(|sh| deckcraft_engine::icons::is_icon_geom(&sh.geom))))
+}
+
+fn icon_cell(app: &mut SlideApp, ui: &mut Ui, icon: &deckcraft_engine::icons::Icon, color: Color32, hover: Color32, swatch: &str, filled: bool) {
+    let (r, resp) = ui.allocate_exact_size(vec2(36.0, 36.0), Sense::click());
+    if resp.hovered() {
+        ui.painter().rect_filled(r, CornerRadius::same(4), hover);
+    }
+    paint_icon(ui.painter(), r.shrink(6.0), icon, color, filled);
+    if resp.on_hover_text(icon.label).clicked() {
+        let _ = app.run("insert.icon", json!({"name": icon.name, "color": swatch, "fill": filled}));
+        ui.close();
+    }
+}
+
+/// Stroke a Lucide outline into a gallery cell. Closed pieces take a fill when `filled` is set.
+fn paint_icon(p: &egui::Painter, r: Rect, icon: &deckcraft_engine::icons::Icon, color: Color32, filled: bool) {
+    let Some(mut bp) = deckcraft_engine::icons::outline(icon.name) else { return };
+    let (w, h) = (r.width().max(1.0) as f64, r.height().max(1.0) as f64);
+    bp.apply_affine(deckcraft_geom::Affine::scale_non_uniform(w / deckcraft_engine::icons::VIEW, h / deckcraft_engine::icons::VIEW));
+    let sw = ((r.width() * icon.stroke as f32) / deckcraft_engine::icons::VIEW as f32).clamp(1.0, 3.5);
+    let mut pts: Vec<egui::Pos2> = vec![];
+    let mut polys: Vec<(Vec<egui::Pos2>, bool)> = vec![];
+    kurbo_flatten(&bp, |el| match el {
+        Fl::Move(x, y) => {
+            if pts.len() > 1 {
+                polys.push((std::mem::take(&mut pts), false));
+            }
+            pts.clear();
+            pts.push(pos2(r.min.x + x as f32, r.min.y + y as f32));
+        }
+        Fl::Line(x, y) => pts.push(pos2(r.min.x + x as f32, r.min.y + y as f32)),
+        Fl::Close => {
+            if pts.len() > 1 {
+                polys.push((std::mem::take(&mut pts), true));
             }
         }
     });
+    if pts.len() > 1 {
+        polys.push((pts, false));
+    }
+    for (poly, closed) in polys {
+        p.add(egui::Shape::Path(egui::epaint::PathShape {
+            points: poly,
+            closed,
+            fill: if filled && closed { color } else { Color32::TRANSPARENT },
+            stroke: egui::epaint::PathStroke::new(sw, color),
+        }));
+    }
 }
 
 // ---------- Draw ----------
