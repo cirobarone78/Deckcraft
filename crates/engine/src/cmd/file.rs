@@ -11,10 +11,10 @@ pub fn specs() -> Vec<CommandSpec> {
         cmd!(noundo "file.new", "New Presentation", ["File"], Some("Cmd+N"), "{theme?: name, size?: [w,h] pt, blank?: bool}", always, new),
         cmd!(noundo "file.open", "Open…", ["File"], Some("Cmd+O"), "{path}", always, open),
         cmd!(noundo "file.openBytes", "Open Data", [], None, "{name, data: base64}", always, open_bytes),
-        cmd!(noundo "file.save", "Save", ["File"], Some("Cmd+S"), "{path?, format?: deckcraft|pptx}", has_doc, save),
+        cmd!(noundo "file.save", "Save", ["File"], Some("Cmd+S"), "{path?, format?: pptx|deckcraft}", has_doc, save),
         cmd!(noundo "file.saveAs", "Save As…", ["File"], Some("Cmd+Shift+S"), "{path, format?}", has_doc, save_as),
         cmd!(noundo "file.saveTemplate", "Save as Template…", ["File"], None, "{path}", has_doc, save_as),
-        cmd!(query "file.saveBytes", "Save to Data", [], None, "{format?: deckcraft|pptx} → {data: base64}", has_doc, save_bytes_cmd),
+        cmd!(query "file.saveBytes", "Save to Data", [], None, "{format?: pptx|deckcraft} → {data: base64}", has_doc, save_bytes_cmd),
         cmd!(noundo "file.export", "Export…", ["File"], None, "{path, format: png|jpeg|pptx|deckcraft|outline|pdf, slide?: index, all?: bool, scale?: px per pt; pdf: layout?: slides|notes|handouts, perPage?: 1|2|3|4|6|9, dpi?, slides?: [index] | \"1-3,5\", includeHidden?, textLayer?, frame?}", has_doc, export),
         cmd!(
             query "file.info",
@@ -117,13 +117,13 @@ fn open_bytes(s: &mut Session, p: &Value) -> Result<Value> {
     Ok(json!({"document": i, "missingFonts": s.doc()?.missing_fonts}))
 }
 
-/// Encode the presentation in `format` (`deckcraft`, `pptx`, `outline`).
+/// Encode the presentation in `format` (`pptx`, `deckcraft`, `outline`, `pdf`).
 pub fn save_bytes(doc: &Presentation, format: &str) -> Result<Vec<u8>> {
     match format {
-        "pptx" | "potx" | "ppsx" => deckcraft_pptx::export(doc).map_err(|e| EngineError::Other(e.to_string())),
+        "deckcraft" => deckcraft_format::save(doc).map_err(|e| EngineError::Other(e.to_string())),
         "outline" | "txt" => Ok(deckcraft_format::slides_to_outline(doc).into_bytes()),
         "pdf" => deckcraft_pdf::export(doc, &Default::default()).map_err(|e| EngineError::Other(e.to_string())),
-        _ => deckcraft_format::save(doc).map_err(|e| EngineError::Other(e.to_string())),
+        _ => deckcraft_pptx::export(doc).map_err(|e| EngineError::Other(e.to_string())),
     }
 }
 
@@ -184,8 +184,8 @@ pub fn pdf_bytes(doc: &Presentation, p: &Value) -> Result<Vec<u8>> {
 
 pub fn format_for_path(path: &str) -> &'static str {
     let l = path.to_ascii_lowercase();
-    if l.ends_with(".pptx") || l.ends_with(".potx") || l.ends_with(".ppsx") {
-        "pptx"
+    if l.ends_with(".deckcraft") {
+        "deckcraft"
     } else if l.ends_with(".png") {
         "png"
     } else if l.ends_with(".jpg") || l.ends_with(".jpeg") {
@@ -195,7 +195,7 @@ pub fn format_for_path(path: &str) -> &'static str {
     } else if l.ends_with(".txt") || l.ends_with(".md") {
         "outline"
     } else {
-        "deckcraft"
+        "pptx"
     }
 }
 
@@ -247,7 +247,7 @@ fn save_as(s: &mut Session, p: &Value) -> Result<Value> {
 }
 
 fn save_bytes_cmd(s: &mut Session, p: &Value) -> Result<Value> {
-    let format = str_param(p, "format").unwrap_or("deckcraft");
+    let format = str_param(p, "format").unwrap_or("pptx");
     let bytes = save_bytes(&s.doc()?.doc, format)?;
     Ok(json!({"data": base64_encode(&bytes), "bytes": bytes.len()}))
 }
