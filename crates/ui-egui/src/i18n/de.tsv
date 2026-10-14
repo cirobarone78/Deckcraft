@@ -33,20 +33,20 @@ Accent 6	Akzent 6
 Accessibility Checker	Barrierefreiheitsprüfung
 Across	Quer
 Action	Aktion
-Action Button: Custom	Aktionsschaltfläche: Benutzerdefiniert
-Action Button: Document	Aktionsschaltfläche: Dokument
-Action Button: Get Information	Aktionsschaltfläche: Informationen abrufen
-Action Button: Go Back	Aktionsschaltfläche: Zurück
-Action Button: Go Back or Previous	Aktionsschaltfläche: Zurück oder Vorherige
-Action Button: Go Forward or Next	Aktionsschaltfläche: Vorwärts oder Nächste
-Action Button: Go Home	Aktionsschaltfläche: Startseite
-Action Button: Go to Beginning	Aktionsschaltfläche: Zum Anfang
-Action Button: Go to End	Aktionsschaltfläche: Zum Ende
-Action Button: Help	Aktionsschaltfläche: Hilfe
-Action Button: Sound	Aktionsschaltfläche: Sound
-Action Button: Video	Aktionsschaltfläche: Video
-Action Button: {k}	Aktionsschaltfläche: {k}
-Action Buttons	Aktionsschaltflächen
+Action Button: Custom	Interaktive Schaltfläche: Benutzerdefiniert
+Action Button: Document	Interaktive Schaltfläche: Dokument
+Action Button: Get Information	Interaktive Schaltfläche: Informationen abrufen
+Action Button: Go Back	Interaktive Schaltfläche: Zurück
+Action Button: Go Back or Previous	Interaktive Schaltfläche: Zurück oder Vorherige
+Action Button: Go Forward or Next	Interaktive Schaltfläche: Vorwärts oder Nächste
+Action Button: Go Home	Interaktive Schaltfläche: Startseite
+Action Button: Go to Beginning	Interaktive Schaltfläche: Zum Anfang
+Action Button: Go to End	Interaktive Schaltfläche: Zum Ende
+Action Button: Help	Interaktive Schaltfläche: Hilfe
+Action Button: Sound	Interaktive Schaltfläche: Sound
+Action Button: Video	Interaktive Schaltfläche: Video
+Action Button: {k}	Interaktive Schaltfläche: {k}
+Action Buttons	Interaktive Schaltflächen
 Add Animation	Animation hinzufügen
 Add Section	Abschnitt hinzufügen
 Add\nAnimation	Animation hinzufügen
@@ -69,12 +69,12 @@ Alt+F9	Alt+F9
 Alt\nText	Alternativtext
 An open-source, clean-room project. Not affiliated with Microsoft.	Ein quelloffenes, unabhängiges Projekt. Keine Verbindung zu Microsoft.
 Angle	Winkel
-Animation Gallery	Animationenkatalog
+Animation Gallery	Animationskatalog
 Animation Pane	Animationsbereich
 Animation Styles	Animationsformatvorlagen
 Animation\nPane	Animationsbereich
 Animations	Animationen
-Animation Painter	Animationspinsel
+Animation Painter	Animation übertragen
 Apply Animation	Animation anwenden
 Play/Pause GIF	GIF abspielen/anhalten
 Animations on Slide	Animationen auf der Folie
@@ -93,19 +93,19 @@ Arrow at start	Pfeil am Anfang
 Arrow: Bent	Pfeil: Gewinkelt
 Arrow: Bent-Up	Pfeil: Gewinkelt nach oben
 Arrow: Chevron	Pfeil: Chevron
-Arrow: Down	Pfeil: Abwärts
-Arrow: Left	Pfeil: Linkswärts
-Arrow: Left-Right	Pfeil: Links-Rechts
+Arrow: Down	Pfeil: nach unten
+Arrow: Left	Pfeil: nach links
+Arrow: Left-Right	Pfeil: nach links und rechts
 Arrow: Left-Right-Up	Pfeil: Links-Rechts-Oben
 Arrow: Left-Up	Pfeil: Links-Oben
 Arrow: Notched Right	Pfeil: Rechts gekerbt
 Arrow: Pentagon	Pfeil: Fünfeck
 Arrow: Quad	Pfeil: Vierfach
-Arrow: Right	Pfeil: Rechtswärts
+Arrow: Right	Pfeil: nach rechts
 Arrow: Striped Right	Pfeil: Rechts gestreift
 Arrow: U-Turn	Pfeil: Kehre
-Arrow: Up	Pfeil: Aufwärts
-Arrow: Up-Down	Pfeil: Auf-Ab
+Arrow: Up	Pfeil: nach oben
+Arrow: Up-Down	Pfeil: nach oben und unten
 Arrows	Pfeile
 Arrows at both ends	Pfeile an beiden Enden
 As One Object	Als ein Objekt
@@ -119,7 +119,7 @@ B5 (ISO) Paper (176x250 mm)	B5-Papier (ISO) (176×250 mm)
 Background	Hintergrund
 Background Styles	Hintergrundformatvorlagen
 Background\nStyles	Hintergrundformatvorlagen
-Backspace	Backspace
+Backspace	Rücktaste
 Banded Columns	Gebänderte Spalten
 Banded Rows	Gebänderte Zeilen
 Banner	Banner
@@ -150,21 +150,21 @@ Box Out	Box von außen
 Box and Whisker	Kastengrafik
 Brightness	Helligkeit
 Brightness {:+}%	Helligkeit {:+} %
-Bring Forward	Nach vorn
+Bring Forward	Ebene nach vorne
 Bring to Front	In den Vordergrund
-Bring\nForward	Nach vorn
-Browsed at a kiosk (full screen)	An einem Kiosk (Vollbild)
-Browsed by an individual (window)	Einzeln durchsuchen (Fenster)
+Bring\nForward	Ebene nach vorne
+Browsed at a kiosk (full screen)	Ansicht an einem Kiosk (Vollbild)
+Browsed by an individual (window)	Ansicht durch eine Einzelperson (Fenster)
 Bubble	Blase
 Bullets	Aufzählungszeichen
 Burst	Ausbruch
 By Paragraph	Nach Absatz
-Callout: Down Arrow	Beschriftung: Pfeil nach unten
-Callout: Left Arrow	Beschriftung: Pfeil nach links
-Callout: Line	Beschriftung: Linie
-Callout: Right Arrow	Beschriftung: Pfeil nach rechts
-Callout: Up Arrow	Beschriftung: Pfeil nach oben
-Callouts	Beschriftungen
+Callout: Down Arrow	Legende: Pfeil nach unten
+Callout: Left Arrow	Legende: Pfeil nach links
+Callout: Line	Legende: Linie
+Callout: Right Arrow	Legende: Pfeil nach rechts
+Callout: Up Arrow	Legende: Pfeil nach oben
+Callouts	Legenden
 Cameo	Cameo
 Camera capture is not available yet	Kameraaufnahme ist noch nicht verfügbar
 Cancel	Abbrechen
@@ -227,7 +227,7 @@ Color Pulse	Farbpuls
 Colors	Farben
 Columns	Spalten
 Comb	Kamm
-Combo	Kombination
+Combo	Kombi
 Command Palette	Befehlspalette
 Comment	Kommentar
 Comments	Kommentare
@@ -257,7 +257,7 @@ Crop 20% each side	Je Seite 20 % zuschneiden
 Crop to Shape	In Form zuschneiden
 Cross	Kreuz
 Crush	Zerdrücken
-Ctrl+	Ctrl+
+Ctrl+	Strg+
 Cube	Würfel
 Currency	Währung
 Curtains	Vorhänge
@@ -288,7 +288,7 @@ Date and time	Datum und Uhrzeit
 Decagon	Zehneck
 Decision	Entscheidung
 DeckCraft	DeckCraft
-Decrease Font Size	Schriftart verkleinern
+Decrease Font Size	Schriftgrad verkleinern
 Decrease List Level	Listenebene verringern
 Delay:	Verzögerung:
 Delete	Löschen
@@ -302,8 +302,8 @@ Delete Text	Text löschen
 Desaturate	Entsättigen
 Deselect	Auswahl aufheben
 Design	Entwurf
-Design Ideas	Entwurfsideen
-Design\nIdeas	Entwurfsideen
+Design Ideas	Designideen
+Design\nIdeas	Designideen
 Deutsch	Deutsch
 Diagonal Stripe	Diagonaler Streifen
 Diamond	Raute
@@ -358,7 +358,7 @@ Effect\nOptions	Effektoptionen
 Effects	Effekte
 Email Address	E-Mail-Adresse
 Email address:	E-Mail-Adresse:
-Emphasis	Betonung
+Emphasis	Hervorgehoben
 End	Ende
 End Show	Bildschirmpräsentation beenden
 End of slide show	Ende der Bildschirmpräsentation
@@ -372,10 +372,10 @@ Equals	Gleich
 Equation	Gleichung
 Equation Shapes	Gleichungsformen
 Eraser	Radiergummi
-Escape	Escape
+Escape	Esc
 Español	Español
-Exciting	Auffällig
-Exit	Ausgang
+Exciting	Spektakulär
+Exit	Beenden
 Expand	Erweitern
 Explosion: 14 Points	Explosion: 14 Spitzen
 Explosion: 8 Points	Explosion: 8 Spitzen
@@ -499,7 +499,7 @@ Gradient…	Verlauf…
 Grayscale	Graustufen
 Greek	Griechisch
 Green	Grün
-Gridlines	Gitterlinien
+Gridlines	Gitternetzlinien
 Group	Gruppieren
 Group Objects	Objekte gruppieren
 Grow & Turn	Vergrößern und drehen
@@ -550,7 +550,7 @@ Icons	Symbole
 In	Von innen
 In Bounce	Von innen mit Sprung
 Include hidden slides	Ausgeblendete Folien einbeziehen
-Increase Font Size	Schriftart vergrößern
+Increase Font Size	Schriftgrad vergrößern
 Increase List Level	Listenebene erhöhen
 Ink to Math	Freihand in Gleichung
 Ink to Math (coming soon)	Freihand in Gleichung (in Kürze)
@@ -589,8 +589,8 @@ Isosceles Triangle	Gleichschenkliges Dreieck
 Italiano	Italiano
 Italic	Kursiv
 JPEG image (current slide)	JPEG-Bild (aktuelle Folie)
-Join our community on Discord	Tritt unserer Community auf Discord bei
-Join the ArtCraft community on Discord	Tritt der ArtCraft-Community auf Discord bei
+Join our community on Discord	Treten Sie unserer Community auf Discord bei
+Join the ArtCraft community on Discord	Treten Sie der ArtCraft-Community auf Discord bei
 Justify	Blocksatz
 L-Shape	L-Form
 Language	Sprache
@@ -634,7 +634,7 @@ Long Dash Dot	Langer Strich Punkt
 Loop continuously until 'Esc'	Endlos wiederholen bis 'Esc'
 Loop until Stopped	Wiederholen bis angehalten
 Loops	Schleifen
-Loose	Gelockert
+Loose	Weit
 Low	Niedrig
 MIT OR Apache-2.0 · © 2026 ArtCraft Team and the DeckCraft contributors	MIT OR Apache-2.0 · © 2026 das ArtCraft-Team und die DeckCraft-Mitwirkenden
 Margins (pt)	Ränder (pt)
@@ -749,8 +749,8 @@ PNG images (current slide)	PNG-Bilder (aktuelle Folie)
 PRs	Pull Requests
 Page Curl	Seitenrollung
 Page Setup…	Seite einrichten…
-PageDown	PageDown
-PageUp	PageUp
+PageDown	Bild ab
+PageUp	Bild auf
 Pan	Schwenken
 Pane	Bereich
 Paragraph	Absatz
@@ -815,7 +815,7 @@ Preferences…	Optionen…
 Presentation	Präsentation
 Presentations	Präsentationen
 Presentations and slide shows, rebuilt from scratch in pure Rust.	Präsentationen und Bildschirmpräsentationen, von Grund auf in reinem Rust neu gebaut.
-Presented by a speaker (full screen)	Durch einen Referenten (Vollbild)
+Presented by a speaker (full screen)	Präsentation durch einen Redner (Vollbild)
 Presenter View	Referentenansicht
 Presenter View — DeckCraft	Referentenansicht — DeckCraft
 Presenter\nView	Referentenansicht
@@ -897,7 +897,7 @@ Reset Slide	Folie zurücksetzen
 Reset Slide Background	Folienhintergrund zurücksetzen
 Resize shape to fit text	Form an Text anpassen
 Resolve	Als gelöst markieren
-Resolve Thread	Unterhaltung auflösen
+Resolve Thread	Unterhaltung als gelöst markieren
 Return	Zurückkehren
 Reveal	Aufdecken
 Reverse the order	Reihenfolge umkehren
@@ -961,9 +961,9 @@ Selection	Auswahl
 Selection Pane	Auswahlbereich
 Selection Pane…	Auswahlbereich…
 Selection\nPane	Auswahlbereich
-Send Backward	Nach hinten
+Send Backward	Ebene nach hinten
 Send to Back	In den Hintergrund
-Send\nBackward	Nach hinten
+Send\nBackward	Ebene nach hinten
 Sentence case.	Satzanfang groß.
 Set Text	Text festlegen
 Set Up Show…	Bildschirmpräsentation einrichten…
@@ -983,8 +983,8 @@ Shape Styles	Formformatvorlagen
 Shape {}	Form {}
 Shape\nStyles	Formformatvorlagen
 Shapes	Formen
-Shift+	Shift+
-Shift+F9	Shift+F9
+Shift+	Umschalt+
+Shift+F9	Umschalt+F9
 Show	Anzeigen
 Show All	Alle anzeigen
 Show Comments	Kommentare anzeigen
@@ -1006,7 +1006,7 @@ Slide Master	Folienmaster
 Slide Number	Foliennummer
 Slide Show	Bildschirmpräsentation
 Slide Size	Foliengröße
-Slide Sorter	Folienübersicht
+Slide Sorter	Foliensortierung
 Slide number	Foliennummer
 Slide timings recorded.	Folien-Zeitaufzeichnungen gespeichert.
 Slide {:02}:{:04.1}   Total {:02}:{:02}	Folie {:02}:{:04.1}   Gesamt {:02}:{:02}
@@ -1016,7 +1016,7 @@ Slide {}: “{w}”	Folie {}: „{w}“
 Slide\nMaster	Folienmaster
 Slide\nNumber	Foliennummer
 Slide\nSize	Foliengröße
-Slide\nSorter	Folienübersicht
+Slide\nSorter	Foliensortierung
 Slides (e.g. 1,3,5):	Folien (z. B. 1,3,5):
 Slides from Outline	Folien aus Gliederung
 Slides from Outline…	Folien aus Gliederung…
@@ -1079,7 +1079,7 @@ Start a conversation	Beginnen Sie eine Unterhaltung
 Start time (s):	Startzeit (s):
 Start:	Start:
 Stealth end	Pfeilspitze
-Stock	Börse
+Stock	Kurs
 Stop	Beenden
 Stop Editing Text	Textbearbeitung beenden
 Strikethrough	Durchgestrichen
@@ -1088,16 +1088,16 @@ Style {i}	Formatvorlage {i}
 Subscript	Tiefgestellt
 Subtle	Dezent
 Sun	Sonne
-Sunburst	Sonnenausbruch
+Sunburst	Sunburst
 Superscript	Hochgestellt
 Surface	Oberfläche
 Switch	Umschalten
 Swivel	Schwenken
 Symbol	Symbol
 System language	Systemsprache
-Tab	Tabstopp
+Tab	Tab
 Table	Tabelle
-Table Design	Tabellendesign
+Table Design	Tabellenentwurf
 Table Style Options	Tabellenformatoptionen
 Table Styles	Tabellenformatvorlagen
 Table…	Tabelle…
@@ -1129,7 +1129,7 @@ This Document	Dieses Dokument
 Thought	Gedanke
 Thought Bubble: Cloud	Gedankenblase: Wolke
 Through Black	Über Schwarz
-Tight	Gestaucht
+Tight	Eng
 Timing	Timing
 Top	Oben
 Total Row	Ergebniszeile
@@ -1164,8 +1164,8 @@ Vert In	Vertikal von innen
 Vert Out	Vertikal von außen
 Vertical	Vertikal
 Vertical alignment	Vertikale Ausrichtung
-Very Loose	Sehr gelockert
-Very Tight	Sehr gestaucht
+Very Loose	Sehr weit
+Very Tight	Sehr eng
 Video	Video
 Video from File…	Video aus Datei…
 View	Ansicht
@@ -1212,7 +1212,7 @@ nothing to undo	Nichts rückgängig zu machen
 select text or a shape	Text oder eine Form auswählen
 select two or more objects	Zwei oder mehr Objekte auswählen
 size (pt)	Größe (pt)
-tOGGLE cASE	tOGGLE cASE
+tOGGLE cASE	gROSS-/kLEINSCHREIBUNG uMKEHREN
 unknown interface language	Unbekannte Sprache der Benutzeroberfläche
 {ch}  Bullet	{ch}  Aufzählungszeichen
 {f} (Body)	{f} (Text)
