@@ -1,6 +1,6 @@
 # Hardware parity with PowerPoint
 
-> **Last reviewed:** 2026-10-10 · **Last updated:** 2026-10-12 · **Change:** minor (IME input, #101; previous: major, created from the renderer, media and windowing code) · **Target:** Microsoft PowerPoint for Mac 16.113 (Microsoft 365); PowerPoint for Windows where noted
+> **Last reviewed:** 2026-10-10 · **Last updated:** 2026-10-14 · **Change:** minor (colour emoji from the installed colour font; previous: minor, IME input, #101) · **Target:** Microsoft PowerPoint for Mac 16.113 (Microsoft 365); PowerPoint for Windows where noted
 
 What hardware PowerPoint uses and what DeckCraft uses, per platform. Dimension score: **~40%
 ready** (estimated), **25–45 h** to parity. Performance (unmeasured, ~55%) is tracked here too
@@ -14,6 +14,7 @@ because it mostly follows from hardware use.
 | Slide rasterization | GPU | **CPU** (`vello_cpu`) | CPU | CPU | CPU (wasm) |
 | Transitions and Morph frames | GPU | CPU-rendered slide images composited as textured quads on the GPU | same | same | same |
 | High-DPI / Retina | yes | yes | yes | yes | yes |
+| Colour emoji | the system colour-emoji font | Apple Color Emoji (`sbix` PNGs) when that font is installed | a catalogued colour-emoji family when installed | same | only a colour font the page loaded |
 | Wide gamut / HDR display | partly (P3 images) | no (sRGB) | no | no | no |
 | Startup on all GPUs | yes | yes | **no**: crashes in some Intel/AMD drivers (#40, #59) | not reported | n/a |
 | Software fallback when no GPU | yes (WARP on Windows) | no | no | no | no |
@@ -71,5 +72,6 @@ outlines every frame (#67, fix open), and the decoders run in software.
 
 | Date | Change | Summary |
 |---|---|---|
+| 2026-10-14 | minor | Colour emoji draw from the installed colour font (Apple Color Emoji on macOS) |
 | 2026-10-12 | minor | IME input methods (#101) |
 | 2026-10-10 | major | Created: rendering, media, displays, input and performance against PowerPoint 16.113 |
