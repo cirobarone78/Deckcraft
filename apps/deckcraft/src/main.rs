@@ -21,20 +21,38 @@ mod logging;
 use deckcraft_engine::Session;
 use deckcraft_ui_egui::{Services, SlideApp};
 
-struct App(SlideApp);
+struct App {
+    inner: SlideApp,
+    #[cfg(target_os = "macos")]
+    apple_events: fmv_macos_events::Inbox,
+}
 
 impl eframe::App for App {
     fn logic(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
-        self.0.logic(ctx);
+        #[cfg(target_os = "macos")]
+        for event in self.apple_events.drain() {
+            match event {
+                fmv_macos_events::Event::Open(paths) => {
+                    for path in paths {
+                        if let Err(error) = self.inner.open_path(&path.to_string_lossy()) {
+                            log::error!("{}: {error}", path.display());
+                            self.inner.set_status(error);
+                        }
+                    }
+                }
+                fmv_macos_events::Event::Quit => ctx.send_viewport_cmd(egui::ViewportCommand::Close),
+            }
+        }
+        self.inner.logic(ctx);
     }
     fn raw_input_hook(&mut self, _ctx: &egui::Context, raw: &mut egui::RawInput) {
-        self.0.raw_input_hook(raw);
+        self.inner.raw_input_hook(raw);
     }
     fn ui(&mut self, ui: &mut egui::Ui, _frame: &mut eframe::Frame) {
-        self.0.ui(ui);
+        self.inner.ui(ui);
     }
     fn on_exit(&mut self) {
-        save_prefs(&self.0);
+        save_prefs(&self.inner);
     }
 }
 
@@ -183,6 +201,8 @@ fn main() -> eframe::Result {
     if let Some(icon) = app_icon() {
         options.viewport = options.viewport.with_icon(icon);
     }
+    #[cfg(target_os = "macos")]
+    let (apple_event_registration, apple_event_inbox) = fmv_macos_events::Registration::install();
     #[cfg(all(unix, not(target_os = "macos")))]
     if std::env::var_os("DISPLAY").is_some() && std::env::var_os("DECKCRAFT_WAYLAND").is_none() {
         options.event_loop_builder = Some(Box::new(|b| {
@@ -193,10 +213,15 @@ fn main() -> eframe::Result {
     // Before eframe creates the wgpu instance: default Windows to DirectX 12 only (see graphics.rs).
     #[cfg(target_os = "windows")]
     graphics::configure(&mut options, eframe::wgpu::Backends::from_env());
-    eframe::run_native(
+    let result = eframe::run_native(
         "DeckCraft",
         options,
         Box::new(move |cc| {
+            #[cfg(target_os = "macos")]
+            apple_event_inbox.set_wake({
+                let ctx = cc.egui_ctx.clone();
+                move || ctx.request_repaint()
+            });
             let mut app = SlideApp::new(Session::new(), services());
             load_prefs(&mut app);
             // AutoRecover: reopen what a previous run left unsaved, then keep it current.
@@ -224,7 +249,14 @@ fn main() -> eframe::Result {
             if show {
                 app.start_show(0, false);
             }
-            Ok(Box::new(App(app)))
+            Ok(Box::new(App {
+                inner: app,
+                #[cfg(target_os = "macos")]
+                apple_events: apple_event_inbox.clone(),
+            }))
         }),
-    )
+    );
+    #[cfg(target_os = "macos")]
+    drop(apple_event_registration);
+    result
 }

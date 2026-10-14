@@ -45,6 +45,27 @@
   <key>NSHumanReadableCopyright</key>
   <string>Copyright © the DeckCraft authors. MIT OR Apache-2.0.</string>
 
+  <!-- Finder and Launch Services use these roles when opening a presentation with DeckCraft. -->
+  <key>CFBundleDocumentTypes</key>
+  <array>
+    <dict>
+      <key>CFBundleTypeName</key>
+      <string>DeckCraft Presentation</string>
+      <key>CFBundleTypeRole</key>
+      <string>Editor</string>
+      <key>LSItemContentTypes</key>
+      <array><string>ai.storyteller.deckcraft.presentation</string></array>
+    </dict>
+    <dict>
+      <key>CFBundleTypeName</key>
+      <string>Open XML Presentation</string>
+      <key>CFBundleTypeRole</key>
+      <string>Editor</string>
+      <key>LSItemContentTypes</key>
+      <array><string>org.openxmlformats.presentationml.presentation</string></array>
+    </dict>
+  </array>
+
   <!-- DeckCraft's own format: a zip of a JSON manifest plus media. -->
   <key>UTExportedTypeDeclarations</key>
   <array>
