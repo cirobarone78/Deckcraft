@@ -542,12 +542,15 @@ pub fn text_body(imp: &mut Imp, part: &Part, tx: &El) -> TextBody {
 
 pub fn paragraph(imp: &mut Imp, part: &Part, p: &El) -> Paragraph {
     let mut para = Paragraph::default();
+    // `a:pPr/a:defRPr`: run defaults local to this paragraph.
+    let mut para_def: Option<RunProps> = None;
     for e in p.elements() {
         match e.local() {
             "pPr" => {
-                let (lvl, pp, _) = ppr(imp, part, e);
+                let (lvl, pp, def) = ppr(imp, part, e);
                 para.level = lvl.unwrap_or(0);
                 para.props = pp;
+                para_def = def;
             }
             "r" => {
                 let props = e.child("rPr").map(|r| rpr(imp, part, r)).unwrap_or_default();
@@ -586,6 +589,15 @@ pub fn paragraph(imp: &mut Imp, part: &Part, p: &El) -> Paragraph {
             _ => {}
         }
     }
+    // Direct run properties win over the paragraph's own defaults, which win over the list styles.
+    if let Some(def) = para_def {
+        for run in &mut para.runs {
+            if !matches!(run.kind, RunKind::Math { .. }) {
+                run.props.inherit(&def);
+            }
+        }
+        para.end_props.inherit(&def);
+    }
     para
 }
 
@@ -607,6 +619,33 @@ mod tests {
         assert!(matches!(color(&d.root).unwrap().base, ColorBase::System { last: Rgba::WHITE, .. }));
         let d = parse(br#"<x><a:scrgbClr r="100000" g="0" b="0"/></x>"#).unwrap();
         assert_eq!(color(&d.root).unwrap().base, ColorBase::Rgb { rgb: Rgba::rgb(255, 0, 0) });
+    }
+
+    #[test]
+    fn paragraph_default_run_props_reach_runs() {
+        let d = parse(
+            br#"<a:p><a:pPr><a:defRPr sz="3000" b="1"/></a:pPr><a:r><a:t>a</a:t></a:r><a:r><a:rPr sz="1200"/><a:t>b</a:t></a:r><a:br/></a:p>"#,
+        )
+        .unwrap();
+        let zip = zip::ZipWriter::new(std::io::Cursor::new(Vec::new())).finish().unwrap().into_inner();
+        let pkg = crate::opc::Package::open(&zip).unwrap();
+        let mut imp = Imp {
+            pkg: &pkg,
+            media: vec![],
+            media_by_part: Default::default(),
+            next: 1,
+            slide_by_part: Default::default(),
+            custom_show_names: Default::default(),
+            table_style_ids: vec![],
+        };
+        let part = Part { name: String::new(), rels: Default::default(), ns: vec![] };
+        let p = paragraph(&mut imp, &part, &d.root);
+        assert_eq!(p.runs[0].props.size, Some(30.0));
+        assert_eq!(p.runs[0].props.bold, Some(true));
+        assert_eq!(p.runs[1].props.size, Some(12.0));
+        assert_eq!(p.runs[1].props.bold, Some(true));
+        assert_eq!(p.runs[2].props.size, Some(30.0));
+        assert_eq!(p.end_props.size, Some(30.0));
     }
 
     #[test]
