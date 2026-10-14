@@ -12,6 +12,7 @@ pub mod control;
 pub mod credits;
 pub mod dialogs;
 pub mod fillui;
+pub mod i18n;
 pub mod icons;
 pub mod media;
 pub mod menus;
@@ -27,6 +28,7 @@ pub mod thumbs;
 pub mod toast;
 pub mod uifonts;
 pub mod widgets;
+mod zh_hans;
 
 use std::sync::mpsc::{Receiver, Sender};
 
@@ -80,6 +82,7 @@ pub enum ViewMode {
 #[serde(default, rename_all = "camelCase")]
 pub struct UiState {
     pub brightness: theme::Brightness,
+    pub language: i18n::Language,
     pub tab: String,
     pub ribbon_collapsed: bool,
     pub view: ViewMode,
@@ -108,6 +111,7 @@ impl Default for UiState {
     fn default() -> Self {
         UiState {
             brightness: theme::Brightness::Light,
+            language: i18n::Language::English,
             tab: "Home".into(),
             ribbon_collapsed: false,
             view: ViewMode::Normal,
@@ -161,6 +165,7 @@ pub const UI_COMMANDS: &[(&str, &str, Option<&str>, &str)] = &[
     ("app.about", "About DeckCraft", None, "{}"),
     ("app.palette", "Command Palette", Some("Cmd+Shift+P"), "{}"),
     ("app.preferences", "Preferences…", Some("Cmd+,"), "{}"),
+    ("app.language", "Interface language", None, "{language: en|zh-Hans}"),
     ("app.openDialog", "Open…", None, "{purpose?}"),
     ("app.insertPictureDialog", "Picture from File…", None, "{}"),
     ("app.insertAudioDialog", "Audio from File…", None, "{}"),
@@ -449,6 +454,10 @@ impl SlideApp {
 
     fn run_ui(&mut self, id: &str, p: &Value) -> Result<Value, String> {
         match id {
+            "app.language" => {
+                let code = p.get("language").and_then(Value::as_str).ok_or("missing `language`")?;
+                self.ui.language = i18n::Language::from_code(code).ok_or("unsupported interface language")?;
+            }
             "view.normal" => self.ui.view = ViewMode::Normal,
             "view.outline" => self.ui.view = ViewMode::Outline,
             "view.sorter" => self.ui.view = ViewMode::Sorter,
@@ -741,6 +750,7 @@ impl SlideApp {
         }
         self.last_time = now;
         self.drain_control(ctx);
+        i18n::set_language(ctx, self.ui.language);
         if self.fonts_ready {
             self.drain_inbox();
         }
@@ -784,6 +794,15 @@ impl SlideApp {
     /// Borrow faces for interface text in scripts the interface fonts lack (#101): the open
     /// presentations' names and text, recent files, and what is typed or composed this frame.
     fn note_ui_text(&mut self, ctx: &egui::Context) {
+        // Language names must also render in English preferences, without scanning fonts for
+        // translated text that isn't visible during normal English editing.
+        if self.ui.language == i18n::Language::SimplifiedChinese
+            || self.dialog.as_ref().is_some_and(|d| matches!(d.id.as_str(), "preferences" | "language"))
+        {
+            #[cfg(target_os = "windows")]
+            self.ui_fonts.prefer_installed_chinese();
+            self.ui_fonts.note(ctx, i18n::font_text());
+        }
         let typed: String = ctx.input(|i| {
             i.events
                 .iter()
@@ -1135,6 +1154,26 @@ mod tests {
     #![allow(clippy::unwrap_used, clippy::expect_used)]
 
     use super::*;
+
+    #[test]
+    fn interface_language_persists_without_changing_the_document_or_tab_ids() {
+        let mut app = SlideApp::new(Session::with_new(), Services::default());
+        let before = serde_json::to_value(&app.session.active().unwrap().doc).unwrap();
+        app.run("app.language", json!({"language": "zh-Hans"})).unwrap();
+        assert_eq!(app.ui.language, i18n::Language::SimplifiedChinese);
+        assert_eq!(app.ui.tab, "Home");
+        assert_eq!(serde_json::to_value(&app.session.active().unwrap().doc).unwrap(), before);
+        let saved = serde_json::to_value(&app.ui).unwrap();
+        assert_eq!(saved["language"], "zh-Hans");
+        let restored: UiState = serde_json::from_value(saved).unwrap();
+        assert_eq!(restored.language, app.ui.language);
+        let legacy: UiState = serde_json::from_value(json!({"tab": "Insert"})).unwrap();
+        assert_eq!(legacy.language, i18n::Language::English);
+        assert!(app.run("app.language", json!({"language": "fr"})).is_err());
+        assert_eq!(app.ui.language, i18n::Language::SimplifiedChinese);
+        app.run("app.language", json!({"language": "en"})).unwrap();
+        assert_eq!(app.ui.language, i18n::Language::English);
+    }
 
     fn title_text(app: &SlideApp) -> String {
         let d = app.session.active().unwrap();

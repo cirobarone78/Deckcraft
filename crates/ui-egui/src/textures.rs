@@ -18,6 +18,7 @@ struct Key {
     master: usize,
     size: (u32, u32),
     edit: bool,
+    language: crate::i18n::Language,
     extra: u64,
     /// The pasteboard region the slide's drawing calls for (canvas only).
     want: Region,
@@ -122,6 +123,7 @@ impl Textures {
             master: master.as_ref().map(|m| Arc::as_ptr(m) as usize).unwrap_or(0),
             size,
             edit,
+            language: if edit { crate::i18n::language(ctx) } else { crate::i18n::Language::English },
             extra: extra ^ grayscale as u64,
             want,
         };
@@ -132,8 +134,16 @@ impl Textures {
         }
         let t0 = crate::now_ms();
         let render = |region: Region| {
-            let opts =
-                RenderOpts { scale, edit, gif_times, threads: threads(), offset: region.offset(), size: Some(region.size()), ..Default::default() };
+            let opts = RenderOpts {
+                scale,
+                edit,
+                gif_times,
+                threads: threads(),
+                offset: region.offset(),
+                size: Some(region.size()),
+                placeholder_prompt: crate::i18n::placeholder_prompt(ctx),
+                ..Default::default()
+            };
             deckcraft_render::render_slide_drawn(p, index, &opts)
         };
         let (mut img, drawn) = render(want);
@@ -181,6 +191,7 @@ impl Textures {
             master: master.as_ref().map(|m| Arc::as_ptr(m) as usize).unwrap_or(0),
             size: (width_px, h),
             edit: false,
+            language: crate::i18n::Language::English,
             extra: 0,
             want: Region::slide(width_px, h),
         };

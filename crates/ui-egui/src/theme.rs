@@ -215,7 +215,11 @@ pub fn add_fallback_faces(defs: &mut FontDefinitions, faces: &[std::sync::Arc<de
         data.index = f.index();
         defs.font_data.insert(name.clone(), std::sync::Arc::new(data));
         for list in defs.families.values_mut() {
-            list.push(name.clone());
+            if matches!(f.family.as_str(), "DengXian" | "等线") {
+                list.insert(0, name.clone());
+            } else {
+                list.push(name.clone());
+            }
         }
     }
 }
