@@ -846,6 +846,33 @@ pub struct Presentation {
     /// Unmodelled presentation-level XML kept for round-trip.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub raw_ext: Option<String>,
+    /// Package parts the model doesn't represent (custom XML data, custom document properties),
+    /// kept byte for byte so a save doesn't drop them.
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub kept_parts: Vec<KeptPart>,
+}
+
+/// Which part a [`KeptPart`]'s relationship comes from.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub enum KeptHost {
+    /// The package root (`/_rels/.rels`).
+    Package,
+    /// `ppt/presentation.xml`.
+    Presentation,
+    /// Another kept part, by name (for example `customXml/itemProps1.xml` hangs off `customXml/item1.xml`).
+    Part(String),
+}
+
+/// An opaque package part and the relationship that reaches it.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct KeptPart {
+    /// Part name without a leading slash, e.g. `customXml/item1.xml`.
+    pub name: String,
+    pub content_type: String,
+    pub data: Vec<u8>,
+    pub host: KeptHost,
+    /// Last segment of the relationship type, e.g. `customXml`, `custom-properties`.
+    pub rel_kind: String,
 }
 
 impl Default for Presentation {

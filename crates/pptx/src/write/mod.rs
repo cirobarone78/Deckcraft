@@ -12,7 +12,7 @@ use std::sync::Arc;
 use deckcraft_geom::Xfrm;
 use deckcraft_model::text::{Paragraph, TextBody};
 use deckcraft_model::{
-    Background, Comment, Layout, LayoutId, Master, MediaId, PhType, Placeholder, Presentation, Shape, ShapeId, Slide, SlideId, defaults,
+    Background, Comment, KeptHost, Layout, LayoutId, Master, MediaId, PhType, Placeholder, Presentation, Shape, ShapeId, Slide, SlideId, defaults,
 };
 
 use crate::PptxError;
@@ -514,6 +514,8 @@ pub fn export(p: &Presentation) -> Result<Vec<u8>, PptxError> {
     x.pkg.xml_part("ppt/viewProps.xml", CT_VIEW_PROPS, view_props_xml());
     let ts = crate::tables::table_styles_xml(&x.table_styles, &p.table_styles);
     x.pkg.xml_part("ppt/tableStyles.xml", CT_TABLE_STYLES, ts);
+    let mut root = RelsOut::default();
+    write_kept_parts(&mut x, p, &mut pres.rels, &mut root);
     let pxml = presentation_xml(&mut x, &mut pres, &master_rids, notes_master_rid.as_deref(), &slide_rids);
     x.pkg.xml_part("ppt/presentation.xml", CT_PRES, pxml);
     x.pkg.rels("ppt/presentation.xml", &pres.rels);
@@ -521,12 +523,33 @@ pub fn export(p: &Presentation) -> Result<Vec<u8>, PptxError> {
     // Document properties and package relationships.
     x.pkg.xml_part("docProps/core.xml", CT_CORE, core_xml(p));
     x.pkg.xml_part("docProps/app.xml", CT_APP, app_xml(p));
-    let mut root = RelsOut::default();
     root.add("officeDocument", "ppt/presentation.xml", false);
     root.add(opc::RT_CORE, "docProps/core.xml", false);
     root.add("extended-properties", "docProps/app.xml", false);
     x.pkg.rels("", &root);
     x.pkg.finish()
+}
+
+/// Write the opaque parts kept from the source package, each with the relationship that reaches it.
+fn write_kept_parts(x: &mut Exp, p: &Presentation, pres: &mut RelsOut, root: &mut RelsOut) {
+    let mut part_rels: HashMap<&str, RelsOut> = HashMap::new();
+    for k in &p.kept_parts {
+        x.pkg.xml_part(&k.name, &k.content_type, k.data.clone());
+        match &k.host {
+            KeptHost::Package => {
+                root.add(&k.rel_kind, &k.name, false);
+            }
+            KeptHost::Presentation => {
+                pres.add(&k.rel_kind, &opc::relative("ppt/presentation.xml", &k.name), false);
+            }
+            KeptHost::Part(owner) => {
+                part_rels.entry(owner.as_str()).or_default().add(&k.rel_kind, &opc::relative(owner, &k.name), false);
+            }
+        }
+    }
+    for (owner, rels) in &part_rels {
+        x.pkg.rels(owner, rels);
+    }
 }
 
 fn layout_xml(x: &mut Exp, o: &mut Out, l: &Layout) -> Vec<u8> {

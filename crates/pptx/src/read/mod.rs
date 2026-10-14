@@ -14,8 +14,8 @@ use std::sync::Arc;
 use deckcraft_geom::{Size, emu_to_pt};
 use deckcraft_model::text::TextBody;
 use deckcraft_model::{
-    Background, Comment, CustomShow, Geom, HeaderFooter, Layout, LayoutId, LayoutType, Master, MasterId, MediaId, MediaItem, PhType, Presentation,
-    Properties, Section, ShowSettings, Slide, SlideId, defaults,
+    Background, Comment, CustomShow, Geom, HeaderFooter, KeptHost, KeptPart, Layout, LayoutId, LayoutType, Master, MasterId, MediaId, MediaItem,
+    PhType, Presentation, Properties, Section, ShowSettings, Slide, SlideId, defaults,
 };
 
 use crate::PptxError;
@@ -177,6 +177,35 @@ fn max_cnvpr(el: &El, m: &mut u32) {
             *m = (*m).max(id);
         }
     }
+}
+
+/// Parts the model has no place for, reached from the package root or the presentation: custom XML
+/// data (with its properties part) and custom document properties.
+fn kept_parts(pkg: &Package, root: &Rels, pres: &Rels) -> Vec<KeptPart> {
+    const MAX_KEPT: usize = 1000;
+    let mut out: Vec<KeptPart> = vec![];
+    let add = |out: &mut Vec<KeptPart>, name: &str, host: KeptHost, kind: &str| -> bool {
+        let Some(data) = pkg.get(name) else { return false };
+        if out.len() >= MAX_KEPT || out.iter().any(|k| k.name == name) {
+            return false;
+        }
+        let name = pkg.original_name(name).unwrap_or(name).to_string();
+        let content_type = pkg.content_type(&name).unwrap_or_else(|| "application/xml".into());
+        out.push(KeptPart { name, content_type, data: data.to_vec(), host, rel_kind: kind.to_string() });
+        true
+    };
+    for r in root.all_of("custom-properties").filter(|r| !r.external) {
+        add(&mut out, &r.target, KeptHost::Package, "custom-properties");
+    }
+    for r in pres.all_of("customXml").filter(|r| !r.external) {
+        if add(&mut out, &r.target, KeptHost::Presentation, "customXml") {
+            let owner = out.last().map(|k| k.name.clone()).unwrap_or_default();
+            for c in pkg.rels(&owner).all_of("customXmlProps").filter(|c| !c.external) {
+                add(&mut out, &c.target, KeptHost::Part(owner.clone()), "customXmlProps");
+            }
+        }
+    }
+    out
 }
 
 pub fn import(bytes: &[u8]) -> Result<Presentation, PptxError> {
@@ -342,6 +371,7 @@ pub fn import(bytes: &[u8]) -> Result<Presentation, PptxError> {
             p.raw_ext = Some(kept);
         }
     }
+    p.kept_parts = kept_parts(&pkg, &root_rels, &pres_part.rels);
     // Custom shows.
     if let Some(l) = pres_el.child("custShowLst") {
         for cs in l.children_named("custShow") {
