@@ -162,6 +162,46 @@ pub fn show(app: &mut SlideApp, ui: &mut Ui) {
             x += w + 2.0;
         }
         let all: Vec<(&str, bool)> = TABS.iter().map(|s| (*s, false)).chain(ctx_tabs.iter().map(|s| (*s, true))).collect();
+
+        // Ribbon tab transition state (smooth fade and slide when switching tabs, like PowerPoint).
+        let animations_enabled = ui.style().animation_time > 0.0;
+        let transition_id = egui::Id::new("deckcraft_ribbon_tab_transition");
+        let mut transition = ui.ctx().data_mut(|d| d.get_temp::<RibbonTransition>(transition_id)).unwrap_or_default();
+        if transition.current_tab.is_empty() {
+            transition.current_tab = app.ui.tab.clone();
+            transition.switch_time = 0.0;
+            transition.direction = 1.0;
+            transition.active = false;
+        } else if transition.current_tab != app.ui.tab {
+            let old_pos = all.iter().position(|(t, _)| *t == transition.current_tab.as_str());
+            let new_pos = all.iter().position(|(t, _)| *t == app.ui.tab.as_str());
+            let direction = match (old_pos, new_pos) {
+                (Some(o), Some(n)) if n < o => -1.0,
+                _ => 1.0,
+            };
+            transition.current_tab = app.ui.tab.clone();
+            transition.switch_time = ui.ctx().input(|i| i.time);
+            transition.direction = direction;
+            transition.active = true;
+        }
+
+        let now = ui.ctx().input(|i| i.time);
+        let elapsed = (now - transition.switch_time).max(0.0);
+        let anim_duration = 0.16; // 160ms smooth transition
+        let (content_opacity, slide_offset) = if transition.active && animations_enabled && elapsed < anim_duration {
+            ui.ctx().request_repaint();
+            let t = (elapsed / anim_duration) as f32;
+            let ease = 1.0 - (1.0 - t).powi(3);
+            let opacity = (0.2 + 0.8 * ease).clamp(0.0, 1.0);
+            let offset = transition.direction * (16.0 * (1.0 - ease));
+            (opacity, offset)
+        } else {
+            transition.active = false;
+            (1.0, 0.0)
+        };
+        ui.ctx().data_mut(|d| d.insert_temp(transition_id, transition));
+
+        let mut active_indicator = None;
         for (name, contextual) in all {
             let font = theme::font(13.0);
             let w = ui.fonts_mut(|f| f.layout_no_wrap(name.to_string(), font.clone(), t.text).size().x) + 18.0;
@@ -176,7 +216,7 @@ pub fn show(app: &mut SlideApp, ui: &mut Ui) {
             ui.painter().text(r.center(), Align2::CENTER_CENTER, name, f, col);
             if active {
                 let uw = (w - 20.0).max(16.0);
-                ui.painter().rect_filled(Rect::from_center_size(pos2(r.center().x, r.max.y - 1.0), vec2(uw, 3.0)), CornerRadius::same(1), t.accent);
+                active_indicator = Some((r.center().x, r.max.y - 1.0, uw));
             }
             if resp.clicked() {
                 if active {
@@ -191,6 +231,12 @@ pub fn show(app: &mut SlideApp, ui: &mut Ui) {
             }
             x += w + 2.0;
         }
+        if let Some((target_x, y, target_w)) = active_indicator {
+            let anim_time = if animations_enabled { 0.16 } else { 0.0 };
+            let cur_x = ui.ctx().animate_value_with_time(ui.id().with("tab_indicator_x"), target_x, anim_time);
+            let cur_w = ui.ctx().animate_value_with_time(ui.id().with("tab_indicator_w"), target_w, anim_time);
+            ui.painter().rect_filled(Rect::from_center_size(pos2(cur_x, y), vec2(cur_w, 3.0)), CornerRadius::same(1), t.accent);
+        }
         if app.ui.ribbon_collapsed {
             return;
         }
@@ -199,32 +245,47 @@ pub fn show(app: &mut SlideApp, ui: &mut Ui) {
         ui.painter().rect_filled(card.translate(vec2(0.0, 1.0)), CornerRadius::same(10), t.card_border);
         ui.painter().rect_filled(card, CornerRadius::same(10), t.card);
         let inner = Rect::from_min_size(pos2(card.min.x + 10.0, card.min.y + 5.0), vec2(card.width() - 20.0, RIBBON_H));
-        let mut cui = ui.new_child(egui::UiBuilder::new().max_rect(inner).layout(egui::Layout::left_to_right(egui::Align::Min)));
+        let content_rect = if slide_offset.abs() > 0.001 { inner.translate(vec2(slide_offset, 0.0)) } else { inner };
+        let mut cui = ui.new_child(egui::UiBuilder::new().max_rect(content_rect).layout(egui::Layout::left_to_right(egui::Align::Min)));
         cui.set_clip_rect(inner.expand2(vec2(0.0, 3.0)));
         cui.spacing_mut().item_spacing.x = 1.0;
-        let ui = &mut cui;
-        let tab = app.ui.tab.clone();
-        match tab.as_str() {
-            "Home" => home(app, ui),
-            "Insert" => insert(app, ui),
-            "Draw" => draw(app, ui),
-            "Design" => design(app, ui),
-            "Transitions" => transitions(app, ui),
-            "Animations" => animations(app, ui),
-            "Slide Show" => slide_show(app, ui),
-            "Record" => record(app, ui),
-            "Review" => review(app, ui),
-            "View" => view(app, ui),
-            "Shape Format" => shape_format(app, ui),
-            "Picture Format" => picture_format(app, ui),
-            "Table Design" => table_design(app, ui),
-            "Layout" => table_layout(app, ui),
-            "Chart Design" => chart_design(app, ui),
-            "Playback" => playback(app, ui),
-            "Slide Master" => slide_master(app, ui),
-            _ => {}
+        if content_opacity < 1.0 {
+            cui.set_opacity(content_opacity);
         }
+        render_tab_content(app, &mut cui);
     });
+}
+
+#[derive(Clone, Debug, Default)]
+struct RibbonTransition {
+    current_tab: String,
+    switch_time: f64,
+    direction: f32,
+    active: bool,
+}
+
+fn render_tab_content(app: &mut SlideApp, ui: &mut Ui) {
+    let tab = app.ui.tab.clone();
+    match tab.as_str() {
+        "Home" => home(app, ui),
+        "Insert" => insert(app, ui),
+        "Draw" => draw(app, ui),
+        "Design" => design(app, ui),
+        "Transitions" => transitions(app, ui),
+        "Animations" => animations(app, ui),
+        "Slide Show" => slide_show(app, ui),
+        "Record" => record(app, ui),
+        "Review" => review(app, ui),
+        "View" => view(app, ui),
+        "Shape Format" => shape_format(app, ui),
+        "Picture Format" => picture_format(app, ui),
+        "Table Design" => table_design(app, ui),
+        "Layout" => table_layout(app, ui),
+        "Chart Design" => chart_design(app, ui),
+        "Playback" => playback(app, ui),
+        "Slide Master" => slide_master(app, ui),
+        _ => {}
+    }
 }
 
 fn big(app: &mut SlideApp, ui: &mut Ui, icon: Icon, label: &str, id: &str, p: Value) {
@@ -2419,4 +2480,48 @@ fn paint_freeform_icon(p: &egui::Painter, r: Rect, name: &str, ink: Color32) {
         _ => (0..=40).map(|i| i as f32 / 40.0).map(|u| at(u, 0.5 + 0.35 * (u * 19.0).sin() * (1.0 - u * 0.4))).collect(),
     };
     p.add(egui::Shape::line(pts, egui::Stroke::new(1.3, ink)));
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn ribbon_tab_switch_animation() {
+        let app = SlideApp::new(deckcraft_engine::Session::with_new(), crate::Services::default());
+        let mut h = egui_kittest::Harness::builder().with_size(vec2(1200.0, 700.0)).build_ui_state(
+            |ui, app: &mut SlideApp| {
+                app.logic(ui.ctx());
+                app.ui(ui);
+            },
+            app,
+        );
+
+        h.ctx.all_styles_mut(|s| s.animation_time = 0.16);
+        h.run_steps(1);
+
+        assert_eq!(h.state().ui.tab, "Home");
+
+        // Switch to Insert (to the right).
+        h.state_mut().ui.tab = "Insert".to_string();
+        h.run_steps(1);
+
+        let transition = h.ctx.data(|d| d.get_temp::<RibbonTransition>(egui::Id::new("deckcraft_ribbon_tab_transition")));
+        assert!(transition.is_some(), "transition state should be recorded");
+        if let Some(tr) = transition {
+            assert_eq!(tr.current_tab, "Insert");
+            assert_eq!(tr.direction, 1.0, "moving forward/right should have positive direction");
+        }
+
+        // Switch backward to Home (to the left).
+        h.state_mut().ui.tab = "Home".to_string();
+        h.run_steps(1);
+
+        let transition = h.ctx.data(|d| d.get_temp::<RibbonTransition>(egui::Id::new("deckcraft_ribbon_tab_transition")));
+        assert!(transition.is_some(), "transition state should be recorded");
+        if let Some(tr) = transition {
+            assert_eq!(tr.current_tab, "Home");
+            assert_eq!(tr.direction, -1.0, "moving backward/left should have negative direction");
+        }
+    }
 }
