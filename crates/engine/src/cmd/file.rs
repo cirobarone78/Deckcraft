@@ -117,10 +117,17 @@ fn open_bytes(s: &mut Session, p: &Value) -> Result<Value> {
     Ok(json!({"document": i, "missingFonts": s.doc()?.missing_fonts}))
 }
 
+/// The warning for saving a macro-enabled deck in a format without macros, as PowerPoint gives.
+pub fn macros_dropped(doc: &Presentation, format: &str) -> Option<String> {
+    (doc.vba_project.is_some() && matches!(format, "pptx" | "potx" | "ppsx"))
+        .then(|| "This presentation has macros, which a .pptx can't hold: they were left out. Save as .pptm to keep them.".to_string())
+}
+
 /// Encode the presentation in `format` (`deckcraft`, `pptx`, `outline`).
 pub fn save_bytes(doc: &Presentation, format: &str) -> Result<Vec<u8>> {
     match format {
         "pptx" | "potx" | "ppsx" => deckcraft_pptx::export(doc).map_err(|e| EngineError::Other(e.to_string())),
+        "pptm" | "potm" | "ppsm" => deckcraft_pptx::export_macro_enabled(doc, format).map_err(|e| EngineError::Other(e.to_string())),
         "outline" | "txt" => Ok(deckcraft_format::slides_to_outline(doc).into_bytes()),
         "pdf" => deckcraft_pdf::export(doc, &Default::default()).map_err(|e| EngineError::Other(e.to_string())),
         _ => deckcraft_format::save(doc).map_err(|e| EngineError::Other(e.to_string())),
@@ -186,6 +193,12 @@ pub fn format_for_path(path: &str) -> &'static str {
     let l = path.to_ascii_lowercase();
     if l.ends_with(".pptx") || l.ends_with(".potx") || l.ends_with(".ppsx") {
         "pptx"
+    } else if l.ends_with(".pptm") {
+        "pptm"
+    } else if l.ends_with(".potm") {
+        "potm"
+    } else if l.ends_with(".ppsm") {
+        "ppsm"
     } else if l.ends_with(".png") {
         "png"
     } else if l.ends_with(".jpg") || l.ends_with(".jpeg") {
@@ -235,7 +248,11 @@ fn save(s: &mut Session, p: &Value) -> Result<Value> {
     let bytes = save_bytes(&s.doc()?.doc, format)?;
     write_file(&path, &bytes)?;
     mark_saved(s, Some(path.clone()))?;
-    Ok(json!({"path": path, "bytes": bytes.len()}))
+    let warning = macros_dropped(&s.doc()?.doc, format);
+    if let Some(w) = &warning {
+        s.ui_requests.push(crate::UiRequest::Message { text: w.clone() });
+    }
+    Ok(json!({"path": path, "bytes": bytes.len(), "warning": warning}))
 }
 
 fn save_as(s: &mut Session, p: &Value) -> Result<Value> {

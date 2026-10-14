@@ -840,6 +840,10 @@ pub struct Presentation {
     pub next_id: u32,
     /// Embedded fonts (family names; bytes in `media`).
     pub embedded_fonts: Vec<(String, MediaId)>,
+    /// A macro-enabled deck's VBA project (`ppt/vbaProject.bin`, bytes in `media`), kept as it is
+    /// and never run; written back only when saving as `.pptm`, `.potm` or `.ppsm`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub vba_project: Option<MediaId>,
     /// Table styles defined in the file (`ppt/tableStyles.xml`).
     #[serde(skip_serializing_if = "Vec::is_empty")]
     pub table_styles: Vec<table::TableStyleDef>,
