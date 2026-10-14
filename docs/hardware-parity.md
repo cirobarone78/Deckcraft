@@ -1,9 +1,9 @@
 # Hardware parity with PowerPoint
 
-> **Last reviewed:** 2026-10-10 · **Last updated:** 2026-10-12 · **Change:** minor (IME input, #101; previous: major, created from the renderer, media and windowing code) · **Target:** Microsoft PowerPoint for Mac 16.113 (Microsoft 365); PowerPoint for Windows where noted
+> **Last reviewed:** 2026-10-10 · **Last updated:** 2026-10-13 · **Change:** minor (show on the other display; previous: minor, IME input, #101) · **Target:** Microsoft PowerPoint for Mac 16.113 (Microsoft 365); PowerPoint for Windows where noted
 
 What hardware PowerPoint uses and what DeckCraft uses, per platform. Dimension score: **~40%
-ready** (estimated), **25–45 h** to parity. Performance (unmeasured, ~55%) is tracked here too
+ready** (estimated), **24–42 h** to parity. Performance (unmeasured, ~55%) is tracked here too
 because it mostly follows from hardware use.
 
 ## Graphics and rendering
@@ -33,7 +33,7 @@ because it mostly follows from hardware use.
 
 | Feature | PowerPoint | DeckCraft |
 |---|---|---|
-| Detect the projector, show on it, presenter view on the laptop | yes | **no**: the show goes full screen on the current display; presenter view opens as a normal window (egui viewport) |
+| Detect the projector, show on it, presenter view on the laptop | yes | yes when a second display is connected: the show is borderless fullscreen on the first non-primary, presenter view fills the primary. One display: fullscreen on the current one. No swap and no manual choice. Wayland ignores window positions |
 | Swap displays, choose the monitor in Set Up Show | yes | no |
 | Mirroring-aware behaviour | yes | no |
 
@@ -59,17 +59,18 @@ outlines every frame (#67, fix open), and the decoders run in software.
 
 | Work | Hours |
 |---|---|
-| Presenter view on the right display, choose monitor, swap | 3–5 |
+| Choose the monitor and swap displays | 1–2 |
 | GPU slide rasterization (vello's GPU/hybrid path) | 12–20 |
 | Hardware video decode (copy FilmCraft's VideoToolbox / Media Foundation / VA-API paths) | 8–14 |
 | Windows GPU startup robustness: backend probing, software fallback (#40, #59) | 4–8 (counted under Stability) |
 | Pen pressure, pinch zoom | 3–6 |
 | Benchmark suite (`cargo xtask bench`) and a first performance pass | 6–12 (Performance dimension) |
-| **Hardware total** | **~26–45** |
+| **Hardware total** | **~24–42** |
 
 ## Revision history
 
 | Date | Change | Summary |
 |---|---|---|
+| 2026-10-13 | minor | Show on the other display, presenter view on the primary. Choose-monitor and swap remain (1–2 h) |
 | 2026-10-12 | minor | IME input methods (#101) |
 | 2026-10-10 | major | Created: rendering, media, displays, input and performance against PowerPoint 16.113 |

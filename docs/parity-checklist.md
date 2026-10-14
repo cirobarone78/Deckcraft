@@ -1,14 +1,14 @@
 # PowerPoint feature checklist
 
-> **Generated:** 2026-10-10 (summary by `cargo xtask parity`; rows re-scored 2026-10-10 against PowerPoint for Mac 16.113.4) · **Target:** Microsoft PowerPoint for Mac 16.113 (Microsoft 365)
+> **Generated:** 2026-10-13 (summary by `cargo xtask parity`; rows re-scored 2026-10-10 against PowerPoint for Mac 16.113.4, multi-monitor presenting 2026-10-13) · **Target:** Microsoft PowerPoint for Mac 16.113 (Microsoft 365)
 
 The summary between `<!-- SUMMARY -->
-**Weighted breadth parity: 79%** over 191 features.
+**Weighted breadth parity: 80%** over 191 features.
 
 | Priority | Features | Done | Partial | Missing | Parity |
 |---|---|---|---|---|---|
 | P0 | 72 | 61 | 11 | 0 | 92% |
-| P1 | 65 | 38 | 21 | 6 | 75% |
+| P1 | 65 | 38 | 22 | 5 | 75% |
 | P2 | 54 | 13 | 15 | 26 | 38% |
 
 | Area | Parity |
@@ -29,7 +29,7 @@ The summary between `<!-- SUMMARY -->
 | Media | 67% |
 | Transitions | 92% |
 | Animations | 79% |
-| Slide show | 66% |
+| Slide show | 71% |
 | Review | 60% |
 | Draw | 33% |
 | Undo & clipboard | 88% |
@@ -218,7 +218,7 @@ Open P0 items: Contextual tabs (Shape Format, Picture Format, Table Design/Layou
 | Slide show | Custom shows | P2 | D |
 | Slide show | Set up show (loop, kiosk, without animation) | P1 | D |
 | Slide show | Record slide show (narration) | P2 | M |
-| Slide show | Multi-monitor presenting | P1 | M |
+| Slide show | Multi-monitor presenting (show on the other display, presenter view on the primary; no swap or manual choice) | P1 | P |
 | Review | Comments (add, reply, resolve, delete) | P1 | D |
 | Review | Accessibility checker | P2 | D |
 | Review | Compare presentations | P2 | M |

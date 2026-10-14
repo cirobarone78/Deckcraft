@@ -185,6 +185,9 @@ pub struct SlideApp {
     pub control_rx: Option<Receiver<ControlRequest>>,
     pub dialog: Option<dialogs::Dialog>,
     pub show: Option<show::Show>,
+    /// Displays connected this frame (`winit` order). Empty in the browser and in tests: the show
+    /// then stays on the current display.
+    pub displays: Vec<show::DisplayInfo>,
     /// Audio/video playback (editor control bar, slide show, `media.*` commands).
     pub media: media::MediaHost,
     pub status: Option<(String, f64)>,
@@ -240,6 +243,7 @@ impl SlideApp {
             control_rx: None,
             dialog: None,
             show: None,
+            displays: Vec::new(),
             media: media::MediaHost::new(audio_out),
             status: None,
             toast: None,
@@ -552,6 +556,11 @@ impl SlideApp {
             _ => return Err(format!("unknown UI command `{id}`")),
         }
         Ok(Value::Null)
+    }
+
+    /// Replace the display list used the next time a slide show starts.
+    pub fn set_displays(&mut self, displays: Vec<show::DisplayInfo>) {
+        self.displays = displays;
     }
 
     pub fn start_show(&mut self, from: usize, reading: bool) {
