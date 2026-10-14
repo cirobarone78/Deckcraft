@@ -270,6 +270,59 @@ fn ext_list(w: &mut W, raw: Option<&str>) {
     w.close("p:extLst");
 }
 
+/// Slide extensions: anything we kept, plus a recorded laser trace.
+fn slide_exts(w: &mut W, s: &Slide) {
+    let laser = laser_ext_xml(s);
+    let parsed = s.raw_ext.as_deref().filter(|r| !r.trim().is_empty()).and_then(|raw| crate::xml::parse(format!("<x>{raw}</x>").as_bytes()).ok());
+    let exts: Vec<String> = parsed
+        .as_ref()
+        .map(|d| {
+            d.root
+                .elements()
+                .filter(|e| e.is("ext") && e.has_attr("uri") && e.attr("uri") != Some(crate::LASER_EXT_URI))
+                .map(|e| e.to_xml())
+                .collect()
+        })
+        .unwrap_or_default();
+    if exts.is_empty() && laser.is_none() {
+        return;
+    }
+    w.open0("p:extLst");
+    for e in &exts {
+        w.raw(e);
+    }
+    if let Some(xml) = &laser {
+        w.raw(xml);
+    }
+    w.close("p:extLst");
+}
+
+fn laser_ext_xml(s: &Slide) -> Option<String> {
+    let t = s.laser.as_ref()?;
+    if t.points.is_empty() {
+        return None;
+    }
+    let mut body = String::new();
+    for p in t.points.iter().take(4096) {
+        if !p.x.is_finite() || !p.y.is_finite() {
+            continue;
+        }
+        let x = p.x.clamp(-1.0e7, 1.0e7);
+        let y = p.y.clamp(-1.0e7, 1.0e7);
+        let _ = std::fmt::Write::write_fmt(&mut body, format_args!("<dc:pt x=\"{x:.3}\" y=\"{y:.3}\" t=\"{}\"/>", p.t_ms.min(3_600_000)));
+    }
+    if body.is_empty() {
+        return None;
+    }
+    Some(format!(
+        "<p:ext uri=\"{}\"><dc:laser xmlns:dc=\"https://deckcraft.app/ns/laser\" r=\"{}\" g=\"{}\" b=\"{}\">{body}</dc:laser></p:ext>",
+        crate::LASER_EXT_URI,
+        t.color.r,
+        t.color.g,
+        t.color.b
+    ))
+}
+
 /// Strip an `<p:extLst>` wrapper (masters/layouts keep the whole element).
 fn ext_children(raw: Option<&str>) -> Option<String> {
     let raw = raw?;
@@ -573,10 +626,8 @@ fn slide_xml(x: &mut Exp, o: &mut Out, s: &Slide) -> Vec<u8> {
     if let Some(t) = &s.transition {
         timing::transition(&mut w, x, o, t);
     }
-    if !s.animations.is_empty() {
-        timing::timing(&mut w, x, &s.animations, &s.shapes, &ids);
-    }
-    ext_list(&mut w, s.raw_ext.as_deref());
+    timing::timing(&mut w, x, &s.animations, &s.shapes, &ids);
+    slide_exts(&mut w, s);
     w.close("p:sld");
     w.finish()
 }
@@ -762,6 +813,13 @@ fn pres_props_xml(p: &Presentation) -> Vec<u8> {
     w.open0("p:penClr");
     w.val("a:srgbClr", s.pen_color.hex());
     w.close("p:penClr");
+    w.open0("p:extLst");
+    w.open("p:ext", A::new().a("uri", crate::LASER_CLR_URI));
+    w.open("p14:laserClr", A::new().a("xmlns:p14", NS_P14));
+    w.val("a:srgbClr", s.laser_color.hex());
+    w.close("p14:laserClr");
+    w.close("p:ext");
+    w.close("p:extLst");
     w.close("p:showPr");
     w.close("p:presentationPr");
     w.finish()

@@ -75,7 +75,21 @@ pub fn inspect(app: &SlideApp, ctx: &egui::Context) -> Value {
         "dialog": app.dialog.as_ref().map(|d| d.id.clone()),
         "home": app.backstage_open(),
         "backstage": app.backstage.as_ref().map(|b| b.page.id()),
-        "showing": app.show.as_ref().map(|s| json!({"slide": s.state.slide, "step": s.state.step, "ended": s.ended})),
+        "showing": app.show.as_ref().map(|s| {
+            let now = ctx.input(|i| i.time);
+            let (slide_secs, total_secs) = s.rehearse_times(now);
+            json!({
+                "slide": s.state.slide,
+                "step": s.state.step,
+                "ended": s.ended,
+                "record": s.record,
+                "rehearse": s.rehearse,
+                "rehearsePaused": s.rehearse_paused(),
+                "askKeep": s.ask_keep,
+                "slideSecs": slide_secs,
+                "totalSecs": total_secs,
+            })
+        }),
         "documents": app.session.documents().iter().map(|d| json!({"title": d.title(), "dirty": d.is_dirty(), "path": d.path})).collect::<Vec<_>>(),
         "status": app.status.as_ref().map(|s| s.0.clone()),
         "perf": {"frameMs": app.perf.frame_ms, "renderMs": app.perf.render_ms, "fps": app.perf.fps},
@@ -178,6 +192,9 @@ pub fn handle(app: &mut SlideApp, ctx: &egui::Context, req: &ControlRequest) -> 
         "ui.move" | "ui.click" | "ui.drag" => {
             let (Some(x), Some(y)) = (f(p, "x"), f(p, "y")) else { return err("missing x/y") };
             let pos = egui::pos2(x, y);
+            if p.get("ctrl").is_some() || p.get("shift").is_some() || p.get("alt").is_some() || p.get("cmd").is_some() {
+                app.synthetic.push(egui::Event::ModifiersChanged(egui_mods(p)));
+            }
             app.synthetic.push(egui::Event::PointerMoved(pos));
             if req.method == "ui.click" {
                 let button = match s("button") {
@@ -295,6 +312,16 @@ pub fn handle(app: &mut SlideApp, ctx: &egui::Context, req: &ControlRequest) -> 
         "show.start" => {
             let from = p.get("from").and_then(Value::as_u64).unwrap_or(0) as usize;
             app.start_show(from, p.get("reading").and_then(Value::as_bool).unwrap_or(false));
+            if p.get("record").and_then(Value::as_bool) == Some(true)
+                && let Some(show) = app.show.as_mut()
+            {
+                show.record = true;
+            }
+            if p.get("rehearse").and_then(Value::as_bool) == Some(true)
+                && let Some(show) = app.show.as_mut()
+            {
+                show.rehearse = true;
+            }
             ok(Value::Null)
         }
         "show.end" => {
@@ -326,6 +353,11 @@ pub fn handle(app: &mut SlideApp, ctx: &egui::Context, req: &ControlRequest) -> 
         }
         other => err(format!("unknown method `{other}`")),
     }
+}
+
+fn egui_mods(p: &Value) -> egui::Modifiers {
+    let b = |n: &str| p.get(n).and_then(Value::as_bool).unwrap_or(false);
+    egui::Modifiers { alt: b("alt"), ctrl: b("ctrl"), shift: b("shift"), mac_cmd: false, command: b("cmd") }
 }
 
 fn mods_from(p: &Value) -> Mods {
