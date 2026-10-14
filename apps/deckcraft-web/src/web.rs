@@ -1,7 +1,7 @@
 //! The browser shell: web `Services`, drag-and-drop, and the eframe web runner.
 
 use deckcraft_engine::Session;
-use deckcraft_ui_egui::{Inbox, Services, SlideApp};
+use deckcraft_ui_egui::{Inbox, InboxEvent, InboxFile, Services, SlideApp};
 use wasm_bindgen::JsCast as _;
 
 const PRESENTATION_EXTS: &[&str] = &["deckcraft", "pptx", "potx", "ppsx", "txt", "md"];
@@ -79,17 +79,47 @@ struct WebShell {
 impl eframe::App for WebShell {
     fn logic(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
         let dropped = ctx.input_mut(|i| std::mem::take(&mut i.raw.dropped_files));
+        // An OBJ, PLY or glTF model dropped with its materials and textures: one request, its
+        // files read and handed over together.
+        let names: Vec<String> =
+            dropped.iter().map(|f| f.path().file_name().map(|n| n.to_string_lossy().to_string()).unwrap_or_else(|| "dropped".into())).collect();
+        if dropped.len() > 1 && names.iter().any(|n| deckcraft_engine::cmd::model3d::uses_companions(n)) {
+            let id = self.app.begin_external_file("drop");
+            let inbox = self.inbox.clone();
+            let repaint = ctx.clone();
+            wasm_bindgen_futures::spawn_local(async move {
+                let mut read = Vec::with_capacity(dropped.len());
+                for (f, name) in dropped.into_iter().zip(names) {
+                    match f.bytes_async().await {
+                        Ok(bytes) => read.push((name, bytes)),
+                        Err(e) => log::error!("couldn't read dropped file {name}: {e}"),
+                    }
+                }
+                let event = if read.is_empty() { InboxEvent::Cancelled { id } } else { InboxEvent::Files { id, files: read } };
+                push_inbox(&inbox, event);
+                repaint.request_repaint();
+            });
+            self.app.logic(ctx);
+            return;
+        }
         for f in dropped {
+            // Capture the document and slide now. The bytes arrive later, after the user may
+            // have switched slides.
+            let id = self.app.begin_external_file("drop");
             let inbox = self.inbox.clone();
             let ctx = ctx.clone();
             wasm_bindgen_futures::spawn_local(async move {
                 let name = f.path().file_name().map(|n| n.to_string_lossy().to_string()).unwrap_or_else(|| "dropped".into());
                 match f.bytes_async().await {
                     Ok(bytes) => {
-                        inbox.lock().unwrap_or_else(|e| e.into_inner()).push((name, bytes));
+                        push_inbox(&inbox, InboxEvent::File(InboxFile { id, name, bytes }));
                         ctx.request_repaint();
                     }
-                    Err(e) => log::error!("couldn't read dropped file {name}: {e}"),
+                    Err(e) => {
+                        log::error!("couldn't read dropped file {name}: {e}");
+                        push_inbox(&inbox, InboxEvent::Cancelled { id });
+                        ctx.request_repaint();
+                    }
                 }
             });
         }
@@ -110,7 +140,7 @@ impl eframe::App for WebShell {
 fn services(inbox: Inbox, ctx: egui::Context) -> Services {
     let open_inbox = inbox.clone();
     Services {
-        open_async: Some(Box::new(move |purpose: &str| {
+        open_async: Some(Box::new(move |purpose: &str, request: u64| {
             let inbox = open_inbox.clone();
             let ctx = ctx.clone();
             let dialog = match purpose {
@@ -122,16 +152,25 @@ fn services(inbox: Inbox, ctx: egui::Context) -> Services {
             };
             let many = purpose == "model3d";
             wasm_bindgen_futures::spawn_local(async move {
-                let files = if many { dialog.pick_files().await.unwrap_or_default() } else { dialog.pick_file().await.into_iter().collect() };
-                // All read first, then handed over together: a model and its companions arrive as one batch.
-                let mut read = Vec::with_capacity(files.len());
-                for file in files {
-                    read.push((file.file_name(), file.read().await));
-                }
-                if read.is_empty() {
+                if many {
+                    // All read first, then handed over together: a model and its companions arrive as one batch.
+                    let files = dialog.pick_files().await.unwrap_or_default();
+                    let mut read = Vec::with_capacity(files.len());
+                    for file in files {
+                        read.push((file.file_name(), file.read().await));
+                    }
+                    let event = if read.is_empty() { InboxEvent::Cancelled { id: request } } else { InboxEvent::Files { id: request, files: read } };
+                    push_inbox(&inbox, event);
+                    ctx.request_repaint();
                     return;
                 }
-                inbox.lock().unwrap_or_else(|e| e.into_inner()).extend(read);
+                let Some(file) = dialog.pick_file().await else {
+                    push_inbox(&inbox, InboxEvent::Cancelled { id: request });
+                    ctx.request_repaint();
+                    return;
+                };
+                let bytes = file.read().await;
+                push_inbox(&inbox, InboxEvent::File(InboxFile { id: request, name: file.file_name(), bytes }));
                 ctx.request_repaint();
             });
         })),
@@ -144,6 +183,10 @@ fn services(inbox: Inbox, ctx: egui::Context) -> Services {
         inbox: Some(inbox),
         ..Default::default()
     }
+}
+
+fn push_inbox(inbox: &Inbox, event: InboxEvent) {
+    inbox.lock().unwrap_or_else(|e| e.into_inner()).push(event);
 }
 
 /// Trigger a browser download of `bytes` named after the last component of `path`.

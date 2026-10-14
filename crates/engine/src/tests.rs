@@ -142,6 +142,62 @@ fn clipboard_copy_paste_shapes_and_slides() {
 }
 
 #[test]
+fn bold_copy_is_html_and_pages_html_pastes_bold() {
+    let mut s = session();
+    let title = s.doc().unwrap().current_slide().unwrap().shapes[0].id.0;
+    s.execute("text.edit", &json!({"id": title})).unwrap();
+    s.execute("text.insert", &json!({"text": "Hello"})).unwrap();
+    s.execute("text.selectAll", &json!({})).unwrap();
+    s.execute("format.bold", &json!({"on": true})).unwrap();
+    let v = s.execute("edit.copy", &json!({})).unwrap();
+    let html = v["html"].as_str().unwrap();
+    assert!(html.contains("<b>"), "{html}");
+    assert_eq!(v["text"], "Hello");
+    // The same plain words are our own clipboard, so a plainer HTML fragment is not reparsed.
+    s.execute("text.select", &json!({"anchor": [0, 5], "caret": [0, 5]})).unwrap();
+    s.execute("edit.paste", &json!({"text": "Hello", "html": "<p>Hello</p>"})).unwrap();
+    let body = s.doc().unwrap().shape(deckcraft_model::ShapeId(title)).unwrap().text.clone().unwrap();
+    assert_eq!(body.text(), "HelloHello");
+    assert!(body.paragraphs.iter().flat_map(|p| p.runs.iter()).all(|r| r.props.bold == Some(true)), "{body:?}");
+    s.execute("text.select", &json!({"anchor": [0, 10], "caret": [0, 10]})).unwrap();
+    let caret = s.execute("edit.copy", &json!({})).unwrap();
+    assert_eq!(caret["text"], "");
+    assert_eq!(caret["html"], "");
+
+    let mut ext = session();
+    ext.execute("edit.paste", &json!({"text": "Hello", "html": "<p style=\"font-weight: bold\">Hello</p>"})).unwrap();
+    let pasted = ext
+        .doc()
+        .unwrap()
+        .current_slide()
+        .unwrap()
+        .shapes
+        .iter()
+        .find(|sh| sh.text.as_ref().is_some_and(|t| t.text() == "Hello"))
+        .unwrap()
+        .text
+        .clone()
+        .unwrap();
+    assert_eq!(pasted.paragraphs[0].runs[0].props.bold, Some(true), "{pasted:?}");
+
+    let mut mismatched = session();
+    mismatched.execute("edit.paste", &json!({"text": "Hi", "html": "<b>Nope</b>"})).unwrap();
+    let plain = mismatched
+        .doc()
+        .unwrap()
+        .current_slide()
+        .unwrap()
+        .shapes
+        .iter()
+        .find(|sh| sh.text.as_ref().is_some_and(|t| t.text() == "Hi"))
+        .unwrap()
+        .text
+        .clone()
+        .unwrap();
+    assert_ne!(plain.paragraphs[0].runs[0].props.bold, Some(true));
+}
+
+#[test]
 fn group_ungroup_roundtrip_positions() {
     let mut s = session();
     let a = s.execute("shape.insert", &json!({"preset": "rect", "rect": [100, 100, 50, 50]})).unwrap()["id"].as_u64().unwrap();
@@ -285,6 +341,34 @@ fn base64_roundtrip() {
         assert_eq!(cmd::base64_decode(&cmd::base64_encode(&data)).unwrap(), data);
     }
     assert!(cmd::base64_decode("!!").is_none());
+}
+
+#[test]
+fn new_slide_body_tabs_match_text_set() {
+    let body = "Install from DMG\nLaunch app\n\tCheck signing\n\t\tDeep\nBuild a deck";
+    let mut s = session();
+    s.execute("slide.new", &json!({"layout": "titleAndContent", "title": "Test Plan", "body": body})).unwrap();
+    let levels = |s: &Session| {
+        let slide = s.doc().unwrap().current_slide().unwrap();
+        let sh = slide.shapes.iter().find(|x| x.ph_type() == Some(deckcraft_model::PhType::Obj)).unwrap();
+        let rows: Vec<(u8, String)> = sh.text.as_ref().unwrap().paragraphs.iter().map(|p| (p.level, p.text())).collect();
+        (sh.id.0, rows)
+    };
+    let (id, from_new) = levels(&s);
+    assert_eq!(
+        from_new,
+        vec![
+            (0, "Install from DMG".to_string()),
+            (0, "Launch app".to_string()),
+            (1, "Check signing".to_string()),
+            (2, "Deep".to_string()),
+            (0, "Build a deck".to_string()),
+        ]
+    );
+    s.execute("text.set", &json!({"id": id, "text": body})).unwrap();
+    assert_eq!(levels(&s).1, from_new);
+    s.execute("text.set", &json!({"id": id, "text": "\t\t\t\t\t\t\t\t\tCapped"})).unwrap();
+    assert_eq!(levels(&s).1, vec![(8, "Capped".to_string())]);
 }
 
 #[test]
@@ -2436,4 +2520,147 @@ fn language_marks_text_and_no_proof_and_repeats_are_reported() {
     s.execute("format.language", &json!({"noProof": true})).unwrap();
     assert!(s.execute("review.spelling", &json!({})).unwrap().as_array().unwrap().is_empty());
     assert!(s.execute("format.language", &json!({"lang": "en US!"})).is_err());
+}
+
+/// Smooth Corners (#286): a rounded rectangle becomes a squircle outline that survives PPTX.
+#[test]
+fn smooth_corners_makes_a_squircle_outline() {
+    let mut s = session();
+    let r = s.execute("shape.insert", &json!({"preset": "roundRect", "rect": [100, 100, 200, 100]})).unwrap();
+    let id = deckcraft_model::ShapeId(r["id"].as_u64().unwrap() as u32);
+    s.execute("shape.smoothCorners", &json!({"smoothing": 60})).unwrap();
+    let d = |s: &Session| match &s.doc().unwrap().shape(id).unwrap().geom {
+        deckcraft_model::Geom::Custom { paths } => paths[0].d.clone(),
+        g => panic!("{g:?}"),
+    };
+    // The default roundRect radius is 16.667% of the short side: 16.667 pt, smoothed 60%.
+    assert_eq!(d(&s), deckcraft_geom::squircle::path_d(200.0, 100.0, 16.667, 0.6));
+    // The smoothed outline takes a new smoothing with the radius it was drawn with; without a
+    // radius, or with another one (it could be any freeform), it is refused.
+    s.execute("shape.smoothCorners", &json!({"smoothing": 100, "radius": 16.667})).unwrap();
+    assert_eq!(d(&s), deckcraft_geom::squircle::path_d(200.0, 100.0, 16.667, 1.0));
+    assert!(s.execute("shape.smoothCorners", &json!({"smoothing": 50})).is_err());
+    assert!(s.execute("shape.smoothCorners", &json!({"smoothing": 50, "radius": 30})).is_err());
+    s.execute("edit.undo", &json!({})).unwrap();
+    assert_eq!(d(&s), deckcraft_geom::squircle::path_d(200.0, 100.0, 16.667, 0.6));
+    // Other shapes are refused.
+    s.execute("shape.insert", &json!({"preset": "ellipse", "rect": [0, 0, 50, 50]})).unwrap();
+    assert!(s.execute("shape.smoothCorners", &json!({"smoothing": 50})).is_err());
+    // So is a freeform, whatever radius is given.
+    s.execute("shape.insert", &json!({"preset": "rect", "rect": [0, 0, 50, 50]})).unwrap();
+    s.execute("shape.editPoints", &json!({"on": true})).unwrap();
+    s.execute("shape.editPoints", &json!({"on": false})).unwrap();
+    assert!(matches!(s.doc().unwrap().shapes().last().unwrap().geom, deckcraft_model::Geom::Custom { .. }), "Edit Points made a freeform");
+    assert!(s.execute("shape.smoothCorners", &json!({"smoothing": 50, "radius": 8})).is_err());
+    // The outline round-trips through PPTX as custom geometry.
+    let bytes = crate::cmd::file::save_bytes(&s.doc().unwrap().doc, "pptx").unwrap();
+    let back = crate::cmd::file::open_presentation("x.pptx", &bytes).unwrap();
+    let sh = back.slides.iter().flat_map(|sl| sl.shapes.iter()).find(|sh| matches!(sh.geom, deckcraft_model::Geom::Custom { .. }));
+    assert!(sh.is_some(), "a custom outline in the saved file");
+}
+
+#[test]
+fn wordart_adjust_handle_drags_and_undoes() {
+    let mut s = session();
+    s.prefs.snap_to_grid = false;
+    s.prefs.smart_guides = false;
+    let id =
+        s.execute("shape.insert", &json!({"preset": "rect", "rect": [80.0, 60.0, 420.0, 200.0], "text": "ARCHED"})).unwrap()["id"].as_u64().unwrap();
+    let sid = model::ShapeId(id as u32);
+    {
+        let st = s.doc_mut().unwrap();
+        let slide = st.selection.slide;
+        let mut doc = (*st.doc).clone();
+        let sh = model::find_shape_mut(&mut std::sync::Arc::make_mut(&mut doc.slides[slide]).shapes, sid).unwrap();
+        sh.text.as_mut().unwrap().body.warp = Some("textArchUp".into());
+        st.doc = std::sync::Arc::new(doc);
+    }
+    s.execute("edit.select", &json!({"ids": [id]})).unwrap();
+    let (at, top) = {
+        let st = s.doc().unwrap();
+        let sh = st.shape(sid).unwrap();
+        let x = cmd::xfrm_of(&st.doc, &st.selection, sh);
+        let hs = tools::wordart_handles(&st.doc, &st.selection, sh, x.w, x.h);
+        assert_eq!(hs.len(), 1);
+        let at = x.affine() * hs[0].pos;
+        (at, deckcraft_geom::Point::new(x.center().x, x.y))
+    };
+    assert!(matches!(s.hit_test(at, 4.0), Some(tools::Hit::Warp { index: 0, .. })));
+    let ev = |kind, p: deckcraft_geom::Point| PointerEvent { kind, x: p.x, y: p.y, mods: Mods::default(), tol: 4.0 };
+    s.pointer(ev(PointerKind::Down, at)).unwrap();
+    s.pointer(ev(PointerKind::Drag, top)).unwrap();
+    s.pointer(ev(PointerKind::Up, top)).unwrap();
+    let adj = s.doc().unwrap().shape(sid).unwrap().text.as_ref().unwrap().body.warp_adj.clone();
+    let deg = adj.first().copied().unwrap_or(0.0) / 60_000.0;
+    assert!((deg - 270.0).abs() < 2.0, "{deg} from {adj:?}");
+    s.execute("edit.undo", &json!({})).unwrap();
+    let body = &s.doc().unwrap().shape(sid).unwrap().text.as_ref().unwrap().body;
+    assert_eq!(body.warp.as_deref(), Some("textArchUp"));
+    assert!(body.warp_adj.is_empty(), "undo restores the default adjusts");
+}
+
+#[test]
+fn shape_picture_fill_options_tile_offset_and_round_trip() {
+    use deckcraft_model::style::PictureMode;
+    let mut img = image::RgbaImage::new(4, 4);
+    img.put_pixel(0, 0, image::Rgba([255, 0, 0, 255]));
+    let mut png = Vec::new();
+    image::DynamicImage::ImageRgba8(img).write_to(&mut std::io::Cursor::new(&mut png), image::ImageFormat::Png).unwrap();
+    let mut s = Session::with_new();
+    s.execute("slide.new", &json!({"layout": "blank"})).unwrap();
+    s.execute("shape.insert", &json!({"preset": "rect", "rect": [100, 100, 200, 100]})).unwrap();
+    let pf = |s: &Session| match s.doc().unwrap().selected_shapes()[0].fill.clone() {
+        Some(deckcraft_model::Fill::Picture(pf)) => pf,
+        other => panic!("{other:?}"),
+    };
+    // Options without a picture fill are a no-op, not an error.
+    s.execute("shape.fill", &json!({"pictureProps": {"tile": true}})).unwrap();
+    s.execute("shape.fill", &json!({"picture": cmd::base64_encode(&png)})).unwrap();
+    s.execute("shape.fill", &json!({"pictureProps": {"stretch": [0.1, 0.2, 5, "x"]}})).unwrap();
+    assert_eq!(pf(&s).mode, PictureMode::Stretch { fill_rect: [0.1, 0.2, 0.99, 0.0] });
+    s.execute("shape.fill", &json!({"pictureProps": {"tile": true, "offsetX": 12, "offsetY": -3, "scaleX": 0.5, "scaleY": 50, "align": "ctr", "mirror": "xy", "rotateWithShape": false}})).unwrap();
+    s.execute("shape.fill", &json!({"pictureProps": {"align": "bogus", "offsetX": f64::NAN}, "transparency": 0.4})).unwrap();
+    let want = PictureMode::Tile { tx: 12.0, ty: -3.0, sx: 0.5, sy: 10.0, flip: "xy".into(), align: "ctr".into() };
+    let got = pf(&s);
+    assert_eq!(got.mode, want);
+    assert!(got.upright);
+    assert!((got.alpha.unwrap() - 0.6).abs() < 1e-9);
+    // PPTX round trip keeps the options.
+    let bytes = cmd::file::save_bytes(&s.doc().unwrap().doc, "pptx").unwrap();
+    s.execute("file.openBytes", &json!({"name": "p.pptx", "data": cmd::base64_encode(&bytes)})).unwrap();
+    let doc = &s.doc().unwrap().doc;
+    let back = doc.slides.iter().flat_map(|sl| sl.shapes.iter()).find_map(|sh| match &sh.fill {
+        Some(deckcraft_model::Fill::Picture(pf)) => Some(pf.clone()),
+        _ => None,
+    });
+    let back = back.unwrap();
+    assert_eq!(back.mode, want);
+    assert!(back.upright);
+    assert!((back.alpha.unwrap() - 0.6).abs() < 1e-6);
+}
+
+#[test]
+fn find_and_replace_across_shapes_and_notes() {
+    let mut s = session();
+    s.execute("shape.insert", &json!({"preset": "rect", "rect": [100, 100, 200, 100], "text": "Old plan, old team\nboldly"})).unwrap();
+    s.execute("slide.notes", &json!({"text": "Discuss the old plan"})).unwrap();
+    let q = json!({"text": "old"});
+    let found = s.execute("text.find", &q).unwrap();
+    let n = found.as_array().unwrap().len();
+    assert!(n >= 3, "{found}");
+    let whole = s.execute("text.find", &json!({"text": "old", "wholeWords": true, "matchCase": true})).unwrap();
+    assert_eq!(whole.as_array().unwrap().len(), n - 2, "Old and boldly are not whole lower-case matches");
+
+    let first = found[0].clone();
+    assert_eq!((first["para"].as_u64(), first["start"].as_u64()), (Some(0), Some(0)));
+    s.execute("text.replace", &json!({"text": "old", "with": "New", "at": first})).unwrap();
+    assert_eq!(s.execute("text.find", &q).unwrap().as_array().unwrap().len(), n - 1);
+
+    let r = s.execute("text.replace", &json!({"text": "old", "with": "new", "wholeWords": true})).unwrap();
+    assert_eq!(r["replaced"].as_u64(), Some(n as u64 - 2));
+    let text = s.doc().unwrap().doc.slides[0].shapes.iter().filter_map(|x| x.text.as_ref()).map(|t| t.text()).collect::<Vec<_>>().join("|");
+    assert!(text.contains("New plan, new team\nboldly"), "{text}");
+    assert!(s.execute("text.replace", &json!({"text": "zebra", "with": "x"})).is_err());
+    s.execute("edit.undo", &json!({})).unwrap();
+    assert_eq!(s.execute("text.find", &q).unwrap().as_array().unwrap().len(), n - 1);
 }

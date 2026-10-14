@@ -9,6 +9,7 @@
 pub mod morph;
 pub mod preset;
 pub mod space;
+pub mod squircle;
 pub mod warp;
 
 pub use kurbo::{Affine, BezPath, PathEl, Point, Rect, Shape as KurboShape, Size, Vec2};

@@ -9,6 +9,8 @@
 > **Last reviewed:** 2026-10-14 · **Last updated:** 2026-10-14 · **Change:** minor (Insert › Date and Time dialog; 28 dialogs, 226 commands; previous: transition frames) · **Target:** Microsoft PowerPoint for Mac 16.113 (Microsoft 365)
 > **Last reviewed:** 2026-10-14 · **Last updated:** 2026-10-14 · **Change:** minor (command registry 227; dialogs stay 27; previous: transition frames) · **Target:** Microsoft PowerPoint for Mac 16.113 (Microsoft 365)
 > **Last reviewed:** 2026-10-14 · **Last updated:** 2026-10-14 · **Change:** minor (command registry counted at 236; dialogs stay 27; the test-count line stays 504; previous: transition frames) · **Target:** Microsoft PowerPoint for Mac 16.113 (Microsoft 365)
+> **Last reviewed:** 2026-10-14 · **Last updated:** 2026-10-14 · **Change:** minor (Font dialog, 227 commands, 28 dialogs; previous: minor, transition frames) · **Target:** Microsoft PowerPoint for Mac 16.113 (Microsoft 365)
+> **Last reviewed:** 2026-10-14 · **Last updated:** 2026-10-14 · **Change:** minor (Paragraph and Tabs dialogs, 229 commands, 29 dialogs; previous: minor, Font dialog) · **Target:** Microsoft PowerPoint for Mac 16.113 (Microsoft 365)
 > **Last reviewed:** 2026-10-13 · **Last updated:** 2026-10-14 · **Change:** minor (3-D models: the `mesh` crate, `geom::space`, the 3-D model shape kind; previous: minor, transition frames: perspective meshes, slide parts, headless compositor; before that: created from the code on main at d556ff9) · **Target:** Microsoft PowerPoint for Mac 16.113 (Microsoft 365)
 
 How DeckCraft is built today. The binding rules (layering, everything is a command, thin UI, never
@@ -41,6 +43,10 @@ nothing below L6 uses egui, eframe, winit or rfd.
 | L6 | `ui-egui`, `mcp` | The PowerPoint-style interface (ribbon with 10 tabs + contextual tabs, canvas, thumbnails, panes, 28 dialogs, show and presenter windows, the JSON control channel); the MCP server (JSON-RPC 2.0 over stdio), headless or connected to a running app |
 | L5 | `engine` | Sessions, documents, selection, undo history on shared slide snapshots, the command registry (226 commands in `cmd/*`), pointer tools, keys, AutoRecover, the panic guard (`guard.rs`) |
 | L6 | `ui-egui`, `mcp` | The PowerPoint-style interface (ribbon with 10 tabs + contextual tabs, canvas, thumbnails, panes, 28 dialogs, show and presenter windows, the JSON control channel); the MCP server (JSON-RPC 2.0 over stdio), headless or connected to a running app |
+| L5 | `engine` | Sessions, documents, selection, undo history on shared slide snapshots, the command registry (227 commands in `cmd/*`), pointer tools, keys, AutoRecover, the panic guard (`guard.rs`) |
+| L6 | `ui-egui`, `mcp` | The PowerPoint-style interface (ribbon with 10 tabs + contextual tabs, canvas, thumbnails, panes, 28 dialogs, show and presenter windows, the JSON control channel); the MCP server (JSON-RPC 2.0 over stdio), headless or connected to a running app |
+| L5 | `engine` | Sessions, documents, selection, undo history on shared slide snapshots, the command registry (229 commands in `cmd/*`), pointer tools, keys, AutoRecover, the panic guard (`guard.rs`) |
+| L6 | `ui-egui`, `mcp` | The PowerPoint-style interface (ribbon with 10 tabs + contextual tabs, canvas, thumbnails, panes, 29 dialogs, show and presenter windows, the JSON control channel); the MCP server (JSON-RPC 2.0 over stdio), headless or connected to a running app |
 | apps | `deckcraft` (desktop: eframe/wgpu, cpal audio, logging), `deckcraft-cli` (run, render, convert, mcp, app), `deckcraft-web` (trunk; WebGPU with WebGL2 fallback), `xtask` | Exempt from layering |
 
 The media codecs and containers are clean-room pure Rust, 59k lines, shared in spirit with
@@ -76,8 +82,9 @@ textures stay straight; soft edges are per-corner opacities. The show renders th
 transition and only composites cached textures each frame; `render::composite_transition` is the
 CPU twin used by `deckcraft-cli render-transition` and the tests. The show window and the presenter view are egui viewports; animation state per shape
 comes from `anim::timeline` each frame (3-D effects add a turn, move and scale of a 3-D model).
-3-D models are rendered by `deckcraft-mesh` at the output's resolution and cached; their lighting
-was measured against PowerPoint's. PDF export renders each slide at print resolution and
+Animations ▸ Preview plays that same state on the editor canvas for the current slide, then draws
+the slide at rest. 3-D models are rendered by `deckcraft-mesh` at the output's resolution and
+cached; their lighting was measured against PowerPoint's. PDF export renders each slide at print resolution and
 overlays an invisible real-text layer with embedded font subsets.
 
 ## File I/O
@@ -109,6 +116,9 @@ macOS, Windows, Linux, FreeBSD and web artifacts.
 | 2026-10-14 | minor | Insert › Date and Time dialog (`insert.dateTime` with no keys). 28 dialogs; command count stays 226 |
 | 2026-10-14 | minor | Command registry is 227 (`design.effects`). Dialogs stay 27. The test-count line stays 504 |
 | 2026-10-14 | minor | Command registry counted at 236, including `master.preserve` and `master.placeholders`. Dialogs stay 27. The test-count line stays 504. The menu measurement and the d556ff9 snapshot still count 226 |
+| 2026-10-13 | trivial | Animation preview draws the current slide's timeline on the editor canvas |
+| 2026-10-14 | minor | Paragraph and Tabs dialogs; command registry 229; 29 dialogs |
+| 2026-10-14 | minor | Font dialog; command registry 227; 28 dialogs |
 | 2026-10-14 | minor | 3-D models: `mesh` crate (readers, GLB writer, renderer), `geom::space`, `ShapeKind::Model3d`, 3-D effects in the timeline |
 | 2026-10-13 | minor | Transitions: perspective meshes, background/content parts, CPU compositor |
 | 2026-10-10 | major | Created from the code on main (d556ff9) and AGENTS.md §4 |
