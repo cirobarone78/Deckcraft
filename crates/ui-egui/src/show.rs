@@ -21,8 +21,8 @@ pub struct Show {
     pub autoplay: bool,
     pub rehearse: bool,
     timeline: Option<(usize, Timeline)>,
-    step_start: f64,
-    slide_start: f64,
+    pub(crate) step_start: f64,
+    pub(crate) slide_start: f64,
     step_end: f64,
     trans: Option<Transition>,
     tex: Option<(Key, TextureHandle)>,
@@ -169,12 +169,28 @@ impl Show {
 
     /// On entering a slide: auto-play its first step when it begins With/After Previous.
     fn after_enter(&mut self, doc: &Presentation, now: f64) {
-        let auto = self.timeline(doc).step_is_auto(0);
-        if auto || self.autoplay {
-            let a = self.state.next(doc);
-            if matches!(a, ShowAction::PlayStep(_)) {
-                self.step_start = now;
+        // `enter` has already marked an auto first step as playing: start its clock here.
+        // Advancing again ran `step_done` on a step that never showed, so the slide came up
+        // fully built (#631). Nothing else advances on entry — back-navigation lands on a slide
+        // fully built (step == steps) and "Show without animation" has no steps at all; both
+        // must stay put.
+        // `enter` has already marked an auto first step as playing: start its clock here.
+        // Advancing again ran `step_done` on a step that never showed, so the slide came up
+        // fully built (#631). Nothing else advances on entry — back-navigation lands on a slide
+        // fully built (step == steps) and "Show without animation" has no steps at all; both
+        // must stay put.
+        if self.state.playing {
+            if self.preview_only && !self.autoplay {
+                // Transition Preview shows the transition only: the entrance completes unseen,
+                // as it did before the entry kick was fixed.
+                let _ = self.state.step_done(doc);
+                return;
             }
+            self.step_start = now;
+        } else if self.autoplay && self.state.step == 0 && self.timeline(doc).steps() > 0 {
+            // Play-all preview over a first step that waits for a click.
+            self.state.next(doc);
+            self.step_start = now;
         }
     }
 }

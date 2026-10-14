@@ -1305,6 +1305,26 @@ mod tests {
         app.run("app.home", json!({})).unwrap();
         assert!(!app.backstage_open(), "with nothing open the start screen shows anyway");
     }
+
+    /// #631: a first animation set After/With Previous plays as soon as the slide appears. The
+    /// entry kick used to advance an already-playing step, completing it before it ever showed.
+    #[test]
+    fn an_auto_first_step_plays_when_the_slide_appears() {
+        let mut harness = canvas_harness();
+        let shape = harness.state().session.active().unwrap().doc.slides[0].shapes[0].id.0;
+        harness
+            .state_mut()
+            .session
+            .execute("animation.add", &json!({"effect": "fade", "start": "afterPrevious", "duration": 3000, "ids": [shape]}))
+            .unwrap();
+        harness.state_mut().start_show(0, false);
+        harness.run_steps(5);
+        let show = harness.state().show.as_ref().expect("show running");
+        assert_eq!(show.state.step, 0, "the first step is the animation");
+        assert!(show.state.playing, "the fade is playing, not already finished");
+        // Both clocks are set in the same frame: the fade started with the slide.
+        assert!((show.step_start - show.slide_start).abs() < 1e-9, "the fade started with the slide");
+    }
     fn canvas_harness() -> egui_kittest::Harness<'static, SlideApp> {
         let mut harness = egui_kittest::Harness::builder().with_size(egui::vec2(1200.0, 800.0)).build_ui_state(
             |ui, app: &mut SlideApp| {
