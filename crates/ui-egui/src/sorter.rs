@@ -14,97 +14,117 @@ pub fn show(app: &mut SlideApp, ui: &mut Ui) {
     let cur = st.selection.slide;
     let multi = st.selection.slides.clone();
     let zoom = app.ui.sorter_zoom.clamp(0.5, 3.0);
+    let rtl = crate::rtl::on();
     egui::ScrollArea::vertical().auto_shrink([false, false]).show(ui, |ui| {
-        ui.add_space(16.0);
-        let tw = 200.0 * zoom;
-        let th = tw * (doc.slide_size.height / doc.slide_size.width.max(1.0)) as f32;
-        let ppp = ui.ctx().pixels_per_point();
-        let cols = ((ui.available_width() - 32.0) / (tw + 36.0)).floor().max(1.0) as usize;
-        let mut budget = 4u32;
-        let mut rects = vec![];
-        let mut need_more = false;
-        for row in 0..doc.slides.len().div_ceil(cols) {
-            ui.horizontal(|ui| {
-                ui.add_space(24.0);
-                for c in 0..cols {
-                    let i = row * cols + c;
-                    if i >= doc.slides.len() {
-                        break;
-                    }
-                    let (cell, resp) = ui.allocate_exact_size(vec2(tw + 36.0, th + 36.0), Sense::click_and_drag());
-                    let img = Rect::from_min_size(cell.min + vec2(18.0, 8.0), vec2(tw, th));
-                    rects.push((i, cell));
-                    let p = ui.painter();
-                    match app.textures.thumb(ui.ctx(), &doc, i, (tw * ppp) as u32, &mut budget) {
-                        Some(tex) => {
-                            p.image(tex.id(), img, Rect::from_min_max(pos2(0.0, 0.0), pos2(1.0, 1.0)), Color32::WHITE);
+        crate::rtl::root(ui, |ui| {
+            ui.add_space(16.0);
+            let tw = 200.0 * zoom;
+            let th = tw * (doc.slide_size.height / doc.slide_size.width.max(1.0)) as f32;
+            let ppp = ui.ctx().pixels_per_point();
+            let cols = ((ui.available_width() - 32.0) / (tw + 36.0)).floor().max(1.0) as usize;
+            let mut budget = 4u32;
+            let mut rects = vec![];
+            let mut need_more = false;
+            for row in 0..doc.slides.len().div_ceil(cols) {
+                ui.horizontal(|ui| {
+                    ui.add_space(24.0);
+                    for c in 0..cols {
+                        let i = row * cols + c;
+                        if i >= doc.slides.len() {
+                            break;
                         }
-                        None => {
-                            p.rect_filled(img, CornerRadius::ZERO, Color32::WHITE);
-                            need_more = true;
-                        }
-                    }
-                    let id = doc.slides.get(i).map(|s| s.id);
-                    let selected = i == cur || id.is_some_and(|id| multi.contains(&id));
-                    p.rect_stroke(
-                        img.expand(if selected { 2.0 } else { 0.0 }),
-                        CornerRadius::same(3),
-                        Stroke::new(if selected { 3.0 } else { 1.0 }, if selected { t.accent } else { t.border }),
-                        egui::StrokeKind::Outside,
-                    );
-                    p.text(pos2(img.min.x, img.max.y + 12.0), Align2::LEFT_CENTER, format!("{}", i + 1), theme::font(12.0), t.text_dim);
-                    if let Some(tr) = doc.slides.get(i).and_then(|s| s.transition.as_ref()).filter(|t| t.kind != "none") {
-                        p.text(pos2(img.max.x, img.max.y + 12.0), Align2::RIGHT_CENTER, format!("★ {}", tr.kind), theme::font(10.5), t.text_faint);
-                    }
-                    if resp.clicked() {
-                        let add = ui.input(|i| i.modifiers.command);
-                        if add {
-                            if let Some(id) = id {
-                                let _ = app.run("slide.selectSlides", json!({"ids": [id.0], "add": true}));
+                        let (cell, resp) = ui.allocate_exact_size(vec2(tw + 36.0, th + 36.0), Sense::click_and_drag());
+                        let img = Rect::from_min_size(cell.min + vec2(18.0, 8.0), vec2(tw, th));
+                        rects.push((i, cell));
+                        let p = ui.painter();
+                        match app.textures.thumb(ui.ctx(), &doc, i, (tw * ppp) as u32, &mut budget) {
+                            Some(tex) => {
+                                p.image(tex.id(), img, Rect::from_min_max(pos2(0.0, 0.0), pos2(1.0, 1.0)), Color32::WHITE);
                             }
-                        } else {
-                            let _ = app.run("slide.go", json!({"index": i}));
+                            None => {
+                                p.rect_filled(img, CornerRadius::ZERO, Color32::WHITE);
+                                need_more = true;
+                            }
                         }
+                        let id = doc.slides.get(i).map(|s| s.id);
+                        let selected = i == cur || id.is_some_and(|id| multi.contains(&id));
+                        p.rect_stroke(
+                            img.expand(if selected { 2.0 } else { 0.0 }),
+                            CornerRadius::same(3),
+                            Stroke::new(if selected { 3.0 } else { 1.0 }, if selected { t.accent } else { t.border }),
+                            egui::StrokeKind::Outside,
+                        );
+                        p.text(
+                            pos2(crate::rtl::lead_x(rtl, img, 0.0), img.max.y + 12.0),
+                            crate::rtl::lead_center(rtl),
+                            (i + 1).to_string(),
+                            theme::font(12.0),
+                            t.text_dim,
+                        );
+                        if let Some(tr) = doc.slides.get(i).and_then(|s| s.transition.as_ref()).filter(|t| t.kind != "none") {
+                            p.text(
+                                pos2(crate::rtl::trail_x(rtl, img, 0.0), img.max.y + 12.0),
+                                if rtl { Align2::LEFT_CENTER } else { Align2::RIGHT_CENTER },
+                                format!("★ {}", tr.kind),
+                                theme::font(10.5),
+                                t.text_faint,
+                            );
+                        }
+                        if resp.clicked() {
+                            let add = ui.input(|i| i.modifiers.command);
+                            if add {
+                                if let Some(id) = id {
+                                    let _ = app.run("slide.selectSlides", json!({"ids": [id.0], "add": true}));
+                                }
+                            } else {
+                                let _ = app.run("slide.go", json!({"index": i}));
+                            }
+                        }
+                        if resp.double_clicked() {
+                            let _ = app.run("slide.go", json!({"index": i}));
+                            app.ui.view = crate::ViewMode::Normal;
+                        }
+                        if resp.drag_started() {
+                            app.thumb_drag = Some((i, i));
+                        }
+                        crate::rtl::context_menu(&resp, |ui| crate::thumbs::slide_menu(app, ui, i));
                     }
-                    if resp.double_clicked() {
-                        let _ = app.run("slide.go", json!({"index": i}));
-                        app.ui.view = crate::ViewMode::Normal;
+                });
+            }
+            if need_more {
+                ui.ctx().request_repaint();
+            }
+            if let Some((from, _)) = app.thumb_drag {
+                if let Some(pp) = ui.input(|i| i.pointer.interact_pos()) {
+                    // A slide is dropped after the one whose far half the pointer is in (the left half
+                    // when the slides run from the right).
+                    let to = rects
+                        .iter()
+                        .find(|(_, r)| r.contains(pp))
+                        .map(|(i, r)| if (pp.x > r.center().x) != rtl { i + 1 } else { *i })
+                        .unwrap_or(doc.slides.len());
+                    app.thumb_drag = Some((from, to));
+                    if let Some((_, r)) = rects.iter().find(|(i, _)| *i == to).or(rects.last()) {
+                        let x = if to >= doc.slides.len() { crate::rtl::trail_x(rtl, *r, 6.0) } else { crate::rtl::lead_x(rtl, *r, 6.0) };
+                        ui.painter().line_segment([pos2(x, r.min.y + 6.0), pos2(x, r.max.y - 20.0)], Stroke::new(3.0, t.accent));
                     }
-                    if resp.drag_started() {
-                        app.thumb_drag = Some((i, i));
-                    }
-                    resp.context_menu(|ui| crate::thumbs::slide_menu(app, ui, i));
                 }
-            });
-        }
-        if need_more {
-            ui.ctx().request_repaint();
-        }
-        if let Some((from, _)) = app.thumb_drag {
-            if let Some(pp) = ui.input(|i| i.pointer.interact_pos()) {
-                let to =
-                    rects.iter().find(|(_, r)| r.contains(pp)).map(|(i, r)| if pp.x > r.center().x { i + 1 } else { *i }).unwrap_or(doc.slides.len());
-                app.thumb_drag = Some((from, to));
-                if let Some((_, r)) = rects.iter().find(|(i, _)| *i == to).or(rects.last()) {
-                    let x = if to >= doc.slides.len() { r.max.x - 6.0 } else { r.min.x + 6.0 };
-                    ui.painter().line_segment([pos2(x, r.min.y + 6.0), pos2(x, r.max.y - 20.0)], Stroke::new(3.0, t.accent));
+                if ui.input(|i| i.pointer.any_released()) {
+                    if let Some((from, to)) = app.thumb_drag.take()
+                        && to != from
+                        && to != from + 1
+                    {
+                        let _ = app.run("slide.move", json!({"from": from, "to": if to > from { to - 1 } else { to }}));
+                    }
+                    app.thumb_drag = None;
                 }
             }
-            if ui.input(|i| i.pointer.any_released()) {
-                if let Some((from, to)) = app.thumb_drag.take()
-                    && to != from
-                    && to != from + 1
-                {
-                    let _ = app.run("slide.move", json!({"from": from, "to": if to > from { to - 1 } else { to }}));
-                }
-                app.thumb_drag = None;
+            // Ctrl/⌘ + wheel zooms the sorter.
+            let (zd, cmd) = ui.input(|i| (i.zoom_delta(), i.modifiers.command));
+            if (zd - 1.0).abs() > 1e-3 || cmd {
+                app.ui.sorter_zoom = (zoom * zd).clamp(0.5, 3.0);
             }
-        }
-        // Ctrl/⌘ + wheel zooms the sorter.
-        let (zd, cmd) = ui.input(|i| (i.zoom_delta(), i.modifiers.command));
-        if (zd - 1.0).abs() > 1e-3 || cmd {
-            app.ui.sorter_zoom = (zoom * zd).clamp(0.5, 3.0);
-        }
+        })
     });
 }
 
@@ -137,7 +157,8 @@ pub fn notes_page(app: &mut SlideApp, ui: &mut Ui) {
     let mut buf: String = child.data_mut(|d| d.get_temp(id).unwrap_or_else(|| current.clone()));
     let r = child.add(
         egui::TextEdit::multiline(&mut buf)
-            .hint_text("Click to add text")
+            .hint_text(crate::i18n::tr("Click to add text"))
+            .horizontal_align(crate::rtl::text_align())
             .desired_width(notes_rect.width())
             .desired_rows(12)
             .frame(egui::Frame::NONE)
@@ -160,73 +181,86 @@ pub fn notes_page(app: &mut SlideApp, ui: &mut Ui) {
 /// Outline view: slide titles and body text as an editable outline.
 pub fn outline_pane(app: &mut SlideApp, ui: &mut Ui) {
     let t = Tokens::get(ui.ctx());
-    egui::Panel::left("outline").resizable(true).default_size(360.0).frame(egui::Frame::NONE.fill(t.card).inner_margin(egui::Margin::same(10))).show(
-        ui,
-        |ui| {
-            let Some(st) = app.session.active() else { return };
-            let doc = st.doc.clone();
-            let cur = st.selection.slide;
-            egui::ScrollArea::vertical().auto_shrink([false, false]).show(ui, |ui| {
-                for (i, s) in doc.slides.iter().enumerate() {
-                    let title_shape = s.shapes.iter().find(|x| x.ph_type().is_some_and(|k| k.is_title())).map(|x| x.id.0);
-                    ui.horizontal(|ui| {
-                        ui.label(egui::RichText::new(format!("{}", i + 1)).color(t.text_dim));
-                        let (r, _) = ui.allocate_exact_size(vec2(14.0, 10.0), Sense::hover());
-                        ui.painter().rect_stroke(
-                            r,
-                            CornerRadius::same(1),
-                            Stroke::new(1.0, if i == cur { t.accent } else { t.text_dim }),
-                            egui::StrokeKind::Inside,
-                        );
-                        let id = egui::Id::new(("ol-title", s.id.0));
-                        let cur_title = s.title();
-                        let mut v: String = ui.data_mut(|d| d.get_temp(id).unwrap_or_else(|| cur_title.clone()));
-                        let resp =
-                            ui.add(egui::TextEdit::singleline(&mut v).font(theme::bold(14.0)).frame(egui::Frame::NONE).desired_width(f32::INFINITY));
-                        if resp.gained_focus() {
-                            let _ = app.run("slide.go", json!({"index": i}));
-                        }
-                        if resp.lost_focus()
-                            && v != cur_title
-                            && let Some(tid) = title_shape
-                        {
-                            let _ = app.run("text.set", json!({"id": tid, "text": v}));
-                        }
-                        if !resp.has_focus() {
-                            ui.data_mut(|d| d.remove::<String>(id));
-                        } else {
-                            ui.data_mut(|d| d.insert_temp(id, v));
-                        }
-                    });
-                    for sh in s.shapes.iter().filter(|x| !x.ph_type().is_some_and(|k| k.is_title())) {
-                        let Some(tb) = &sh.text else { continue };
-                        if tb.is_empty() {
-                            continue;
-                        }
-                        let id = egui::Id::new(("ol-body", s.id.0, sh.id.0));
-                        let cur_text: String =
-                            tb.paragraphs.iter().map(|p| format!("{}{}", "\t".repeat(p.level as usize), p.text())).collect::<Vec<_>>().join("\n");
-                        let mut v: String = ui.data_mut(|d| d.get_temp(id).unwrap_or_else(|| cur_text.clone()));
+    crate::rtl::start_panel("outline")
+        .resizable(true)
+        .default_size(360.0)
+        .frame(egui::Frame::NONE.fill(t.card).inner_margin(egui::Margin::same(10)))
+        .show(ui, |ui| {
+            crate::rtl::root(ui, |ui| {
+                let Some(st) = app.session.active() else { return };
+                let doc = st.doc.clone();
+                let cur = st.selection.slide;
+                egui::ScrollArea::vertical().auto_shrink([false, false]).show(ui, |ui| {
+                    for (i, s) in doc.slides.iter().enumerate() {
+                        let title_shape = s.shapes.iter().find(|x| x.ph_type().is_some_and(|k| k.is_title())).map(|x| x.id.0);
                         ui.horizontal(|ui| {
-                            ui.add_space(36.0);
-                            let resp =
-                                ui.add(egui::TextEdit::multiline(&mut v).frame(egui::Frame::NONE).desired_width(f32::INFINITY).desired_rows(1));
+                            ui.label(egui::RichText::new((i + 1).to_string()).color(t.text_dim));
+                            let (r, _) = ui.allocate_exact_size(vec2(14.0, 10.0), Sense::hover());
+                            ui.painter().rect_stroke(
+                                r,
+                                CornerRadius::same(1),
+                                Stroke::new(1.0, if i == cur { t.accent } else { t.text_dim }),
+                                egui::StrokeKind::Inside,
+                            );
+                            let id = egui::Id::new(("ol-title", s.id.0));
+                            let cur_title = s.title();
+                            let mut v: String = ui.data_mut(|d| d.get_temp(id).unwrap_or_else(|| cur_title.clone()));
+                            let resp = ui.add(
+                                egui::TextEdit::singleline(&mut v)
+                                    .font(theme::bold(14.0))
+                                    .frame(egui::Frame::NONE)
+                                    .horizontal_align(crate::rtl::text_align())
+                                    .desired_width(f32::INFINITY),
+                            );
                             if resp.gained_focus() {
                                 let _ = app.run("slide.go", json!({"index": i}));
                             }
-                            if resp.lost_focus() && v != cur_text {
-                                let _ = app.run("text.set", json!({"id": sh.id.0, "text": v}));
+                            if resp.lost_focus()
+                                && v != cur_title
+                                && let Some(tid) = title_shape
+                            {
+                                let _ = app.run("text.set", json!({"id": tid, "text": v}));
                             }
                             if !resp.has_focus() {
                                 ui.data_mut(|d| d.remove::<String>(id));
                             } else {
-                                ui.data_mut(|d| d.insert_temp(id, v.clone()));
+                                ui.data_mut(|d| d.insert_temp(id, v));
                             }
                         });
+                        for sh in s.shapes.iter().filter(|x| !x.ph_type().is_some_and(|k| k.is_title())) {
+                            let Some(tb) = &sh.text else { continue };
+                            if tb.is_empty() {
+                                continue;
+                            }
+                            let id = egui::Id::new(("ol-body", s.id.0, sh.id.0));
+                            let cur_text: String =
+                                tb.paragraphs.iter().map(|p| format!("{}{}", "\t".repeat(p.level as usize), p.text())).collect::<Vec<_>>().join("\n");
+                            let mut v: String = ui.data_mut(|d| d.get_temp(id).unwrap_or_else(|| cur_text.clone()));
+                            ui.horizontal(|ui| {
+                                ui.add_space(36.0);
+                                let resp = ui.add(
+                                    egui::TextEdit::multiline(&mut v)
+                                        .frame(egui::Frame::NONE)
+                                        .horizontal_align(crate::rtl::text_align())
+                                        .desired_width(f32::INFINITY)
+                                        .desired_rows(1),
+                                );
+                                if resp.gained_focus() {
+                                    let _ = app.run("slide.go", json!({"index": i}));
+                                }
+                                if resp.lost_focus() && v != cur_text {
+                                    let _ = app.run("text.set", json!({"id": sh.id.0, "text": v}));
+                                }
+                                if !resp.has_focus() {
+                                    ui.data_mut(|d| d.remove::<String>(id));
+                                } else {
+                                    ui.data_mut(|d| d.insert_temp(id, v.clone()));
+                                }
+                            });
+                        }
+                        ui.add_space(6.0);
                     }
-                    ui.add_space(6.0);
-                }
-            });
-        },
-    );
+                });
+            })
+        });
 }

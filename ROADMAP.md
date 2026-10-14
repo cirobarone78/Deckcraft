@@ -2,7 +2,7 @@
 
 **Stage: alpha** · next: beta, ~20 points and ~120–210 h away
 
-> **Last reviewed:** 2026-10-10 · **Last updated:** 2026-10-10 · **Change:** minor (hours to ~95% per audience added; ready 56% → 55%; stage stays alpha; previous: major, full re-measure against PowerPoint for Mac 16.113.4; restructured to the craftrules progress-docs standard) · **Target:** Microsoft PowerPoint for Mac 16.113 (Microsoft 365)
+> **Last reviewed:** 2026-10-10 · **Last updated:** 2026-10-10 · **Change:** minor (Ukrainian UI catalog and language selection) · **Target:** Microsoft PowerPoint for Mac 16.113 (Microsoft 365)
 
 DeckCraft aims at full PowerPoint parity, and to be better: faster, open (a documented zip+JSON
 format plus PPTX), scriptable by agents (CLI, JSON control channel, MCP), and available everywhere
@@ -84,7 +84,11 @@ EMF/SVG pictures, the data-loss and startup-crash bugs (#60, #40, #59) and the b
 
 ## Languages
 
-English only today; no string catalog yet (Ukrainian is in review as PR #34). Detail:
+English, Ukrainian and Arabic: Preferences offers System language, English, Українська and العربية.
+Ukrainian and Arabic (`ar`, `ar-*`) OS/browser locales select them automatically; Arabic mirrors the
+whole window right to left (ribbon, tabs, panes, status bar, File tab, dialogs, menus); explicit desktop choices persist in `ui.json`.
+Menus, ribbon, command palette, panels, dialogs and presenter controls use the interface catalog.
+Presentation content and command IDs retain their original values. Detail:
 [docs/localization-parity.md](docs/localization-parity.md).
 
 | Language | Code | UI strings | Status | Hours to full |
@@ -102,8 +106,8 @@ English only today; no string catalog yet (Ukrainian is in review as PR #34). De
 | Korean | ko | 0% | none | 4–7 |
 | Vietnamese | vi | 0% | none | 3–5 |
 
-Plus 8–14 h once for the catalog infrastructure. Other languages shipped: none. PowerPoint for Mac
-ships 26.
+Other languages shipped: **Ukrainian (uk)** and **Arabic (ar, mirrored right to left)**, with English fallback and bundled Cyrillic glyph
+coverage. PowerPoint for Mac ships 26 languages; additional catalogs and native review remain.
 
 ## Upcoming
 
@@ -113,7 +117,7 @@ Ranked; detail and the full beta plan in [docs/roadmap.md](docs/roadmap.md).
    image paste (#53), editor soak tests. 10–20 h.
 2. **PPTX on real decks:** owned corpus, round-trip checks, fixes; #70, #74, #77; EMF/WMF and SVG.
    36–64 h.
-3. **Localization:** catalog, system language (#15), zh-Hans, es, fr, de, ja with IME. 27–46 h.
+3. **Localization:** additional catalogs for zh-Hans, es, fr, de, ja, native review and IME. 27–46 h.
 4. **Output:** vector PDF, printing. 10–16 h.
 5. **Depth that users hit:** font weights (#69), chart data and elements, Animation Pane timeline,
    presenter view on the right display, native macOS menu bar, Format Shape pane. 33–56 h.
@@ -128,6 +132,8 @@ app's JSON control channel (`deckcraft --control PORT`).
 
 | Date | What landed |
 |---|---|
+| 2026-10-13 | Arabic interface (`ar.tsv`, 1,420 entries, count-neutral wording, Western digits), mirrored right to left: `bidi.rs` puts catalog text into display order, `rtl.rs` mirrors panels, ribbon, menus, dialogs and every `Grid`; an audit test walks every tab, File page, dialog, pane and ribbon control in Arabic and fails on a panic or on English text |
+| 2026-10-10 | Ukrainian UI catalog, system-language detection and persisted language choice (#15, #30); translated placeholder prompts preserve presentation content |
 | 2026-10-13 | Slide transitions like PowerPoint: every transition and option measured frame by frame against PowerPoint's video export and retuned (curves, directions, soft edges, 3-D perspective, contents moving over backgrounds); PowerPoint's own XML elements and defaults read and written (diagonal Wipe, Zoom, Shape In/Out, Glitter Hexagons, Shred In/Out, Page Curl Single); `deckcraft-cli render-transition` renders frames headless |
 | 2026-10-13 | Wild text cases measured against PowerPoint (102 synthetic slides): bidi by run language, East Asian vertical text upright, mongolianVert/wordArtVert/wordArtVertRtl, underline styles and strikethrough at the font's metrics, centre/right/decimal tabs, East Asian, Thai, Hindi, Arabic and Hebrew numbering, small caps, all-caps "ß", transparent text, soft hyphens, kinsoku, rtlCol and just/dist anchoring, emoji presentation, fallback faces that no longer move the baseline |
 | 2026-10-13 | Render matches PowerPoint more closely on wild shape, picture and table cases: even-odd custom paths, dashes and caps, arrowheads, radial and path gradients, tile rects, rotWithShape, gradient lines, shadows cast by what is drawn (group and perspective too), group fill, picture borders, tiles, reflection, recolour (biLevel, alphaInv, brightness/contrast), table borders and grid default, 20+ preset shapes by their ECMA formulas, default miter joins, and approximate 3-D bevels, cameras and face lighting |
@@ -150,6 +156,7 @@ app's JSON control channel (`deckcraft --control PORT`).
 
 | Date | Change | Summary |
 |---|---|---|
+| 2026-10-10 | minor | Added Ukrainian UI and language selection to the reorganized language summary |
 | 2026-10-13 | trivial | Progress log: wild text cases |
 | 2026-10-12 | trivial | Progress log: File tab (Backstage, #76) |
 | 2026-10-12 | trivial | Progress log: lines in scaled groups (#233) |

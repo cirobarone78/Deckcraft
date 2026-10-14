@@ -112,6 +112,7 @@ fn copy_opts<'a>(o: &RenderOpts<'a>) -> RenderOpts<'a> {
         clear: o.clear,
         date_text: o.date_text.clone(),
         now: o.now,
+        placeholder_prompt: o.placeholder_prompt,
     }
 }
 

@@ -18,6 +18,7 @@ struct Key {
     master: usize,
     size: (u32, u32),
     edit: bool,
+    language: crate::i18n::Language,
     extra: u64,
     /// The pasteboard region the slide's drawing calls for (canvas only).
     want: Region,
@@ -122,6 +123,7 @@ impl Textures {
             master: master.as_ref().map(|m| Arc::as_ptr(m) as usize).unwrap_or(0),
             size,
             edit,
+            language: if edit { crate::i18n::current() } else { crate::i18n::Language::En },
             extra: extra ^ grayscale as u64,
             want,
         };
@@ -132,8 +134,16 @@ impl Textures {
         }
         let t0 = crate::now_ms();
         let render = |region: Region| {
-            let opts =
-                RenderOpts { scale, edit, gif_times, threads: threads(), offset: region.offset(), size: Some(region.size()), ..Default::default() };
+            let opts = RenderOpts {
+                scale,
+                edit,
+                gif_times,
+                placeholder_prompt: Some(crate::i18n::placeholder_prompt),
+                threads: threads(),
+                offset: region.offset(),
+                size: Some(region.size()),
+                ..Default::default()
+            };
             deckcraft_render::render_slide_drawn(p, index, &opts)
         };
         let (mut img, drawn) = render(want);
@@ -181,6 +191,7 @@ impl Textures {
             master: master.as_ref().map(|m| Arc::as_ptr(m) as usize).unwrap_or(0),
             size: (width_px, h),
             edit: false,
+            language: crate::i18n::Language::En,
             extra: 0,
             want: Region::slide(width_px, h),
         };
@@ -211,5 +222,50 @@ impl Textures {
             }
         }
         Some(tex)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn switching_interface_language_refreshes_cached_hints_and_preserves_user_content() {
+        fn updated_canvas(ctx: &egui::Context, textures: &mut Textures, p: &Presentation, language: crate::i18n::Language) -> egui::ImageData {
+            crate::i18n::set_current(language);
+            let tex = textures.slide(ctx, p, 0, (480, 270), Region::slide(480, 270), true, 0, false, &[]).unwrap().0;
+            let mut delta = ctx.tex_manager().write().take_delta();
+            let image = delta.set.get(&tex.id()).and_then(|images| images.last()).map(|image| image.image.clone());
+            delta.clear();
+            image.expect("the changed interface language must update the canvas texture")
+        }
+
+        let ctx = egui::Context::default();
+        let mut textures = Textures::default();
+        let mut p = Presentation::default();
+        let before = p.clone();
+        let english = updated_canvas(&ctx, &mut textures, &p, crate::i18n::Language::En);
+        let ukrainian = updated_canvas(&ctx, &mut textures, &p, crate::i18n::Language::Uk);
+        assert!(english != ukrainian, "the default placeholder hints must change visibly");
+        assert_eq!(p, before);
+
+        for master in &mut p.masters {
+            for layout in &mut Arc::make_mut(master).layouts {
+                for shape in &mut layout.shapes {
+                    if let Some(ph) = &mut shape.ph {
+                        ph.has_custom_prompt = true;
+                        shape.text = Some(deckcraft_model::TextBody::from_text("Custom {project} prompt"));
+                    }
+                }
+            }
+        }
+        Arc::make_mut(p.slides.first_mut().unwrap()).shapes.first_mut().unwrap().text =
+            Some(deckcraft_model::TextBody::from_text("User File {project}"));
+        let before = p.clone();
+        let english = updated_canvas(&ctx, &mut textures, &p, crate::i18n::Language::En);
+        let ukrainian = updated_canvas(&ctx, &mut textures, &p, crate::i18n::Language::Uk);
+        assert!(english == ukrainian, "stored text and custom prompts must retain their original wording");
+        assert_eq!(p, before);
+        crate::i18n::set_current(crate::i18n::Language::En);
     }
 }

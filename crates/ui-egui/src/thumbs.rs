@@ -11,7 +11,7 @@ use crate::theme::{self, Tokens};
 pub fn show(app: &mut SlideApp, ui: &mut Ui) {
     let t = Tokens::get(ui.ctx());
     let in_master = app.session.active().is_some_and(|d| d.selection.target != Target::Slides);
-    egui::Panel::left("thumbs")
+    crate::rtl::start_panel("thumbs")
         .resizable(true)
         .default_size(app.ui.thumbs_width)
         .size_range(150.0..=420.0)
@@ -52,59 +52,61 @@ fn list(app: &mut SlideApp, ui: &mut Ui) {
             ui.add_space(4.0);
             let (r, resp) = ui.allocate_exact_size(vec2(width, 22.0), Sense::click());
             let p = ui.painter();
-            crate::widgets::chevron(p, pos2(r.min.x + 14.0, r.center().y), 3.0, t.text_dim);
+            let rtl = crate::rtl::on();
+            crate::widgets::chevron(p, pos2(crate::rtl::lead_x(rtl, r, 14.0), r.center().y), 3.0, t.text_dim);
             p.text(
-                pos2(r.min.x + 24.0, r.center().y),
-                Align2::LEFT_CENTER,
-                format!("{}  ({})", sec.name, sec.slides.len()),
+                pos2(crate::rtl::lead_x(rtl, r, 24.0), r.center().y),
+                crate::rtl::lead_center(rtl),
+                if rtl {
+                    format!("({})  {}", sec.slides.len(), crate::bidi::visual(&sec.name))
+                } else {
+                    format!("{}  ({})", sec.name, sec.slides.len())
+                },
                 theme::font(12.0),
                 t.text_dim,
             );
-            resp.context_menu(|ui| {
-                if ui.button("Rename Section…").clicked() {
+            crate::rtl::context_menu(&resp, |ui| {
+                if ui.button(crate::i18n::tr("Rename Section…")).clicked() {
                     let mut d = crate::dialogs::Dialog::new("renameSection");
                     d.params = json!({"index": si, "name": sec.name});
                     app.dialog = Some(d);
                     ui.close();
                 }
-                if ui.button("Remove Section").clicked() {
+                if ui.button(crate::i18n::tr("Remove Section")).clicked() {
                     let _ = app.run("section.remove", json!({"index": si}));
                     ui.close();
                 }
-                if ui.button("Remove Section & Slides").clicked() {
+                if ui.button(crate::i18n::tr("Remove Section & Slides")).clicked() {
                     let _ = app.run("section.remove", json!({"index": si, "slides": true}));
                     ui.close();
                 }
-                if ui.button("Move Section Up").clicked() {
+                if ui.button(crate::i18n::tr("Move Section Up")).clicked() {
                     let _ = app.run("section.move", json!({"index": si, "to": si.saturating_sub(1)}));
                     ui.close();
                 }
-                if ui.button("Move Section Down").clicked() {
+                if ui.button(crate::i18n::tr("Move Section Down")).clicked() {
                     let _ = app.run("section.move", json!({"index": si, "to": si + 1}));
                     ui.close();
                 }
             });
         }
         let (row, resp) = ui.allocate_exact_size(vec2(width, th + 16.0), Sense::click_and_drag());
-        let img = Rect::from_min_size(pos2(row.min.x + 30.0, row.min.y + 6.0), vec2(tw, th));
+        let rtl = crate::rtl::on();
+        // The number leads and the picture follows it (to its left in a mirrored window).
+        let num_x = crate::rtl::lead_x(rtl, row, 14.0);
+        let img = Rect::from_min_size(pos2(if rtl { row.max.x - 30.0 - tw } else { row.min.x + 30.0 }, row.min.y + 6.0), vec2(tw, th));
         rects.push((i, row));
         let p = ui.painter();
         let id = doc.slides.get(i).map(|s| s.id);
         let selected = i == cur || id.is_some_and(|id| multi.contains(&id));
         let hidden = doc.slides.get(i).is_some_and(|s| s.hidden);
-        p.text(
-            pos2(row.min.x + 14.0, img.min.y + 2.0),
-            Align2::CENTER_TOP,
-            format!("{}", i + 1),
-            theme::font(12.0),
-            if selected { t.text } else { t.text_dim },
-        );
+        p.text(pos2(num_x, img.min.y + 2.0), Align2::CENTER_TOP, (i + 1).to_string(), theme::font(12.0), if selected { t.text } else { t.text_dim });
         if hidden {
-            p.line_segment([pos2(row.min.x + 8.0, img.min.y + 18.0), pos2(row.min.x + 20.0, img.min.y + 6.0)], Stroke::new(1.0, t.text_dim));
+            p.line_segment([pos2(num_x - 6.0, img.min.y + 18.0), pos2(num_x + 6.0, img.min.y + 6.0)], Stroke::new(1.0, t.text_dim));
         }
         let has_anim = doc.slides.get(i).is_some_and(|s| !s.animations.is_empty() || s.transition.as_ref().is_some_and(|tr| tr.kind != "none"));
         if has_anim {
-            p.text(pos2(row.min.x + 14.0, img.min.y + 20.0), Align2::CENTER_TOP, "★", theme::font(10.0), t.text_faint);
+            p.text(pos2(num_x, img.min.y + 20.0), Align2::CENTER_TOP, "★", theme::font(10.0), t.text_faint);
         }
         let wpx = (tw * ppp).round() as u32;
         match app.textures.thumb(ui.ctx(), &doc, i, wpx, &mut budget) {
@@ -153,7 +155,7 @@ fn list(app: &mut SlideApp, ui: &mut Ui) {
         if resp.drag_started() {
             app.thumb_drag = Some((i, i));
         }
-        resp.context_menu(|ui| slide_menu(app, ui, i));
+        crate::rtl::context_menu(&resp, |ui| slide_menu(app, ui, i));
     }
     if need_more {
         ui.ctx().request_repaint();
@@ -170,7 +172,8 @@ fn list(app: &mut SlideApp, ui: &mut Ui) {
             }
             app.thumb_drag = Some((from, to));
             let y = rects.iter().find(|(i, _)| *i == to).map(|(_, r)| r.min.y + 2.0).or_else(|| rects.last().map(|(_, r)| r.max.y)).unwrap_or(0.0);
-            ui.painter().line_segment([pos2(26.0, y), pos2(width, y)], Stroke::new(2.0, t.accent));
+            let (from, to) = if crate::rtl::on() { (0.0, width - 26.0) } else { (26.0, width) };
+            ui.painter().line_segment([pos2(ui.max_rect().min.x + from, y), pos2(ui.max_rect().min.x + to, y)], Stroke::new(2.0, t.accent));
         }
         if ui.input(|i| i.pointer.any_released()) {
             if let Some((from, to)) = app.thumb_drag.take()
@@ -186,7 +189,7 @@ fn list(app: &mut SlideApp, ui: &mut Ui) {
     // Click on empty space below: new slide prompt.
     let (r, resp) = ui.allocate_exact_size(vec2(width, 40.0), Sense::click());
     if resp.hovered() {
-        ui.painter().text(r.center(), Align2::CENTER_CENTER, "+ New Slide", theme::font(12.0), t.text_faint);
+        ui.painter().text(r.center(), Align2::CENTER_CENTER, crate::i18n::tr("+ New Slide"), theme::font(12.0), t.text_faint);
     }
     if resp.clicked() {
         let _ = app.run("slide.new", json!({}));
@@ -202,52 +205,52 @@ pub fn slide_menu(app: &mut SlideApp, ui: &mut Ui, i: usize) {
         ("Copy", "edit.copy", json!({"scope": "slides"})),
         ("Paste", "edit.paste", json!({"scope": "slides"})),
     ] {
-        if ui.button(l).clicked() {
+        if ui.button(crate::i18n::tr(l)).clicked() {
             let _ = app.run(id, p);
             ui.close();
         }
     }
     ui.separator();
-    if ui.button("New Slide").clicked() {
+    if ui.button(crate::i18n::tr("New Slide")).clicked() {
         let _ = app.run("slide.new", json!({}));
         ui.close();
     }
-    if ui.button("Duplicate Slide").clicked() {
+    if ui.button(crate::i18n::tr("Duplicate Slide")).clicked() {
         let _ = app.run("slide.duplicate", json!({}));
         ui.close();
     }
-    if ui.button("Delete Slide").clicked() {
+    if ui.button(crate::i18n::tr("Delete Slide")).clicked() {
         let _ = app.run("slide.delete", json!({}));
         ui.close();
     }
     ui.separator();
-    if ui.button("Add Section").clicked() {
+    if ui.button(crate::i18n::tr("Add Section")).clicked() {
         let _ = app.run("section.add", json!({"at": i}));
         ui.close();
     }
-    ui.menu_button("Layout", |ui| {
+    ui.menu_button(crate::i18n::tr("Layout"), |ui| {
         let layouts: Vec<(String, u32)> = app
             .session
             .active()
             .and_then(|d| d.doc.masters.first().map(|m| m.layouts.iter().map(|l| (l.name.clone(), l.id.0)).collect()))
             .unwrap_or_default();
         for (n, id) in layouts {
-            if ui.button(n).clicked() {
+            if ui.button(crate::bidi::visual(&n)).clicked() {
                 let _ = app.run("slide.layout", json!({"layout": id}));
                 ui.close();
             }
         }
     });
-    if ui.button("Reset Slide").clicked() {
+    if ui.button(crate::i18n::tr("Reset Slide")).clicked() {
         let _ = app.run("slide.reset", json!({}));
         ui.close();
     }
-    if ui.button("Format Background…").clicked() {
+    if ui.button(crate::i18n::tr("Format Background…")).clicked() {
         let _ = app.run("view.pane", json!({"pane": "background"}));
         ui.close();
     }
     let hidden = app.session.active().and_then(|d| d.doc.slides.get(i).map(|s| s.hidden)).unwrap_or(false);
-    if ui.button(if hidden { "Show Slide" } else { "Hide Slide" }).clicked() {
+    if ui.button(crate::i18n::tr(if hidden { "Show Slide" } else { "Hide Slide" })).clicked() {
         let _ = app.run("slide.hide", json!({"index": i}));
         ui.close();
     }
@@ -268,7 +271,8 @@ fn master_list(app: &mut SlideApp, ui: &mut Ui) {
                 let tw = (width - indent - 14.0).max(40.0) * if li.is_some() { 0.8 } else { 1.0 };
                 let th = tw * (doc.slide_size.height / doc.slide_size.width.max(1.0)) as f32;
                 let (row, resp) = ui.allocate_exact_size(vec2(width, th + 12.0), Sense::click());
-                let img = Rect::from_min_size(pos2(row.min.x + indent, row.min.y + 4.0), vec2(tw, th));
+                let img_x = if crate::rtl::on() { row.max.x - indent - tw } else { row.min.x + indent };
+                let img = Rect::from_min_size(pos2(img_x, row.min.y + 4.0), vec2(tw, th));
                 let ppp = ui.ctx().pixels_per_point();
                 let px = ((tw * ppp) as u32).max(1);
                 let pic = deckcraft_render::render_layout(
@@ -298,9 +302,9 @@ fn master_list(app: &mut SlideApp, ui: &mut Ui) {
                 );
                 let name = match li {
                     Some(l) => m.layouts.get(l).map(|x| x.name.clone()).unwrap_or_default(),
-                    None => format!("{} Slide Master", m.name),
+                    None => crate::i18n::format("{} Slide Master", std::slice::from_ref(&m.name)),
                 };
-                let resp = resp.on_hover_text(name);
+                let resp = resp.on_hover_text(crate::bidi::visual(&name));
                 if resp.clicked() {
                     let p = match li {
                         Some(l) => json!({"master": mi, "layout": l}),

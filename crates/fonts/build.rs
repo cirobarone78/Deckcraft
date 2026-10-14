@@ -57,7 +57,13 @@ fn manifest(dir: &std::path::Path, manifest: &std::path::Path) -> Result<String,
         if EXCLUDED_FAMILIES.contains(family) {
             continue;
         }
-        if wasm && !matches!((*family, *style), ("BIZ UDPGothic", "Regular") | ("Inter", "Regular" | "Bold" | "Variable")) {
+        // The Arabic interface needs its face in the browser too, where no installed fonts exist.
+        if wasm
+            && !matches!(
+                (*family, *style),
+                ("BIZ UDPGothic", "Regular") | ("Inter", "Regular" | "Bold" | "Variable") | ("Noto Sans Arabic", "Regular")
+            )
+        {
             continue;
         }
         let path = dir.join(file).canonicalize().map_err(|e| format!("{file}: {e}"))?;

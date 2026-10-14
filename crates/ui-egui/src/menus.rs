@@ -82,56 +82,74 @@ pub fn palette(app: &mut SlideApp, ctx: &egui::Context) {
         .anchor(egui::Align2::CENTER_TOP, egui::vec2(0.0, 90.0))
         .fixed_size(egui::vec2(520.0, 380.0))
         .show(ctx, |ui| {
-            let r = ui.add(egui::TextEdit::singleline(&mut query).hint_text("Search commands…").desired_width(f32::INFINITY).font(theme::font(15.0)));
-            r.request_focus();
-            let q = query.to_lowercase();
-            let mut items: Vec<(String, String, Option<&'static str>)> = app
-                .session
-                .commands()
-                .into_iter()
-                .filter(|c| c.enabled)
-                .map(|c| (c.id.to_string(), c.label.to_string(), c.shortcut))
-                .chain(crate::UI_COMMANDS.iter().map(|c| (c.0.to_string(), c.1.to_string(), c.2)))
-                .filter(|(id, label, _)| q.is_empty() || label.to_lowercase().contains(&q) || id.to_lowercase().contains(&q))
-                .collect();
-            items.sort_by_key(|(_, l, _)| !l.to_lowercase().starts_with(&q));
-            items.truncate(60);
-            let (down, up, enter, esc) = ui.input(|i| {
-                (
-                    i.key_pressed(egui::Key::ArrowDown),
-                    i.key_pressed(egui::Key::ArrowUp),
-                    i.key_pressed(egui::Key::Enter),
-                    i.key_pressed(egui::Key::Escape),
-                )
-            });
-            if down {
-                sel = (sel + 1).min(items.len().saturating_sub(1));
-            }
-            if up {
-                sel = sel.saturating_sub(1);
-            }
-            if esc {
-                close = true;
-            }
-            if enter && let Some((id, ..)) = items.get(sel) {
-                run = Some(id.clone());
-            }
-            egui::ScrollArea::vertical().max_height(320.0).show(ui, |ui| {
-                for (k, (id, label, sc)) in items.iter().enumerate() {
-                    let r = ui.horizontal(|ui| {
-                        let resp = ui.selectable_label(k == sel, label);
-                        if let Some(s) = sc {
-                            ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                                ui.label(egui::RichText::new(crate::ribbon::pretty_shortcut(s)).color(t.text_faint));
-                            });
-                        }
-                        resp
-                    });
-                    if r.inner.clicked() {
-                        run = Some(id.clone());
-                    }
+            crate::rtl::root(ui, |ui| {
+                let r = ui.add(
+                    egui::TextEdit::singleline(&mut query)
+                        .hint_text(crate::i18n::tr("Search commands…"))
+                        .desired_width(f32::INFINITY)
+                        .horizontal_align(crate::rtl::text_align())
+                        .font(theme::font(15.0)),
+                );
+                r.request_focus();
+                let q = query.to_lowercase();
+                // A command is found by its English name, its id or its label in the interface language
+                // (typed in reading order, so a right-to-left label matches what a person typed).
+                let mut items: Vec<(String, String, Option<&'static str>)> = app
+                    .session
+                    .commands()
+                    .into_iter()
+                    .filter(|c| c.enabled)
+                    .map(|c| (c.id.to_string(), c.label, c.shortcut))
+                    .chain(crate::UI_COMMANDS.iter().map(|c| (c.0.to_string(), c.1, c.2)))
+                    .filter(|(id, label, _)| {
+                        q.is_empty()
+                            || label.to_lowercase().contains(&q)
+                            || crate::i18n::tr_logical(label).to_lowercase().contains(&q)
+                            || id.to_lowercase().contains(&q)
+                    })
+                    .map(|(id, label, sc)| (id, label.to_string(), sc))
+                    .collect();
+                items.sort_by_key(|(_, l, _)| !(l.to_lowercase().starts_with(&q) || crate::i18n::tr_logical(l).to_lowercase().starts_with(&q)));
+                items.truncate(60);
+                let items: Vec<(String, String, Option<&'static str>)> =
+                    items.into_iter().map(|(id, l, sc)| (id, crate::i18n::tr(&l).to_string(), sc)).collect();
+                let (down, up, enter, esc) = ui.input(|i| {
+                    (
+                        i.key_pressed(egui::Key::ArrowDown),
+                        i.key_pressed(egui::Key::ArrowUp),
+                        i.key_pressed(egui::Key::Enter),
+                        i.key_pressed(egui::Key::Escape),
+                    )
+                });
+                if down {
+                    sel = (sel + 1).min(items.len().saturating_sub(1));
                 }
-            });
+                if up {
+                    sel = sel.saturating_sub(1);
+                }
+                if esc {
+                    close = true;
+                }
+                if enter && let Some((id, ..)) = items.get(sel) {
+                    run = Some(id.clone());
+                }
+                egui::ScrollArea::vertical().max_height(320.0).show(ui, |ui| {
+                    for (k, (id, label, sc)) in items.iter().enumerate() {
+                        let r = ui.horizontal(|ui| {
+                            let resp = ui.selectable_label(k == sel, label);
+                            if let Some(s) = sc {
+                                ui.with_layout(crate::rtl::far_side(ui, egui::Align::Center), |ui| {
+                                    ui.label(egui::RichText::new(crate::ribbon::pretty_shortcut(s)).color(t.text_faint));
+                                });
+                            }
+                            resp
+                        });
+                        if r.inner.clicked() {
+                            run = Some(id.clone());
+                        }
+                    }
+                });
+            })
         });
     if let Some(id) = run {
         let _ = app.run(&id, json!({}));

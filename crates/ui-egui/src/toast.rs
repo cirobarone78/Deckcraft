@@ -17,15 +17,20 @@ pub struct Toast {
 
 /// The notice for fonts a presentation uses that aren't installed, or `None` when all are.
 pub fn missing_fonts_message(fonts: &[String]) -> Option<String> {
+    use crate::i18n::format;
     let names = match fonts {
         [] => return None,
         [a] => a.clone(),
-        [a, b] => format!("{a} and {b}"),
-        [a, b, c] => format!("{a}, {b} and {c}"),
-        [a, b, c, rest @ ..] => format!("{a}, {b}, {c} and {} more", rest.len()),
+        [a, b] => format("{} and {}", &[a.clone(), b.clone()]),
+        [a, b, c] => format("{}, {} and {}", &[a.clone(), b.clone(), c.clone()]),
+        [a, b, c, rest @ ..] => format("{}, {}, {} and {} more", &[a.clone(), b.clone(), c.clone(), rest.len().to_string()]),
     };
-    let (it, them) = if fonts.len() == 1 { ("isn't", "it") } else { ("aren't", "them") };
-    Some(format!("{names} {it} installed on this computer. Text that uses {them} is shown in a similar font."))
+    let sentence = if fonts.len() == 1 {
+        "{} isn't installed on this computer. Text that uses it is shown in a similar font."
+    } else {
+        "{} aren't installed on this computer. Text that uses them is shown in a similar font."
+    };
+    Some(format(sentence, &[names]))
 }
 
 /// Toast the active presentation's missing fonts, once per opened document.
@@ -56,19 +61,21 @@ pub fn show(app: &mut SlideApp, ctx: &egui::Context) {
             .inner_margin(Margin::symmetric(14, 10))
             .shadow(egui::epaint::Shadow { offset: [0, 2], blur: 8, spread: 0, color: t.shadow })
             .show(ui, |ui| {
-                ui.set_max_width(520.0);
-                ui.horizontal(|ui| {
-                    ui.add(egui::Label::new(egui::RichText::new(&text).font(theme::font(13.0)).color(t.text)).wrap());
-                    let (r, resp) = ui.allocate_exact_size(vec2(20.0, 20.0), egui::Sense::click());
-                    resp.widget_info(|| egui::WidgetInfo::labeled(egui::WidgetType::Button, true, "Close"));
-                    if resp.hovered() {
-                        ui.painter().rect_filled(r, CornerRadius::same(4), t.hover);
-                    }
-                    icons::paint(ui.painter(), r.shrink(3.0), Icon::Close, t.text_dim, false);
-                    if resp.on_hover_text("Close").clicked() {
-                        close = true;
-                    }
-                });
+                crate::rtl::root(ui, |ui| {
+                    ui.set_max_width(520.0);
+                    ui.horizontal(|ui| {
+                        ui.add(egui::Label::new(egui::RichText::new(&text).font(theme::font(13.0)).color(t.text)).wrap());
+                        let (r, resp) = ui.allocate_exact_size(vec2(20.0, 20.0), egui::Sense::click());
+                        resp.widget_info(|| egui::WidgetInfo::labeled(egui::WidgetType::Button, true, crate::i18n::tr("Close")));
+                        if resp.hovered() {
+                            ui.painter().rect_filled(r, CornerRadius::same(4), t.hover);
+                        }
+                        icons::paint(ui.painter(), r.shrink(3.0), Icon::Close, t.text_dim, false);
+                        if resp.on_hover_text(crate::i18n::tr("Close")).clicked() {
+                            close = true;
+                        }
+                    });
+                })
             });
     });
     if close {
