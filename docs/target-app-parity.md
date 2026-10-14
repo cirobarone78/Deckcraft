@@ -11,7 +11,7 @@ number.
 
 | Number | Value | Kind |
 |---|---|---|
-| **Feature breadth** (weighted checklist) | **79%** over 191 features (P0 92%, P1 75%, P2 36%) | **measured**: `cargo xtask parity` formula over [parity-checklist.md](parity-checklist.md), rows re-scored 2026-10-10 |
+| **Feature breadth** (weighted checklist) | **80%** over 191 features (P0 93%, P1 75%, P2 37%) | **measured**: `cargo xtask parity` formula over [parity-checklist.md](parity-checklist.md), font-face row re-scored 2026-10-13 |
 | Menu-bar coverage | **59%** (128 of 217 app-specific PowerPoint menu items have a DeckCraft command or UI label of the same name) | **measured** (heuristic lower bound): script matching the 2026-10-07 PowerPoint menu dump against the 226 engine command labels and the UI's strings; excludes the app, Window and Help menus and the subtitle language lists |
 | **Ready for real work** | **~55%** | **estimated**: weighted dimension table below (was ~56% until the features row was recomputed from written area weights) |
 | **Mainstream practitioner** | **~53%** | **estimated**: [method below](#mainstream-practitioner-and-essentials-user) |
@@ -64,7 +64,7 @@ The weights are what those users actually depend on, written down so the total c
 
 | Dimension | Weight | Ready | Hours to full | Doc | Evidence |
 |---|---:|---:|---|---|---|
-| Features (breadth × depth) | 30% | ~62% | 140–240 | [parity-checklist.md](parity-checklist.md), [animation-parity.md](animation-parity.md), [slideshow-parity.md](slideshow-parity.md) | Breadth 79% measured. Depth lags: 37 of 191 rows are partial, and users found depth bugs in rows scored done within two days (#53, #60, #69, #70, #74, #77, #78) |
+| Features (breadth × depth) | 30% | ~62% | 140–240 | [parity-checklist.md](parity-checklist.md), [animation-parity.md](animation-parity.md), [slideshow-parity.md](slideshow-parity.md) | Breadth 80% measured. Depth lags: partial rows remain, and users found depth bugs in rows scored done within two days (#53, #60, #70, #74, #77, #78) |
 | File formats | 20% | ~58% | 60–110 | [file-format-parity.md](file-format-parity.md) | PPTX reads and writes every main part and keeps unknown objects; files open in PowerPoint without repair. But it has never met a corpus of real decks, EMF/WMF/SVG pictures don't decode, comments/media/rewind settings are lost on round trip, and there is no `.ppt`, `.pptm`, `.odp`, video or GIF export |
 | UI/UX fidelity | 15% | ~60% | 30–50 | [ui-parity.md](ui-parity.md) | All 10 ribbon tabs and the contextual tabs exist; Format Shape pane, Animation Pane, dialogs and menus are thinner than PowerPoint's; no native macOS menu bar; user reports #17, #71, #73, #76 |
 | Stability | 10% | ~60% | 10–20 | [gaps.md](gaps.md) | Never-crash rules, a panic guard round every command, PPTX fuzz/malformed tests. But startup crashes on some Windows GPUs (#40, #59) and Close discards edits without asking (#60) |
@@ -99,7 +99,7 @@ PowerPoint is taken out of the areas and charged once, as a discount.
 
 | Area (weekly use) | Weight | Depth | Evidence |
 |---|---:|---:|---|
-| Text: typing, fonts, paragraphs, bullets | 18 | 70 | Every Home-tab control; font weights (#69), Tab in text boxes (#78) |
+| Text: typing, fonts, paragraphs, bullets | 18 | 70 | Every Home-tab control, including the family's other faces; Tab in text boxes (#78) |
 | Slides, layouts, sections, views | 10 | 82 | Checklist 90% breadth in both areas |
 | Masters, themes, backgrounds | 8 | 75 | Slide Master view, 8 themes; Notes/Handout masters rarely used |
 | Shapes, format, arrange | 14 | 75 | Presets, connectors, smart guides; Format Shape pane thinner |
@@ -116,7 +116,7 @@ PowerPoint is taken out of the areas and charged once, as a discount.
 
 | Discount | Factor | Evidence |
 |---|---:|---|
-| Interaction fidelity | ×0.92 | No native macOS menu bar, thinner Format Shape pane, Tab ends text entry (#78), font faces (#69), window chrome (#71) |
+| Interaction fidelity | ×0.92 | No native macOS menu bar, thinner Format Shape pane, Tab ends text entry (#78), window chrome (#71) |
 | Stability on real machines | ×0.92 | Startup crashes on some Windows GPUs (#40, #59); Close discards edits (#60, fix in PR #75); video stalls in the editor on Ubuntu (#91); arrows reported dead in the show on Linux Mint (#17) |
 | File exchange with PowerPoint users | ×0.88 | Harsher than VectorCraft's ×0.92 because swapping `.pptx` is daily work for this user: never tested on real decks, EMF pictures blank, icons from PowerPoint don't come through (#56), comment threads, media options and rewind lost on save (#70, #74, #77) |
 
@@ -134,7 +134,7 @@ mainstream number leaves out.
 | Core feature | Weight | Depth | Evidence |
 |---|---:|---:|---|
 | Start a deck from a theme (start screen) | 8 | 70 | Works; layout problems on the start screen (#17, #76) |
-| Type titles and bullets, basic formatting | 20 | 78 | Works; #69, #78 |
+| Type titles and bullets, basic formatting | 20 | 78 | Works, including named font faces; #78 |
 | New slide, layout, reorder, duplicate | 12 | 88 | Works |
 | Insert a picture | 10 | 65 | From file yes; paste fails on Windows/Linux (#53) |
 | Basic shapes and text boxes | 8 | 85 | Works |
@@ -187,7 +187,7 @@ it is the Features row of the dimension table. Automation and Platforms are scor
 | Shapes | 7 | 86% | ~75% | 8–14 | Edit points, text warp, WordArt depth | [ui-parity.md](ui-parity.md) |
 | Format (fill, line, effects) | 6 | 81% | ~65% | 8–14 | Format Shape pane depth, bevel and 3-D, picture/texture fill options | [ui-parity.md](ui-parity.md) |
 | Arrange | 3 | 100% | ~90% | 1–2 | Align to slide vs selected as a menu choice, More Rotation Options | [ui-parity.md](ui-parity.md) |
-| Text | 15 | 80% | ~62% | 18–30 | Font weights beyond Regular/Bold/Italic (#69), Tab in text boxes (#78), IME, true vertical CJK, dictionaries, AutoCorrect, thesaurus, equations (PR #55 open) | [localization-parity.md](localization-parity.md) |
+| Text | 15 | 83% | ~62% | 18–30 | Tab in text boxes (#78), IME, true vertical CJK, dictionaries, AutoCorrect, thesaurus, equations (PR #55 open) | [localization-parity.md](localization-parity.md) |
 | Tables | 5 | 89% | ~75% | 3–6 | Draw table, borders and cell effects depth | [parity-checklist.md](parity-checklist.md) |
 | Charts | 7 | 65% | ~45% | 12–20 | Data grid editing, chart elements, the `chartex` types (waterfall, funnel, treemap, sunburst, histogram, box) | [parity-checklist.md](parity-checklist.md) |
 | SmartArt | 4 | 33% | ~25% | 10–16 | Text pane, layout switching, the diagram data model on save | [parity-checklist.md](parity-checklist.md) |
@@ -276,6 +276,7 @@ scored done (16 open issues).
 
 | Date | Change | Summary |
 |---|---|---|
+| 2026-10-13 | trivial | Named font faces left the text shortfall lists (#69); the ready percentage is unchanged |
 | 2026-10-10 | minor | Added the readiness-by-audience table: each number gets its own hours to ~95% (full 340–600, mainstream 150–250, essentials 50–90). The full number stays an additive weighted sum; no change to the percentages |
 | 2026-10-10 | minor | Added the mainstream practitioner (~53%) and essentials user (~62%) numbers with written weights, discounts and user evidence. Features dimension recomputed from written area weights (66% judgement → 62.4% weighted mean), which moves ready for real work from ~56% to ~55%; stage unchanged |
 | 2026-10-10 | minor | Stage checked against the core-workflow gate (all six pass); stays alpha |

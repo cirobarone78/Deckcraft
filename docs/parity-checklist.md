@@ -1,13 +1,13 @@
 # PowerPoint feature checklist
 
-> **Generated:** 2026-10-10 (summary by `cargo xtask parity`; rows re-scored 2026-10-10 against PowerPoint for Mac 16.113.4) · **Target:** Microsoft PowerPoint for Mac 16.113 (Microsoft 365)
+> **Generated:** 2026-10-13 (summary by `cargo xtask parity`; rows re-scored 2026-10-10 against PowerPoint for Mac 16.113.4, font faces 2026-10-13) · **Target:** Microsoft PowerPoint for Mac 16.113 (Microsoft 365)
 
 The summary between `<!-- SUMMARY -->
-**Weighted breadth parity: 79%** over 191 features.
+**Weighted breadth parity: 80%** over 191 features.
 
 | Priority | Features | Done | Partial | Missing | Parity |
 |---|---|---|---|---|---|
-| P0 | 72 | 61 | 11 | 0 | 92% |
+| P0 | 72 | 62 | 10 | 0 | 93% |
 | P1 | 65 | 38 | 21 | 6 | 75% |
 | P2 | 54 | 13 | 15 | 26 | 38% |
 
@@ -21,7 +21,7 @@ The summary between `<!-- SUMMARY -->
 | Shapes | 88% |
 | Format | 83% |
 | Arrange | 100% |
-| Text | 80% |
+| Text | 83% |
 | Tables | 89% |
 | Charts | 65% |
 | SmartArt | 33% |
@@ -36,7 +36,7 @@ The summary between `<!-- SUMMARY -->
 | Automation (✱) | 100% |
 | Platforms (✱) | 67% |
 
-Open P0 items: Contextual tabs (Shape Format, Picture Format, Table Design/Layout, Chart Design), Export to PDF (slides, notes pages, handouts; text layer, links, bookmarks; vector artwork pending), Format Shape pane, Font, size, bold, italic, underline, strikethrough (only Regular/Bold/Italic faces, #69), Edit chart data, Crop (and crop to shape, aspect ratio), Paste image from clipboard (fails on Windows and Linux, #53), Audio/video playback in the show (WMA/WMV not decodable yet), Animation pane (reorder, timing), Presenter view (notes, next slide, timer), macOS, Windows, Linux builds.
+Open P0 items: Contextual tabs (Shape Format, Picture Format, Table Design/Layout, Chart Design), Export to PDF (slides, notes pages, handouts; text layer, links, bookmarks; vector artwork pending), Format Shape pane, Edit chart data, Crop (and crop to shape, aspect ratio), Paste image from clipboard (fails on Windows and Linux, #53), Audio/video playback in the show (WMA/WMV not decodable yet), Animation pane (reorder, timing), Presenter view (notes, next slide, timer), macOS, Windows, Linux builds.
 
 ## Rows
 
@@ -139,7 +139,7 @@ Open P0 items: Contextual tabs (Shape Format, Picture Format, Table Design/Layou
 | Arrange | Lock shapes | P2 | D |
 | Arrange | Alt text | P1 | D |
 | Text | In-place text editing (caret, selection, mouse, keyboard) | P0 | D |
-| Text | Font, size, bold, italic, underline, strikethrough (only Regular/Bold/Italic faces, #69) | P0 | P |
+| Text | Font, size, bold, italic, underline, strikethrough, and the family's other faces | P0 | D |
 | Text | Font colour, highlight | P0 | D |
 | Text | Superscript, subscript, caps, character spacing | P1 | D |
 | Text | Change case, grow/shrink font, clear formatting | P1 | D |

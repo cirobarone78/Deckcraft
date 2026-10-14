@@ -14,7 +14,7 @@ format plus PPTX), scriptable by agents (CLI, JSON control channel, MCP), and av
 
 | | Value | Kind |
 |---|---|---|
-| **Feature breadth** | **79%** weighted over 191 PowerPoint features (P0 92%, P1 75%, P2 36%) | measured: `cargo xtask parity` over [docs/parity-checklist.md](docs/parity-checklist.md) |
+| **Feature breadth** | **80%** weighted over 191 PowerPoint features (P0 93%, P1 75%, P2 37%) | measured: `cargo xtask parity` over [docs/parity-checklist.md](docs/parity-checklist.md) |
 | Menu-bar coverage | 59% of 217 app-specific PowerPoint menu items matched by name (lower bound) | measured: script over the PowerPoint menu dump and the 226 commands |
 | **Ready for real work** | **~55%** | estimated: weighted dimensions below |
 | Mainstream practitioner | ~53% | estimated: weekly-use areas × discounts for interaction (×0.92), stability (×0.92) and `.pptx` exchange (×0.88), [method](docs/target-app-parity.md#mainstream-practitioner-and-essentials-user) |
@@ -45,7 +45,7 @@ EMF/SVG pictures, the data-loss and startup-crash bugs (#60, #40, #59) and the b
 
 | Dimension | Ready | Hours to full | Doc |
 |---|---:|---|---|
-| Features (breadth 79% measured, with depth) | ~62% | 140–240 | [docs/parity-checklist.md](docs/parity-checklist.md) |
+| Features (breadth 80% measured, with depth) | ~62% | 140–240 | [docs/parity-checklist.md](docs/parity-checklist.md) |
 | UI/UX fidelity | ~60% | 30–50 | [docs/ui-parity.md](docs/ui-parity.md) |
 | File formats (PPTX, PDF, legacy, export) | ~58% | 60–110 | [docs/file-format-parity.md](docs/file-format-parity.md) |
 | Hardware (GPU raster, video decode, displays, pens) | ~40% | 25–45 | [docs/hardware-parity.md](docs/hardware-parity.md) |
@@ -68,7 +68,7 @@ EMF/SVG pictures, the data-loss and startup-crash bugs (#60, #40, #59) and the b
 | Shapes | 86% | ~75% | 8–14 | [ui-parity](docs/ui-parity.md) |
 | Format (fill, line, effects) | 81% | ~65% | 8–14 | [ui-parity](docs/ui-parity.md) |
 | Arrange | 100% | ~90% | 1–2 | [ui-parity](docs/ui-parity.md) |
-| Text | 80% | ~62% | 18–30 | [gaps](docs/gaps.md#features) |
+| Text | 83% | ~62% | 18–30 | [gaps](docs/gaps.md#features) |
 | Tables | 89% | ~75% | 3–6 | [checklist](docs/parity-checklist.md) |
 | Charts | 65% | ~45% | 12–20 | [gaps](docs/gaps.md#charts-data-grid-elements-and-the-newer-chart-types) |
 | SmartArt | 33% | ~25% | 10–16 | [gaps](docs/gaps.md#smartart-is-pre-drawn-shapes-only) |
@@ -115,7 +115,7 @@ Ranked; detail and the full beta plan in [docs/roadmap.md](docs/roadmap.md).
    36–64 h.
 3. **Localization:** catalog, system language (#15), zh-Hans, es, fr, de, ja with IME. 27–46 h.
 4. **Output:** vector PDF, printing. 10–16 h.
-5. **Depth that users hit:** font weights (#69), chart data and elements, Animation Pane timeline,
+5. **Depth that users hit:** chart data and elements, Animation Pane timeline,
    presenter view on the right display, native macOS menu bar, Format Shape pane. 33–56 h.
 
 ## Agents: CLI and MCP
@@ -128,6 +128,7 @@ app's JSON control channel (`deckcraft --control PORT`).
 
 | Date | What landed |
 |---|---|
+| 2026-10-13 | Font faces beyond Regular, Bold and Italic: the family's own list (Light, Semibold, …), drawn and saved as the typeface name (#69) |
 | 2026-10-13 | Slide transitions like PowerPoint: every transition and option measured frame by frame against PowerPoint's video export and retuned (curves, directions, soft edges, 3-D perspective, contents moving over backgrounds); PowerPoint's own XML elements and defaults read and written (diagonal Wipe, Zoom, Shape In/Out, Glitter Hexagons, Shred In/Out, Page Curl Single); `deckcraft-cli render-transition` renders frames headless |
 | 2026-10-13 | Wild text cases measured against PowerPoint (102 synthetic slides): bidi by run language, East Asian vertical text upright, mongolianVert/wordArtVert/wordArtVertRtl, underline styles and strikethrough at the font's metrics, centre/right/decimal tabs, East Asian, Thai, Hindi, Arabic and Hebrew numbering, small caps, all-caps "ß", transparent text, soft hyphens, kinsoku, rtlCol and just/dist anchoring, emoji presentation, fallback faces that no longer move the baseline |
 | 2026-10-13 | Render matches PowerPoint more closely on wild shape, picture and table cases: even-odd custom paths, dashes and caps, arrowheads, radial and path gradients, tile rects, rotWithShape, gradient lines, shadows cast by what is drawn (group and perspective too), group fill, picture borders, tiles, reflection, recolour (biLevel, alphaInv, brightness/contrast), table borders and grid default, 20+ preset shapes by their ECMA formulas, default miter joins, and approximate 3-D bevels, cameras and face lighting |
@@ -150,6 +151,7 @@ app's JSON control channel (`deckcraft --control PORT`).
 
 | Date | Change | Summary |
 |---|---|---|
+| 2026-10-13 | trivial | Progress log: named font faces (#69) |
 | 2026-10-13 | trivial | Progress log: wild text cases |
 | 2026-10-12 | trivial | Progress log: File tab (Backstage, #76) |
 | 2026-10-12 | trivial | Progress log: lines in scaled groups (#233) |

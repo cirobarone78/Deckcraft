@@ -86,7 +86,7 @@ menu colours taken from the theme tokens (menu `chrome`, page `card`).
 | Context menus on shapes, slides, text, thumbnails | yes | yes, shorter |
 | Drag and drop of files and between thumbnails | yes | yes |
 | Image paste from the clipboard | yes | macOS yes; Windows and Linux no (#53) |
-| Font menu: every installed family with its faces | yes | families yes; only Regular/Bold/Italic faces (#69) |
+| Font menu: every installed family with its faces | yes | families and each family's own faces (Light, Semibold, …) |
 
 ## Keyboard shortcuts
 
@@ -148,6 +148,7 @@ imitate Microsoft's. No pixel comparison against PowerPoint screenshots has been
 
 | Date | Change | Summary |
 |---|---|---|
+| 2026-10-13 | minor | The font menu lists each family's own faces, not only Regular, Bold and Italic (#69) |
 | 2026-10-12 | minor | File tab (Backstage) observed in PowerPoint for Windows and matched (#76); the start screen is File › Home |
 | 2026-10-12 | minor | Off-slide objects drawn and editable around the slide in Normal view (#270) |
 | 2026-10-12 | minor | Selection Pane matched to PowerPoint (#133): drag and drop, arrows, groups, eye, Lock |
