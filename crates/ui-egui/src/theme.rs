@@ -1,5 +1,6 @@
 //! Design tokens (light, PowerPoint-like; and dark) and fonts for the UI.
 
+use craft_ui::theme::SuiteDarkPalette;
 use egui::{Color32, CornerRadius, FontData, FontDefinitions, FontFamily, Stroke, Visuals};
 use serde::{Deserialize, Serialize};
 
@@ -74,23 +75,24 @@ impl Tokens {
         }
     }
     pub fn dark() -> Self {
+        let suite = SuiteDarkPalette::ARTCRAFT;
         // ArtCraft native dark UI roles. Slide content, handles and guides stay semantic.
         Tokens {
             dark: true,
-            chrome: Color32::from_rgb(0x0A, 0x0A, 0x0C),
-            card: Color32::from_rgb(0x1E, 0x1F, 0x22),
-            card_border: Color32::from_rgb(0x36, 0x37, 0x3A),
-            canvas: Color32::from_rgb(0x12, 0x13, 0x16),
-            text: Color32::from_rgb(0xF2, 0xF1, 0xEE),
-            text_dim: Color32::from_rgb(0xA6, 0xA6, 0xA8),
-            text_faint: Color32::from_rgb(0x71, 0x71, 0x76),
-            border: Color32::from_rgb(0x36, 0x37, 0x3A),
-            separator: Color32::from_rgb(0x36, 0x37, 0x3A),
-            hover: Color32::from_rgb(0x32, 0x33, 0x37),
-            pressed: Color32::from_rgb(0x41, 0x42, 0x46),
-            selected: Color32::from_rgb(0x20, 0x3B, 0x65),
-            accent: Color32::from_rgb(0x2D, 0x81, 0xFF),
-            accent_text: Color32::from_rgb(0x06, 0x06, 0x07),
+            chrome: suite.chrome,
+            card: suite.raised,
+            card_border: suite.border,
+            canvas: suite.window,
+            text: suite.text,
+            text_dim: suite.text_secondary,
+            text_faint: suite.text_disabled,
+            border: suite.border,
+            separator: suite.border,
+            hover: suite.hover,
+            pressed: suite.pressed,
+            selected: suite.selection,
+            accent: suite.accent,
+            accent_text: suite.on_accent,
             contextual: Color32::from_rgb(0xF5, 0x8A, 0x4B),
             selection: Color32::from_rgb(0xAA, 0xAA, 0xAA),
             handle_fill: Color32::WHITE,
@@ -98,7 +100,7 @@ impl Tokens {
             guide: Color32::from_rgb(0xF2, 0x8A, 0x4B),
             caret: Color32::BLACK,
             text_selection: Color32::from_rgba_unmultiplied(0x5A, 0x8F, 0xE0, 90),
-            field_bg: Color32::from_rgb(0x06, 0x06, 0x07),
+            field_bg: suite.input,
             shadow: Color32::from_black_alpha(90),
         }
     }
@@ -136,7 +138,7 @@ pub fn apply(ctx: &egui::Context, t: &Tokens) {
     v.widgets.inactive.bg_stroke = Stroke::NONE;
     v.widgets.hovered.weak_bg_fill = t.hover;
     v.widgets.hovered.bg_fill = t.hover;
-    v.widgets.hovered.bg_stroke = if t.dark { Stroke::new(1.0, Color32::from_rgb(0x74, 0xAA, 0xFF)) } else { Stroke::NONE };
+    v.widgets.hovered.bg_stroke = if t.dark { Stroke::new(1.0, SuiteDarkPalette::ARTCRAFT.focus) } else { Stroke::NONE };
     v.widgets.active.weak_bg_fill = t.pressed;
     v.widgets.active.bg_fill = t.pressed;
     v.widgets.open.weak_bg_fill = t.pressed;
@@ -235,6 +237,53 @@ pub fn to_color32(c: deckcraft_color::Rgba) -> Color32 {
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn shared_dark_adapter_maps_ui_roles() {
+        let suite = super::SuiteDarkPalette::ARTCRAFT;
+        let dark = super::Tokens::dark();
+        for (actual, expected) in [
+            (dark.chrome, suite.chrome),
+            (dark.card, suite.raised),
+            (dark.card_border, suite.border),
+            (dark.canvas, suite.window),
+            (dark.text, suite.text),
+            (dark.text_dim, suite.text_secondary),
+            (dark.text_faint, suite.text_disabled),
+            (dark.border, suite.border),
+            (dark.separator, suite.border),
+            (dark.hover, suite.hover),
+            (dark.pressed, suite.pressed),
+            (dark.selected, suite.selection),
+            (dark.accent, suite.accent),
+            (dark.accent_text, suite.on_accent),
+            (dark.field_bg, suite.input),
+        ] {
+            assert_eq!(actual, expected);
+        }
+        // Editing marks belong to the slide, independently of UI row selection.
+        assert_eq!(dark.contextual, egui::Color32::from_rgb(0xf5, 0x8a, 0x4b));
+        assert_eq!(dark.selection, egui::Color32::from_rgb(0xaa, 0xaa, 0xaa));
+        assert_eq!(dark.handle_fill, egui::Color32::WHITE);
+        assert_eq!(dark.handle_stroke, egui::Color32::from_rgb(0x6e, 0x6e, 0x6e));
+        assert_eq!(dark.guide, egui::Color32::from_rgb(0xf2, 0x8a, 0x4b));
+        assert_eq!(dark.caret, egui::Color32::BLACK);
+        assert_eq!(dark.text_selection, egui::Color32::from_rgba_unmultiplied(0x5a, 0x8f, 0xe0, 90));
+        let ctx = egui::Context::default();
+        super::apply(&ctx, &dark);
+        let visuals = ctx.global_style().visuals.clone();
+        assert_eq!(visuals.selection.bg_fill, suite.selection);
+        assert_eq!(visuals.selection.stroke.color, suite.selection_text);
+        assert_eq!(visuals.widgets.hovered.bg_stroke, egui::Stroke::new(1.0, suite.focus));
+        assert_eq!(visuals.widgets.inactive.bg_stroke, egui::Stroke::NONE);
+        let light = super::Tokens::light();
+        super::apply(&ctx, &light);
+        let visuals = ctx.global_style().visuals.clone();
+        assert_eq!(visuals.selection.bg_fill, light.accent.gamma_multiply(0.85));
+        assert_eq!(visuals.selection.stroke.color, light.accent_text);
+        assert_eq!(visuals.widgets.hovered.bg_stroke, egui::Stroke::NONE);
+        assert_eq!(super::Brightness::default(), super::Brightness::Light);
+    }
+
     #[test]
     fn artcraft_dark_roles_preserve_slide_and_light() {
         let dark = super::Tokens::dark();
