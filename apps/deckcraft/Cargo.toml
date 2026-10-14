@@ -11,6 +11,10 @@ default-run = "deckcraft"
 workspace = true
 
 [dependencies]
+# The CraftHub v3 client path (default off): the adapter contract; the session wiring lands
+# behind this flag in the pilot follow-up. Nothing changes until it is switched on.
+deckcraft-hub = { workspace = true, optional = true }
+
 deckcraft-engine = { workspace = true }
 deckcraft-ui-egui = { workspace = true }
 deckcraft-media = { workspace = true }
@@ -31,3 +35,8 @@ cpal = "0.16"
 
 [target.'cfg(all(unix, not(target_os = "macos")))'.dependencies]
 winit = { version = "0.30", default-features = false, features = ["x11"] }
+
+[features]
+# The CraftHub v3 client path (spec §18.4 row 3): default off, flipped only after the
+# simulation suite runs green in CI for a full week.
+crafthub = ["dep:deckcraft-hub"]
