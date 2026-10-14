@@ -2,7 +2,7 @@
 
 **Stage: alpha** · next: beta, ~20 points and ~120–210 h away
 
-> **Last reviewed:** 2026-10-13 · **Last updated:** 2026-10-13 · **Change:** trivial (Japanese for the application shell; previous: minor, hours to ~95% per audience added) · **Target:** Microsoft PowerPoint for Mac 16.113 (Microsoft 365)
+> **Last reviewed:** 2026-10-13 · **Last updated:** 2026-10-14 · **Change:** minor (Japanese dialog, pane and Home control labels; previous: Japanese shell, #543) · **Target:** Microsoft PowerPoint for Mac 16.113 (Microsoft 365)
 
 DeckCraft aims at full PowerPoint parity, and to be better: faster, open (a documented zip+JSON
 format plus PPTX), scriptable by agents (CLI, JSON control channel, MCP), and available everywhere
@@ -84,8 +84,10 @@ EMF/SVG pictures, the data-loss and startup-crash bugs (#60, #40, #59) and the b
 
 ## Languages
 
-English, plus Japanese for the application shell (ribbon tabs, File menu, title bar, status bar and
-Preferences). The rest of the UI has no catalog yet (Ukrainian is in review as PR #34). Detail:
+English, plus Japanese for the application shell, fixed dialog/task-pane controls and the Home
+ribbon. The 402-entry catalog extends PR #543 by 335 entries; other tabs, galleries and some
+controls still use English. No complete-UI percentage or independent native review is claimed.
+Ukrainian is in review as PR #34. Detail:
 [docs/localization-parity.md](docs/localization-parity.md).
 
 | Language | Code | UI strings | Status | Hours to full |
@@ -98,7 +100,7 @@ Preferences). The rest of the UI has no catalog yet (Ukrainian is in review as P
 | French | fr | 0% | none | 3–5 |
 | Portuguese | pt | 0% | none | 3–5 |
 | Indonesian | id | 0% | none | 3–5 |
-| Japanese | ja | shell | partial | 4–7 |
+| Japanese | ja | 402 catalog entries (shell + Home/dialog/pane subset) | partial | 4–7 |
 | German | de | 0% | none | 3–5 |
 | Korean | ko | 0% | none | 4–7 |
 | Vietnamese | vi | 0% | none | 3–5 |
@@ -129,6 +131,7 @@ app's JSON control channel (`deckcraft --control PORT`).
 
 | Date | What landed |
 |---|---|
+| 2026-10-14 | Japanese follow-up to #543: 335 additional catalog entries for dialog fields/actions, task panes, Selection actions, Home controls and slide-size labels; stored ids and presentation data stay intact |
 | 2026-10-13 | Interface language for the application shell: System, English or 日本語. A ja locale (or Preferences, or `app.language`) translates the ribbon tabs, File menu, title bar, status bar and Preferences; ribbon groups and the other dialogs stay English |
 | 2026-10-13 | Wild text cases measured against PowerPoint (102 synthetic slides): bidi by run language, East Asian vertical text upright, mongolianVert/wordArtVert/wordArtVertRtl, underline styles and strikethrough at the font's metrics, centre/right/decimal tabs, East Asian, Thai, Hindi, Arabic and Hebrew numbering, small caps, all-caps "ß", transparent text, soft hyphens, kinsoku, rtlCol and just/dist anchoring, emoji presentation, fallback faces that no longer move the baseline |
 | 2026-10-13 | Render matches PowerPoint more closely on wild shape, picture and table cases: even-odd custom paths, dashes and caps, arrowheads, radial and path gradients, tile rects, rotWithShape, gradient lines, shadows cast by what is drawn (group and perspective too), group fill, picture borders, tiles, reflection, recolour (biLevel, alphaInv, brightness/contrast), table borders and grid default, 20+ preset shapes by their ECMA formulas, default miter joins, and approximate 3-D bevels, cameras and face lighting |
@@ -151,6 +154,7 @@ app's JSON control channel (`deckcraft --control PORT`).
 
 | Date | Change | Summary |
 |---|---|---|
+| 2026-10-14 | minor | Japanese beyond the shell: Home controls, dialogs and task panes; catalog count is not a full-UI percentage |
 | 2026-10-13 | trivial | Progress log: Japanese for the application shell |
 | 2026-10-13 | trivial | Progress log: wild text cases |
 | 2026-10-12 | trivial | Progress log: File tab (Backstage, #76) |

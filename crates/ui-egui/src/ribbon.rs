@@ -5,10 +5,10 @@ use deckcraft_model::{ShapeKind, anim::AnimClass};
 use egui::{Align2, Color32, CornerRadius, Rect, Sense, Stroke, Ui, pos2, vec2};
 use serde_json::{Value, json};
 
-use crate::SlideApp;
 use crate::icons::{self, Icon};
 use crate::theme::{self, Tokens};
 use crate::widgets::{self, RIBBON_H, big_button, big_button_ex, color_split, dropdown, group, icon_toggle, rows, small_button, small_button_ex};
+use crate::{SlideApp, i18n};
 
 pub const TITLE_H: f32 = 38.0;
 
@@ -297,30 +297,32 @@ pub fn fmt_state(app: &mut SlideApp) -> Value {
 // ---------- Home ----------
 
 fn clipboard_group(app: &mut SlideApp, ui: &mut Ui) {
+    let lang = app.lang();
     group(ui, |ui| {
-        let (main, arrow) = big_button_ex(ui, Icon::Paste, "Paste", enabled(app, "edit.paste"), true, false);
-        if main.on_hover_text("Paste (⌘V)").clicked() {
+        let (main, arrow) = big_button_ex(ui, Icon::Paste, i18n::text(lang, "ribbon.clipboard.paste"), enabled(app, "edit.paste"), true, false);
+        if main.on_hover_text(i18n::text(lang, "ribbon.clipboard.paste_tip")).clicked() {
             run(app, "edit.paste", json!({}));
         }
         if let Some(a) = arrow {
             egui::Popup::menu(&a).show(|ui| {
-                if ui.button("Paste").clicked() {
+                if ui.button(i18n::text(lang, "ribbon.clipboard.paste")).clicked() {
                     run(app, "edit.paste", json!({}));
                 }
-                if ui.button("Paste and Match Formatting").clicked() {
+                if ui.button(i18n::text(lang, "ribbon.clipboard.paste_match")).clicked() {
                     run(app, "edit.pasteText", json!({}));
                 }
-                if ui.button("Paste Formatting").clicked() {
+                if ui.button(i18n::text(lang, "ribbon.clipboard.paste_format")).clicked() {
                     run(app, "format.painterApply", json!({}));
                 }
             });
         }
         rows(ui, |ui| {
-            small(app, ui, Icon::Cut, "Cut", "edit.cut", json!({}));
-            small(app, ui, Icon::Copy, "Copy", "edit.copy", json!({}));
+            small(app, ui, Icon::Cut, i18n::text(lang, "ribbon.clipboard.cut"), "edit.cut", json!({}));
+            small(app, ui, Icon::Copy, i18n::text(lang, "ribbon.clipboard.copy"), "edit.copy", json!({}));
             let on = app.session.painter.is_some();
             let en = enabled(app, "format.painter");
-            let r = small_button(ui, Icon::FormatPainter, "Format", en, on).on_hover_text("Format Painter (double-click to keep it on)");
+            let r = small_button(ui, Icon::FormatPainter, i18n::text(lang, "ribbon.clipboard.format"), en, on)
+                .on_hover_text(i18n::text(lang, "ribbon.clipboard.painter_tip"));
             if r.double_clicked() {
                 run(app, "format.painter", json!({"sticky": true}));
             } else if r.clicked() {
@@ -383,33 +385,34 @@ fn layout_menu(app: &mut SlideApp, ui: &mut Ui, cmd: &str) {
 }
 
 fn slides_group(app: &mut SlideApp, ui: &mut Ui) {
+    let lang = app.lang();
     group(ui, |ui| {
-        let (main, arrow) = big_button_ex(ui, Icon::NewSlide, "New\nSlide", enabled(app, "slide.new"), true, false);
-        if main.on_hover_text("New Slide (⇧⌘N)").clicked() {
+        let (main, arrow) = big_button_ex(ui, Icon::NewSlide, i18n::text(lang, "ribbon.slides.new"), enabled(app, "slide.new"), true, false);
+        if main.on_hover_text(i18n::text(lang, "ribbon.slides.new_tip")).clicked() {
             run(app, "slide.new", json!({}));
         }
         if let Some(a) = arrow {
             egui::Popup::menu(&a).width(420.0).show(|ui| {
                 layout_menu(app, ui, "slide.new");
                 ui.separator();
-                if ui.button("Duplicate Selected Slides").clicked() {
+                if ui.button(i18n::text(lang, "ribbon.slides.duplicate")).clicked() {
                     run(app, "slide.duplicate", json!({}));
                 }
-                if ui.button("Slides from Outline…").clicked() {
+                if ui.button(i18n::text(lang, "ribbon.slides.outline")).clicked() {
                     app.dialog = Some(crate::dialogs::Dialog::new("outline"));
                 }
             });
         }
         rows(ui, |ui| {
-            let (r, _) = small_button_ex(ui, Icon::Layout, "Layout", enabled(app, "slide.layout"), false, true);
+            let (r, _) = small_button_ex(ui, Icon::Layout, i18n::text(lang, "ribbon.slides.layout"), enabled(app, "slide.layout"), false, true);
             egui::Popup::menu(&r).width(420.0).show(|ui| layout_menu(app, ui, "slide.layout"));
-            small(app, ui, Icon::ResetSlide, "Reset", "slide.reset", json!({}));
-            let (r, _) = small_button_ex(ui, Icon::Section, "Section", enabled(app, "section.add"), false, true);
+            small(app, ui, Icon::ResetSlide, i18n::text(lang, "ribbon.slides.reset"), "slide.reset", json!({}));
+            let (r, _) = small_button_ex(ui, Icon::Section, i18n::text(lang, "ribbon.slides.section"), enabled(app, "section.add"), false, true);
             egui::Popup::menu(&r).show(|ui| {
-                if ui.button("Add Section").clicked() {
+                if ui.button(i18n::text(lang, "ribbon.slides.add_section")).clicked() {
                     run(app, "section.add", json!({}));
                 }
-                if ui.button("Remove All Sections").clicked() {
+                if ui.button(i18n::text(lang, "ribbon.slides.remove_sections")).clicked() {
                     run(app, "section.removeAll", json!({}));
                 }
             });
@@ -429,6 +432,7 @@ pub fn font_families(app: &SlideApp) -> Vec<String> {
 }
 
 fn font_group(app: &mut SlideApp, ui: &mut Ui, st: &Value) {
+    let lang = app.lang();
     let en = enabled(app, "format.bold");
     group(ui, |ui| {
         rows(ui, |ui| {
@@ -441,9 +445,9 @@ fn font_group(app: &mut SlideApp, ui: &mut Ui, st: &Value) {
                 dropdown(ui, "font", &font, 150.0, en, |ui| {
                     for (k, f) in fams.iter().enumerate() {
                         let label = if k == 0 && theme_fonts.len() == 2 {
-                            format!("{f} (Headings)")
+                            i18n::fill(i18n::text(lang, "ribbon.font.headings"), &[("font", f)])
                         } else if k == 1 && theme_fonts.len() == 2 {
-                            format!("{f} (Body)")
+                            i18n::fill(i18n::text(lang, "ribbon.font.body"), &[("font", f)])
                         } else {
                             f.clone()
                         };
@@ -465,36 +469,42 @@ fn font_group(app: &mut SlideApp, ui: &mut Ui, st: &Value) {
                         }
                     }
                 });
-                toggle(app, ui, Icon::FontGrow, "Increase Font Size", "format.grow", false);
-                toggle(app, ui, Icon::FontShrink, "Decrease Font Size", "format.shrink", false);
-                toggle(app, ui, Icon::ClearFormatting, "Clear All Formatting", "format.clear", false);
+                toggle(app, ui, Icon::FontGrow, i18n::text(lang, "ribbon.font.grow"), "format.grow", false);
+                toggle(app, ui, Icon::FontShrink, i18n::text(lang, "ribbon.font.shrink"), "format.shrink", false);
+                toggle(app, ui, Icon::ClearFormatting, i18n::text(lang, "ribbon.font.clear"), "format.clear", false);
             });
             ui.add_space(3.0);
             ui.horizontal(|ui| {
                 ui.spacing_mut().item_spacing.x = 1.0;
                 let b = |k: &str| st.get(k).and_then(Value::as_bool).unwrap_or(false);
-                toggle(app, ui, Icon::Bold, "Bold", "format.bold", b("bold"));
-                toggle(app, ui, Icon::Italic, "Italic", "format.italic", b("italic"));
-                toggle(app, ui, Icon::Underline, "Underline", "format.underline", b("underline"));
-                toggle(app, ui, Icon::Strikethrough, "Strikethrough", "format.strikethrough", b("strike"));
-                toggle(app, ui, Icon::Superscript, "Superscript", "format.superscript", b("superscript"));
-                toggle(app, ui, Icon::Subscript, "Subscript", "format.subscript", b("subscript"));
-                let r = icon_toggle(ui, Icon::CharSpacing, "Character Spacing", en, false);
+                toggle(app, ui, Icon::Bold, i18n::text(lang, "ribbon.font.bold"), "format.bold", b("bold"));
+                toggle(app, ui, Icon::Italic, i18n::text(lang, "ribbon.font.italic"), "format.italic", b("italic"));
+                toggle(app, ui, Icon::Underline, i18n::text(lang, "ribbon.font.underline"), "format.underline", b("underline"));
+                toggle(app, ui, Icon::Strikethrough, i18n::text(lang, "ribbon.font.strike"), "format.strikethrough", b("strike"));
+                toggle(app, ui, Icon::Superscript, i18n::text(lang, "ribbon.font.superscript"), "format.superscript", b("superscript"));
+                toggle(app, ui, Icon::Subscript, i18n::text(lang, "ribbon.font.subscript"), "format.subscript", b("subscript"));
+                let r = icon_toggle(ui, Icon::CharSpacing, i18n::text(lang, "ribbon.font.spacing"), en, false);
                 egui::Popup::menu(&r).show(|ui| {
-                    for (label, pt) in [("Very Tight", -3.0), ("Tight", -1.5), ("Normal", 0.0), ("Loose", 3.0), ("Very Loose", 6.0)] {
+                    for (label, pt) in [
+                        (i18n::text(lang, "ribbon.font.spacing_very_tight"), -3.0),
+                        (i18n::text(lang, "ribbon.font.spacing_tight"), -1.5),
+                        (i18n::text(lang, "ribbon.font.spacing_normal"), 0.0),
+                        (i18n::text(lang, "ribbon.font.spacing_loose"), 3.0),
+                        (i18n::text(lang, "ribbon.font.spacing_very_loose"), 6.0),
+                    ] {
                         if ui.button(label).clicked() {
                             run(app, "format.spacing", json!({"pt": pt}));
                         }
                     }
                 });
-                let r = icon_toggle(ui, Icon::ChangeCase, "Change Case", en, false);
+                let r = icon_toggle(ui, Icon::ChangeCase, i18n::text(lang, "ribbon.font.case"), en, false);
                 egui::Popup::menu(&r).show(|ui| {
                     for (label, mode) in [
-                        ("Sentence case.", "sentence"),
-                        ("lowercase", "lower"),
-                        ("UPPERCASE", "upper"),
-                        ("Capitalize Each Word", "title"),
-                        ("tOGGLE cASE", "toggle"),
+                        (i18n::text(lang, "ribbon.font.case_sentence"), "sentence"),
+                        (i18n::text(lang, "ribbon.font.case_lower"), "lower"),
+                        (i18n::text(lang, "ribbon.font.case_upper"), "upper"),
+                        (i18n::text(lang, "ribbon.font.case_title"), "title"),
+                        (i18n::text(lang, "ribbon.font.case_toggle"), "toggle"),
                     ] {
                         if ui.button(label).clicked() {
                             run(app, "format.case", json!({"mode": mode}));
@@ -502,16 +512,16 @@ fn font_group(app: &mut SlideApp, ui: &mut Ui, st: &Value) {
                     }
                 });
                 let sc = scheme(app);
-                let (m, a) = color_split(ui, Icon::Highlight, "Text Highlight Color", Color32::from_rgb(255, 230, 0), en);
+                let (m, a) = color_split(ui, Icon::Highlight, i18n::text(lang, "ribbon.font.highlight"), Color32::from_rgb(255, 230, 0), en);
                 if m.clicked() {
                     run(app, "format.highlight", json!({"color": "#FFFF00"}));
                 }
                 widgets::color_popup(&a).show(|ui| {
-                    if let Some(c) = widgets::color_grid(ui, &sc, Some("No Color")) {
+                    if let Some(c) = widgets::color_grid(ui, &sc, Some(i18n::text(lang, "ribbon.font.no_color"))) {
                         run(app, "format.highlight", json!({"color": c.map(|c| serde_json::to_value(cref_param(&c)).unwrap_or_default())}));
                     }
                 });
-                let (m, a) = color_split(ui, Icon::FontColor, "Font Color", Color32::from_rgb(0xD8, 0x3F, 0x3F), en);
+                let (m, a) = color_split(ui, Icon::FontColor, i18n::text(lang, "ribbon.font.color"), Color32::from_rgb(0xD8, 0x3F, 0x3F), en);
                 if m.clicked() {
                     run(app, "format.color", json!({"color": "#C00000"}));
                 }
@@ -554,6 +564,7 @@ pub fn cref_param(c: &deckcraft_model::ColorRef) -> Value {
 }
 
 fn paragraph_group(app: &mut SlideApp, ui: &mut Ui, st: &Value) {
+    let lang = app.lang();
     let en = enabled(app, "format.bullets");
     group(ui, |ui| {
         rows(ui, |ui| {
@@ -561,28 +572,31 @@ fn paragraph_group(app: &mut SlideApp, ui: &mut Ui, st: &Value) {
                 ui.spacing_mut().item_spacing.x = 1.0;
                 let b = |k: &str| st.get(k).and_then(Value::as_bool).unwrap_or(false);
                 let (m, a) = small_button_ex(ui, Icon::Bullets, "", en, b("bullets"), true);
-                if m.on_hover_text("Bullets").clicked() {
+                if m.on_hover_text(i18n::text(lang, "ribbon.paragraph.bullets")).clicked() {
                     run(app, "format.bullets", json!({}));
                 }
                 if let Some(a) = a {
                     egui::Popup::menu(&a).show(|ui| {
-                        if ui.button("None").clicked() {
+                        if ui.button(i18n::text(lang, "pane.format.none")).clicked() {
                             run(app, "format.bullets", json!({"on": false}));
                         }
                         for ch in ["•", "○", "■", "□", "◆", "➢", "✓", "–", "★"] {
-                            if ui.button(egui::RichText::new(format!("{ch}  Bullet")).size(14.0)).clicked() {
+                            if ui
+                                .button(egui::RichText::new(i18n::fill(i18n::text(lang, "ribbon.paragraph.bullet"), &[("symbol", ch)])).size(14.0))
+                                .clicked()
+                            {
                                 run(app, "format.bullets", json!({"on": true, "char": ch}));
                             }
                         }
                     });
                 }
                 let (m, a) = small_button_ex(ui, Icon::Numbering, "", en, b("numbering"), true);
-                if m.on_hover_text("Numbering").clicked() {
+                if m.on_hover_text(i18n::text(lang, "ribbon.paragraph.numbering")).clicked() {
                     run(app, "format.numbering", json!({}));
                 }
                 if let Some(a) = a {
                     egui::Popup::menu(&a).show(|ui| {
-                        if ui.button("None").clicked() {
+                        if ui.button(i18n::text(lang, "pane.format.none")).clicked() {
                             run(app, "format.numbering", json!({"on": false}));
                         }
                         for (label, sch) in [
@@ -600,23 +614,29 @@ fn paragraph_group(app: &mut SlideApp, ui: &mut Ui, st: &Value) {
                         }
                     });
                 }
-                toggle(app, ui, Icon::DecreaseIndent, "Decrease List Level", "format.outdent", false);
-                toggle(app, ui, Icon::IncreaseIndent, "Increase List Level", "format.indent", false);
-                let r = icon_toggle(ui, Icon::LineSpacing, "Line Spacing", en, false);
+                toggle(app, ui, Icon::DecreaseIndent, i18n::text(lang, "ribbon.paragraph.outdent"), "format.outdent", false);
+                toggle(app, ui, Icon::IncreaseIndent, i18n::text(lang, "ribbon.paragraph.indent"), "format.indent", false);
+                let r = icon_toggle(ui, Icon::LineSpacing, i18n::text(lang, "ribbon.paragraph.line_spacing"), en, false);
                 egui::Popup::menu(&r).show(|ui| {
                     for v in [1.0, 1.5, 2.0, 2.5, 3.0] {
                         if ui.button(format!("{v:.1}")).clicked() {
                             run(app, "format.lineSpacing", json!({"lines": v}));
                         }
                     }
-                    if ui.button("Line Spacing Options…").clicked() {
+                    if ui.button(i18n::text(lang, "ribbon.paragraph.line_spacing_options")).clicked() {
                         app.dialog = Some(crate::dialogs::Dialog::new("paragraph"));
                     }
                 });
-                let r = icon_toggle(ui, Icon::Columns, "Columns", en, false);
+                let r = icon_toggle(ui, Icon::Columns, i18n::text(lang, "ribbon.paragraph.columns"), en, false);
                 egui::Popup::menu(&r).show(|ui| {
                     for n in 1..=3 {
-                        if ui.button(format!("{n} Column{}", if n > 1 { "s" } else { "" })).clicked() {
+                        if ui
+                            .button(i18n::fill(
+                                i18n::text(lang, if n > 1 { "ribbon.paragraph.columns_many" } else { "ribbon.paragraph.columns_one" }),
+                                &[("n", &n.to_string())],
+                            ))
+                            .clicked()
+                        {
                             run(app, "format.columns", json!({"count": n, "spacing": 18}));
                         }
                     }
@@ -626,26 +646,30 @@ fn paragraph_group(app: &mut SlideApp, ui: &mut Ui, st: &Value) {
             ui.horizontal(|ui| {
                 ui.spacing_mut().item_spacing.x = 1.0;
                 let al = st.get("align").and_then(Value::as_str).unwrap_or("");
-                toggle(app, ui, Icon::AlignLeft, "Align Left", "format.alignLeft", al == "l");
-                toggle(app, ui, Icon::AlignCenter, "Center", "format.alignCenter", al == "ctr");
-                toggle(app, ui, Icon::AlignRight, "Align Right", "format.alignRight", al == "r");
-                toggle(app, ui, Icon::Justify, "Justify", "format.justify", al == "just");
-                let r = icon_toggle(ui, Icon::TextDirection, "Text Direction", en, false);
+                toggle(app, ui, Icon::AlignLeft, i18n::text(lang, "ribbon.align.left"), "format.alignLeft", al == "l");
+                toggle(app, ui, Icon::AlignCenter, i18n::text(lang, "ribbon.paragraph.center"), "format.alignCenter", al == "ctr");
+                toggle(app, ui, Icon::AlignRight, i18n::text(lang, "ribbon.align.right"), "format.alignRight", al == "r");
+                toggle(app, ui, Icon::Justify, i18n::text(lang, "ribbon.paragraph.justify"), "format.justify", al == "just");
+                let r = icon_toggle(ui, Icon::TextDirection, i18n::text(lang, "ribbon.paragraph.direction"), en, false);
                 egui::Popup::menu(&r).show(|ui| {
                     for (l, d) in [
-                        ("Horizontal", "horizontal"),
-                        ("Rotate all text 90°", "rotate90"),
-                        ("Rotate all text 270°", "rotate270"),
-                        ("Stacked", "stacked"),
+                        (i18n::text(lang, "ribbon.paragraph.horizontal"), "horizontal"),
+                        (i18n::text(lang, "ribbon.paragraph.rotate_90"), "rotate90"),
+                        (i18n::text(lang, "ribbon.paragraph.rotate_270"), "rotate270"),
+                        (i18n::text(lang, "ribbon.paragraph.stacked"), "stacked"),
                     ] {
                         if ui.button(l).clicked() {
                             run(app, "format.direction", json!({"dir": d}));
                         }
                     }
                 });
-                let r = icon_toggle(ui, Icon::AlignText, "Align Text", en, false);
+                let r = icon_toggle(ui, Icon::AlignText, i18n::text(lang, "ribbon.paragraph.align"), en, false);
                 egui::Popup::menu(&r).show(|ui| {
-                    for (l, a) in [("Top", "top"), ("Middle", "middle"), ("Bottom", "bottom")] {
+                    for (l, a) in [
+                        (i18n::text(lang, "pane.format.top"), "top"),
+                        (i18n::text(lang, "pane.format.middle"), "middle"),
+                        (i18n::text(lang, "pane.format.bottom"), "bottom"),
+                    ] {
                         if ui.button(l).clicked() {
                             run(app, "format.anchor", json!({"anchor": a}));
                         }
@@ -755,29 +779,30 @@ fn kurbo_flatten(path: &deckcraft_geom::BezPath, mut f: impl FnMut(Fl)) {
 }
 
 fn drawing_group(app: &mut SlideApp, ui: &mut Ui) {
+    let lang = app.lang();
     group(ui, |ui| {
         let en = enabled(app, "shape.insert");
-        let r = big_button(ui, Icon::Shapes, "Shapes", en).on_hover_text("Shapes");
+        let r = big_button(ui, Icon::Shapes, i18n::text(lang, "ribbon.drawing.shapes"), en).on_hover_text(i18n::text(lang, "ribbon.drawing.shapes"));
         egui::Popup::menu(&r).show(|ui| {
             if let Some(p) = shapes_gallery(ui) {
                 app.session.set_tool(deckcraft_engine::ToolKind::Shape { preset: p.to_string() });
             }
         });
-        big(app, ui, Icon::TextBox, "Text Box", "insert.textBox", json!({}));
+        big(app, ui, Icon::TextBox, i18n::text(lang, "pane.format.text_box"), "insert.textBox", json!({}));
         let sel = enabled(app, "shape.fill");
-        let r = big_button(ui, Icon::Arrange, "Arrange", sel);
+        let r = big_button(ui, Icon::Arrange, i18n::text(lang, "ribbon.drawing.arrange"), sel);
         egui::Popup::menu(&r).show(|ui| arrange_menu(app, ui));
-        let r = big_button(ui, Icon::QuickStyles, "Quick\nStyles", sel);
+        let r = big_button(ui, Icon::QuickStyles, i18n::text(lang, "ribbon.drawing.quick_styles"), sel);
         egui::Popup::menu(&r).width(330.0).show(|ui| quick_styles(app, ui));
         rows(ui, |ui| {
             let sc = scheme(app);
-            let (m, a) = small_button_ex(ui, Icon::ShapeFill, "Shape Fill", sel, false, true);
+            let (m, a) = small_button_ex(ui, Icon::ShapeFill, i18n::text(lang, "ribbon.drawing.fill"), sel, false, true);
             if m.clicked() {
                 run(app, "shape.fill", json!({"color": "accent1"}));
             }
             if let Some(a) = a {
                 widgets::color_popup(&a).show(|ui| {
-                    if let Some(c) = widgets::color_grid(ui, &sc, Some("No Fill")) {
+                    if let Some(c) = widgets::color_grid(ui, &sc, Some(i18n::text(lang, "pane.format.no_fill_color"))) {
                         match c {
                             Some(c) => run(app, "shape.fill", json!({"color": cref_param(&c)})),
                             None => run(app, "shape.fill", json!({"none": true})),
@@ -785,14 +810,14 @@ fn drawing_group(app: &mut SlideApp, ui: &mut Ui) {
                     }
                 });
             }
-            let (m, a) = small_button_ex(ui, Icon::ShapeOutline, "Shape Outline", sel, false, true);
+            let (m, a) = small_button_ex(ui, Icon::ShapeOutline, i18n::text(lang, "ribbon.drawing.outline"), sel, false, true);
             if m.clicked() {
                 run(app, "shape.line", json!({"color": "tx1", "width": 1}));
             }
             if let Some(a) = a {
                 widgets::color_popup(&a).show(|ui| outline_menu(app, ui, &sc));
             }
-            let (_, a) = small_button_ex(ui, Icon::ShapeEffects, "Shape Effects", sel, false, true);
+            let (_, a) = small_button_ex(ui, Icon::ShapeEffects, i18n::text(lang, "ribbon.drawing.effects"), sel, false, true);
             if let Some(a) = a {
                 egui::Popup::menu(&a).show(|ui| effects_menu(app, ui));
             }
@@ -952,49 +977,51 @@ fn quick_styles(app: &mut SlideApp, ui: &mut Ui) {
 }
 
 pub fn arrange_menu(app: &mut SlideApp, ui: &mut Ui) {
-    ui.label(egui::RichText::new("Order Objects").font(theme::bold(12.0)));
+    let lang = app.lang();
+    ui.label(egui::RichText::new(i18n::text(lang, "ribbon.arrange.order_heading")).font(theme::bold(12.0)));
     for (l, id, ic) in [
-        ("Bring to Front", "arrange.bringToFront", Icon::BringToFront),
-        ("Send to Back", "arrange.sendToBack", Icon::SendToBack),
-        ("Bring Forward", "arrange.bringForward", Icon::BringForward),
-        ("Send Backward", "arrange.sendBackward", Icon::SendBackward),
+        (i18n::text(lang, "pane.selection.bring_front"), "arrange.bringToFront", Icon::BringToFront),
+        (i18n::text(lang, "pane.selection.send_back"), "arrange.sendToBack", Icon::SendToBack),
+        (i18n::text(lang, "pane.selection.bring_forward"), "arrange.bringForward", Icon::BringForward),
+        (i18n::text(lang, "pane.selection.send_backward"), "arrange.sendBackward", Icon::SendBackward),
     ] {
         menu_item(app, ui, ic, l, id, json!({}));
     }
     ui.separator();
-    ui.label(egui::RichText::new("Group Objects").font(theme::bold(12.0)));
-    menu_item(app, ui, Icon::Group, "Group", "arrange.group", json!({}));
-    menu_item(app, ui, Icon::Ungroup, "Ungroup", "arrange.ungroup", json!({}));
-    menu_item(app, ui, Icon::Group, "Regroup", "arrange.regroup", json!({}));
+    ui.label(egui::RichText::new(i18n::text(lang, "ribbon.arrange.group_heading")).font(theme::bold(12.0)));
+    menu_item(app, ui, Icon::Group, i18n::text(lang, "ribbon.arrange.group"), "arrange.group", json!({}));
+    menu_item(app, ui, Icon::Ungroup, i18n::text(lang, "ribbon.arrange.ungroup"), "arrange.ungroup", json!({}));
+    menu_item(app, ui, Icon::Group, i18n::text(lang, "ribbon.arrange.regroup"), "arrange.regroup", json!({}));
     ui.separator();
-    ui.label(egui::RichText::new("Position Objects").font(theme::bold(12.0)));
-    ui.menu_button("Align", |ui| align_menu(app, ui));
-    ui.menu_button("Rotate", |ui| {
-        menu_item(app, ui, Icon::RotateRight, "Rotate Right 90°", "arrange.rotateRight", json!({}));
-        menu_item(app, ui, Icon::RotateLeft, "Rotate Left 90°", "arrange.rotateLeft", json!({}));
-        menu_item(app, ui, Icon::FlipV, "Flip Vertical", "arrange.flipVertical", json!({}));
-        menu_item(app, ui, Icon::FlipH, "Flip Horizontal", "arrange.flipHorizontal", json!({}));
+    ui.label(egui::RichText::new(i18n::text(lang, "ribbon.arrange.position_heading")).font(theme::bold(12.0)));
+    ui.menu_button(i18n::text(lang, "ribbon.arrange.align"), |ui| align_menu(app, ui));
+    ui.menu_button(i18n::text(lang, "ribbon.arrange.rotate"), |ui| {
+        menu_item(app, ui, Icon::RotateRight, i18n::text(lang, "ribbon.arrange.rotate_right"), "arrange.rotateRight", json!({}));
+        menu_item(app, ui, Icon::RotateLeft, i18n::text(lang, "ribbon.arrange.rotate_left"), "arrange.rotateLeft", json!({}));
+        menu_item(app, ui, Icon::FlipV, i18n::text(lang, "ribbon.arrange.flip_v"), "arrange.flipVertical", json!({}));
+        menu_item(app, ui, Icon::FlipH, i18n::text(lang, "ribbon.arrange.flip_h"), "arrange.flipHorizontal", json!({}));
     });
-    if ui.button("Selection Pane…").clicked() {
+    if ui.button(i18n::text(lang, "ribbon.arrange.selection")).clicked() {
         let _ = app.run("view.pane", json!({"pane": "selection"}));
         ui.close();
     }
 }
 
 pub fn align_menu(app: &mut SlideApp, ui: &mut Ui) {
+    let lang = app.lang();
     for (l, e, ic) in [
-        ("Align Left", "left", Icon::AlignObjLeft),
-        ("Align Center", "center", Icon::AlignObjCenter),
-        ("Align Right", "right", Icon::AlignObjRight),
-        ("Align Top", "top", Icon::AlignObjTop),
-        ("Align Middle", "middle", Icon::AlignObjMiddle),
-        ("Align Bottom", "bottom", Icon::AlignObjBottom),
+        (i18n::text(lang, "ribbon.align.left"), "left", Icon::AlignObjLeft),
+        (i18n::text(lang, "ribbon.align.center"), "center", Icon::AlignObjCenter),
+        (i18n::text(lang, "ribbon.align.right"), "right", Icon::AlignObjRight),
+        (i18n::text(lang, "ribbon.align.top"), "top", Icon::AlignObjTop),
+        (i18n::text(lang, "ribbon.align.middle"), "middle", Icon::AlignObjMiddle),
+        (i18n::text(lang, "ribbon.align.bottom"), "bottom", Icon::AlignObjBottom),
     ] {
         menu_item(app, ui, ic, l, "arrange.align", json!({"edge": e}));
     }
     ui.separator();
-    menu_item(app, ui, Icon::DistributeH, "Distribute Horizontally", "arrange.distribute", json!({"dir": "horizontal"}));
-    menu_item(app, ui, Icon::DistributeV, "Distribute Vertically", "arrange.distribute", json!({"dir": "vertical"}));
+    menu_item(app, ui, Icon::DistributeH, i18n::text(lang, "ribbon.arrange.distribute_h"), "arrange.distribute", json!({"dir": "horizontal"}));
+    menu_item(app, ui, Icon::DistributeV, i18n::text(lang, "ribbon.arrange.distribute_v"), "arrange.distribute", json!({"dir": "vertical"}));
 }
 
 pub fn menu_item(app: &mut SlideApp, ui: &mut Ui, icon: Icon, label: &str, id: &str, p: Value) {
@@ -1007,17 +1034,18 @@ pub fn menu_item(app: &mut SlideApp, ui: &mut Ui, icon: Icon, label: &str, id: &
 }
 
 fn home(app: &mut SlideApp, ui: &mut Ui) {
+    let lang = app.lang();
     let st = fmt_state(app);
     clipboard_group(app, ui);
     slides_group(app, ui);
     font_group(app, ui, &st);
     paragraph_group(app, ui, &st);
     group(ui, |ui| {
-        big(app, ui, Icon::Picture, "Picture", "app.insertPictureDialog", json!({}));
+        big(app, ui, Icon::Picture, i18n::text(lang, "pane.format.picture"), "app.insertPictureDialog", json!({}));
     });
     drawing_group(app, ui);
     group(ui, |ui| {
-        big(app, ui, Icon::DesignIdeas, "Design\nIdeas", "view.pane", json!({"pane": "designer"}));
+        big(app, ui, Icon::DesignIdeas, i18n::text(lang, "ribbon.home.design_ideas"), "view.pane", json!({"pane": "designer"}));
     });
 }
 
