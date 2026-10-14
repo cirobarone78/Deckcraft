@@ -16,6 +16,7 @@ pub mod links;
 pub mod recovery;
 pub mod sample;
 pub mod tools;
+pub mod video;
 
 use std::sync::Arc;
 
