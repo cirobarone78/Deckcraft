@@ -1,6 +1,6 @@
 # File-format parity with PowerPoint
 
-> **Last reviewed:** 2026-10-10 · **Last updated:** 2026-10-12 · **Change:** trivial (Groups with a small legacy child coordinate space draw outlines, dashes, arrowheads and ink at their own width (#233); previously major: created; formats taken from PowerPoint 16.113.4's Info.plist, PPTX coverage measured from `crates/pptx`) · **Target:** Microsoft PowerPoint for Mac 16.113 (Microsoft 365)
+> **Last reviewed:** 2026-10-10 · **Last updated:** 2026-10-14 · **Change:** minor (3-D models: inserted from GLB, glTF, OBJ, STL, PLY and 3MF, drawn, and read and written as PowerPoint's `am3d:model3d`; previous: trivial, groups with a small legacy child coordinate space draw outlines at their own width (#233); before that major: created; formats taken from PowerPoint 16.113.4's Info.plist, PPTX coverage measured from `crates/pptx`) · **Target:** Microsoft PowerPoint for Mac 16.113 (Microsoft 365)
 
 Every format PowerPoint reads or writes, DeckCraft's support, fidelity and how it is tested.
 Gaps are itemized in [gaps.md](gaps.md#file-formats). Dimension score: **~58% ready**
@@ -47,7 +47,7 @@ PowerPoint opens and saves; Viewer = opens only).
 | WMV | yes (Windows) | embedded, not playable | |
 | Online video (YouTube embeds) | yes | no | Cloud feature |
 | Embedded OLE objects | yes | kept on round trip (opaque), not insertable or editable | `ShapeKind::Opaque` |
-| 3-D models (`.glb`) | yes | no | |
+| 3-D models: GLB, glTF, OBJ (with MTL and textures), STL, PLY, 3MF | yes (not glTF) | yes | Kept as glTF binary like PowerPoint: GLB as it is, the others converted on insert (`crates/mesh`). Textures, vertex colours and materials are kept; PowerPoint's own conversion drops PLY vertex colours and 3MF textures. Drawn by a software renderer whose lighting was measured against PowerPoint's. Not drawn: Draco or meshopt compression; skinned and animated models show at rest |
 | Embedded fonts | yes | no | `p:embeddedFontLst` ignored |
 
 ## PPTX coverage (PresentationML / DrawingML)
@@ -68,6 +68,7 @@ the round trip even though DeckCraft doesn't model it.
 | Lines: dash, compound, caps, joins, arrowheads | yes | yes | |
 | Effects: shadow, glow, soft edges, reflection | yes | yes | |
 | 3-D: `scene3d`, `sp3d` | kept | kept | Not rendered |
+| 3-D models (`am3d:model3d` in `mc:AlternateContent`, `model/gltf.binary` part, picture fallback) | yes | yes | Camera, model transform, rotation, `objViewport` and lights read and written in PowerPoint's element order; a file's own lights are written back unchanged; a fresh fallback picture (2 px/pt), which PowerPoint shows until the model is edited. `attrSrcUrl`, `winViewport` and extensions are dropped. Checked by opening DeckCraft's files in PowerPoint and PowerPoint's in DeckCraft (2026-10-14) |
 | Text: runs, paragraphs, bullets, numbering, levels, autofit, columns, vertical, RTL, script fonts, fields, hyperlinks | yes | yes | Round-trip tests incl. `justLow` and date fields |
 | Text warp (`prstTxWarp`) | yes | yes | All 40 presets rendered (`crates/geom/src/warp.rs`); adjust values (`avLst`) round-trip |
 | Pictures with crop, recolour, duotone, alpha, luminance | yes | yes | |
@@ -99,6 +100,7 @@ the round trip even though DeckCraft doesn't model it.
 
 | Date | Change | Summary |
 |---|---|---|
+| 2026-10-14 | minor | 3-D models: six model formats inserted, `am3d:model3d` read and written, checked both ways against PowerPoint |
 | 2026-10-12 | minor | EMF/WMF text and pattern brushes drawn; OLE (VML) and ActiveX previews read |
 | 2026-10-12 | minor | Text warps rendered; their adjust values read and written |
 | 2026-10-12 | trivial | Groups with a small legacy child coordinate space draw outlines, dashes, arrowheads and ink at their own width (#233) |

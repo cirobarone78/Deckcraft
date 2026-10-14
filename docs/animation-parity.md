@@ -1,6 +1,6 @@
 # Transitions and animations: parity with PowerPoint
 
-> **Last reviewed:** 2026-10-13 · **Last updated:** 2026-10-13 · **Change:** major (transitions measured frame by frame against PowerPoint for Windows' video export and retuned; previous: created) · **Target:** Microsoft PowerPoint for Mac 16.113 (Microsoft 365)
+> **Last reviewed:** 2026-10-13 · **Last updated:** 2026-10-14 · **Change:** minor (3-D effects for 3-D models and Morph of 3-D models; previous: major, transitions measured frame by frame against PowerPoint for Windows' video export and retuned; before that: created) · **Target:** Microsoft PowerPoint for Mac 16.113 (Microsoft 365)
 
 Transitions and animations are what make a deck a presentation, and the part of PowerPoint people
 notice first when it's missing. Scores roll up into [target-app-parity.md](target-app-parity.md)
@@ -44,10 +44,10 @@ perspective-correct subdivided meshes.
 | Morph: objects move, resize, recolour | yes | yes |
 | Morph: Words and Characters | yes | yes (#5) |
 | Morph: geometry (circle to star) | yes | yes (#27) |
-| Morph: `!!` name forcing, pictures, 3-D models, ink | yes | names partly; no 3-D or ink |
+| Morph: `!!` name forcing, pictures, 3-D models, ink | yes | names partly; 3-D models turn along the shortest rotation while they move and resize; no ink |
 | Frame-by-frame comparison with PowerPoint | | done (Windows, 2026-10-13); headless frames: `deckcraft-cli render-transition` |
 
-## Animations: 64 of ~190 effects
+## Animations: 69 of ~195 effects
 
 | Class | PowerPoint (gallery + More Effects) | DeckCraft | Missing (examples) |
 |---|---:|---:|---|
@@ -56,6 +56,7 @@ perspective-correct subdivided meshes.
 | Exit | ~50 | 14 | Mirrors of the missing entrance effects, plus Blinds, Box, Checkerboard, Circle, Diamond, Peek Out, Strips as exits |
 | Motion paths | 64 presets + custom | 6 (Lines, Arcs, Turns, Loops, Shapes-style presets, Custom Path) | Most of Basic (shapes), Lines & Curves and Special presets |
 | Media (Play, Pause, Stop) | 3 (+ Seek) | 3 | Seek, bookmarks as triggers |
+| 3D (3-D models only: Arrive, Turntable, Swing, Jump & Turn, Leave) | 5 | 5 | Effect options (direction, intensity). Curves shaped after PowerPoint's, observed black-box; written to PPTX as PowerPoint writes them (`3d.view.rotation`, `3d.object.*` keyframes) and recognised by PowerPoint |
 
 By how often people use them, the effects present cover nearly all real decks (Appear, Fade, Fly
 In, Wipe, Zoom, Float In, Grow/Shrink, Pulse, Spin, motion lines): weighted, ~85% of use; by count,
@@ -93,5 +94,6 @@ In, Wipe, Zoom, Float In, Grow/Shrink, Pulse, Spin, motion lines): weighted, ~85
 
 | Date | Change | Summary |
 |---|---|---|
+| 2026-10-14 | minor | 3-D effects (Arrive, Turntable, Swing, Jump & Turn, Leave) and Morph turning 3-D models |
 | 2026-10-13 | major | Transitions measured frame by frame against PowerPoint's video export and retuned (mean diff 35.7 → 15.0); PowerPoint's XML defaults and option meanings; new options |
 | 2026-10-10 | major | Created: 48/48 transitions, 64 of ~190 animation effects, pane and option depth, estimates |
