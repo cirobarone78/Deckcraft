@@ -1,5 +1,6 @@
 //! Slide Show: full-screen playback with transitions and animations (`deckcraft-anim`),
-//! keyboard/mouse navigation, pen, black/white screens, presenter view and rehearsed timings.
+//! keyboard/mouse navigation, pen, black/white screens, presenter view, rehearsed timings
+//! and recorded timings, narration, ink and laser.
 
 use deckcraft_anim::{Layer, LinkJump, ShowAction, ShowState, Source, Timeline};
 use deckcraft_model::text::Hyperlink;
@@ -20,6 +21,8 @@ pub struct Show {
     /// Play every step automatically (animation preview).
     pub autoplay: bool,
     pub rehearse: bool,
+    /// Record Slide Show: keep timings, narration, pen ink and laser when the show ends.
+    pub record: bool,
     timeline: Option<(usize, Timeline)>,
     step_start: f64,
     slide_start: f64,
@@ -29,11 +32,25 @@ pub struct Show {
     next_tex: Option<(usize, TextureHandle)>,
     blank: Option<Color32>,
     pen: bool,
+    /// Laser pointer left on (the Laser button, or L while recording). Hold Ctrl for the same
+    /// dot in any show. It leaves no ink; points are kept only while recording.
+    laser: bool,
     strokes: Vec<Vec<Pos2>>,
     goto: String,
     started: bool,
     show_start: f64,
     timings: Vec<(usize, f64)>,
+    /// Pen strokes kept while recording, in slide points, with the slide they were drawn on.
+    recorded: Vec<(usize, Vec<(f64, f64)>)>,
+    /// Laser samples kept while recording: slide points and milliseconds from the slide start.
+    laser_live: Vec<(f64, f64, u32)>,
+    laser_saved: Vec<(usize, Vec<(f64, f64, u32)>)>,
+    /// WAV bytes per slide, taken from the microphone when the slide is left.
+    narration: Vec<(usize, Vec<u8>)>,
+    mic_tried: bool,
+    mic_ok: bool,
+    /// Pen width in slide points, matching the 3px stroke on screen.
+    ink_width: f64,
     last_move: f64,
     pub ended: bool,
     /// The slide whose media was last started (auto-play runs once per visit).
@@ -80,6 +97,7 @@ impl Show {
             preview_only: false,
             autoplay: false,
             rehearse: false,
+            record: false,
             timeline: None,
             step_start: 0.0,
             slide_start: 0.0,
@@ -89,11 +107,19 @@ impl Show {
             next_tex: None,
             blank: None,
             pen: false,
+            laser: false,
             strokes: vec![],
             goto: String::new(),
             started: false,
             show_start: 0.0,
             timings: vec![],
+            recorded: vec![],
+            laser_live: vec![],
+            laser_saved: vec![],
+            narration: vec![],
+            mic_tried: false,
+            mic_ok: false,
+            ink_width: 2.25,
             last_move: 0.0,
             ended: false,
             media_slide: None,
@@ -125,9 +151,12 @@ impl Show {
                 self.step_end = now;
             }
             ShowAction::Slide(i) => {
-                if self.rehearse {
-                    self.timings.push((self.timeline.as_ref().map(|t| t.0).unwrap_or(i), now - self.slide_start));
+                let left = self.timeline.as_ref().map(|t| t.0).unwrap_or(i);
+                if self.rehearse || self.record {
+                    self.timings.push((left, now - self.slide_start));
                 }
+                self.stash_ink(doc, left);
+                self.stash_laser(left);
                 let (kind, option, dur) = doc
                     .slides
                     .get(i)
@@ -177,6 +206,49 @@ impl Show {
             }
         }
     }
+
+    /// Move the pen's strokes into the recording, in slide points. Always clears the live strokes.
+    fn stash_ink(&mut self, doc: &Presentation, slide: usize) {
+        let strokes = std::mem::take(&mut self.strokes);
+        let w = doc.slide_size.width;
+        let h = doc.slide_size.height;
+        if !self.record || !(w > 0.0 && h > 0.0) {
+            return;
+        }
+        for stroke in strokes {
+            let mut pts = Vec::new();
+            for q in stroke.iter().take(4096) {
+                let x = q.x as f64 * w;
+                let y = q.y as f64 * h;
+                if x.is_finite() && y.is_finite() {
+                    pts.push((x, y));
+                }
+            }
+            if pts.len() >= 2 {
+                self.recorded.push((slide, pts));
+            }
+        }
+    }
+
+    fn stash_laser(&mut self, slide: usize) {
+        let pts = std::mem::take(&mut self.laser_live);
+        if self.record && !pts.is_empty() {
+            self.laser_saved.push((slide, pts));
+        }
+    }
+
+    fn note_laser(&mut self, x: f64, y: f64, t_ms: u32) {
+        if !x.is_finite() || !y.is_finite() || self.laser_live.len() >= 4096 {
+            return;
+        }
+        if let Some((px, py, pt)) = self.laser_live.last() {
+            let moved = (x - px).hypot(y - py) >= 1.5;
+            if t_ms.saturating_sub(*pt) < 40 && !moved {
+                return;
+            }
+        }
+        self.laser_live.push((x, y, t_ms));
+    }
 }
 
 fn state_for(tl: &Timeline, id: ShapeId, step: usize, t: f64) -> ShapeState {
@@ -198,6 +270,59 @@ fn state_for(tl: &Timeline, id: ShapeId, step: usize, t: f64) -> ShapeState {
             })
             .collect(),
     }
+}
+
+fn record_bar_rect(full: Rect) -> Rect {
+    Rect::from_min_size(pos2(full.min.x + 12.0, full.min.y + 12.0), vec2(420.0, 32.0))
+}
+
+fn pen_width_slide(doc: &Presentation, full: Rect, reading: bool) -> f64 {
+    let avail = if reading { Rect::from_min_max(full.min, pos2(full.max.x, full.max.y - 34.0)) } else { full };
+    let srect = fit(avail, doc);
+    let scale = srect.width() / doc.slide_size.width.max(1.0) as f32;
+    if scale.is_finite() && scale > 0.01 { (3.0 / scale) as f64 } else { 2.25 }
+}
+
+/// The recording badge. Returns false when Stop was clicked.
+fn recording_bar(ui: &mut Ui, painter: &egui::Painter, ctx: &egui::Context, full: Rect, now: f64, show: &mut Show, mic_samples: usize) -> bool {
+    let t = now - show.slide_start;
+    let secs = if t.is_finite() { t.max(0.0) } else { 0.0 };
+    let r = record_bar_rect(full);
+    painter.rect_filled(r, CornerRadius::same(6), Color32::from_black_alpha(180));
+    painter.circle_filled(pos2(r.min.x + 16.0, r.center().y), 5.0, Color32::from_rgb(220, 40, 40));
+    let clock = format!("{:02}:{:04.1}", (secs / 60.0) as u32, secs % 60.0);
+    let mic_live = mic_samples;
+    let label = if show.mic_tried && !show.mic_ok {
+        format!("Recording  {clock}  · no mic")
+    } else if mic_live >= 800 {
+        format!("Recording  {clock}  · mic")
+    } else {
+        format!("Recording  {clock}")
+    };
+    painter.text(pos2(r.min.x + 30.0, r.center().y), Align2::LEFT_CENTER, label, theme::font(13.0), Color32::WHITE);
+    let laser = Rect::from_min_size(pos2(r.max.x - 124.0, r.min.y + 4.0), vec2(56.0, 24.0));
+    let lresp = ui.interact(laser, ui.id().with("record_laser"), Sense::click());
+    if lresp.clicked() {
+        show.laser = !show.laser;
+        if show.laser {
+            show.pen = false;
+        }
+    }
+    let laser_fill = if show.laser {
+        Color32::from_rgb(180, 40, 40)
+    } else if lresp.hovered() {
+        Color32::from_rgb(80, 80, 80)
+    } else {
+        Color32::from_rgb(50, 50, 50)
+    };
+    painter.rect_filled(laser, CornerRadius::same(4), laser_fill);
+    painter.text(laser.center(), Align2::CENTER_CENTER, "Laser", theme::font(12.0), Color32::WHITE);
+    let stop = Rect::from_min_size(pos2(r.max.x - 62.0, r.min.y + 4.0), vec2(54.0, 24.0));
+    let resp = ui.interact(stop, ui.id().with("record_stop"), Sense::click());
+    painter.rect_filled(stop, CornerRadius::same(4), if resp.hovered() { Color32::from_rgb(180, 40, 40) } else { Color32::from_rgb(140, 32, 32) });
+    painter.text(stop.center(), Align2::CENTER_CENTER, "Stop", theme::font(12.0), Color32::WHITE);
+    ctx.request_repaint_after(std::time::Duration::from_millis(100));
+    !resp.clicked()
 }
 
 fn fit(avail: Rect, doc: &Presentation) -> Rect {
@@ -261,6 +386,19 @@ pub fn ui(app: &mut SlideApp, ui: &mut Ui) {
             ctx.send_viewport_cmd(egui::ViewportCommand::Fullscreen(true));
         }
         show.after_enter(&doc, now);
+        if show.record && !show.mic_tried {
+            show.mic_tried = true;
+            match app.services.mic.as_mut() {
+                Some(mic) => match mic.start() {
+                    Ok(()) => show.mic_ok = true,
+                    Err(e) => {
+                        log::info!("record narration: {e}");
+                        show.mic_ok = false;
+                    }
+                },
+                None => show.mic_ok = false,
+            }
+        }
     }
     let mut keep = true;
     // Input.
@@ -301,20 +439,36 @@ pub fn ui(app: &mut SlideApp, ui: &mut Ui) {
                 show.ended = false;
                 actions.push(show.state.prev(&doc));
             }
-            P if m.command => show.pen = !show.pen,
+            P if m.command => {
+                show.pen = !show.pen;
+                if show.pen {
+                    show.laser = false;
+                }
+            }
+            L if show.record => {
+                show.laser = !show.laser;
+                if show.laser {
+                    show.pen = false;
+                }
+            }
             A if m.command => show.pen = false,
             Home => actions.push(show.state.goto(&doc, 0)),
             End => actions.push(show.state.goto(&doc, doc.slides.len().saturating_sub(1))),
             B | Period => show.blank = if show.blank == Some(Color32::BLACK) { None } else { Some(Color32::BLACK) },
             W | Comma => show.blank = if show.blank == Some(Color32::WHITE) { None } else { Some(Color32::WHITE) },
-            E => show.strokes.clear(),
+            E => {
+                show.strokes.clear();
+                show.laser_live.clear();
+            }
             Num0 | Num1 | Num2 | Num3 | Num4 | Num5 | Num6 | Num7 | Num8 | Num9 => {
                 show.goto.push_str(k.name());
             }
             _ => {}
         }
     }
-    let on_slide = !show.pen && !show.ended && show.blank.is_none() && !show.reading_bar_hit(&ctx);
+    let ctrl = ctx.input(|i| i.modifiers.ctrl);
+    let laser_on = pointer_is_laser(show.laser, ctrl, show.blank.is_some());
+    let on_slide = !show.pen && !laser_on && !show.ended && show.blank.is_none() && !show.reading_bar_hit(&ctx) && !show.record_bar_hit(&ctx);
     let gif_click = if clicked && on_slide { gif_hit(&ctx, ui, &show, &doc, app) } else { None };
     let media_click = if clicked && on_slide && gif_click.is_none() { media_hit(&ctx, ui, &show, &doc) } else { None };
     let link = if on_slide && gif_click.is_none() && media_click.is_none() { link_hit(&ctx, ui, &mut show, &doc) } else { None };
@@ -330,7 +484,7 @@ pub fn ui(app: &mut SlideApp, ui: &mut Ui) {
             LinkJump::Exit => keep = false,
             LinkJump::None => {}
         }
-    } else if clicked && !show.pen && !show.reading_bar_hit(&ctx) {
+    } else if clicked && !show.pen && !laser_on && !show.reading_bar_hit(&ctx) && !show.record_bar_hit(&ctx) {
         if show.ended {
             keep = false;
         } else if show.blank.is_some() {
@@ -339,11 +493,12 @@ pub fn ui(app: &mut SlideApp, ui: &mut Ui) {
             actions.push(show.state.next(&doc));
         }
     }
-    if secondary && !show.ended {
+    if secondary && !show.ended && !laser_on && !show.record_bar_hit(&ctx) {
         actions.push(show.state.prev(&doc));
     }
     // Apply input first: a step started by this click must restart the clock before it is read.
     for a in actions.drain(..) {
+        before_slide_change(app, &mut show, &a);
         if !show.apply(a, &doc, now) {
             keep = false;
         }
@@ -364,13 +519,15 @@ pub fn ui(app: &mut SlideApp, ui: &mut Ui) {
         let next_auto = show.timeline(&doc).step_is_auto(cur_step);
         let n_steps = show.timeline(&doc).steps();
         let step_due = cur_step < n_steps && ((show.autoplay && idle > 0.3) || next_auto);
-        if step_due || (!show.rehearse && show.state.auto_advance_due(&doc, idle) && !show.ended) {
+        if step_due || (!(show.rehearse || show.record) && show.state.auto_advance_due(&doc, idle) && !show.ended) {
             actions.push(show.state.next(&doc));
         } else if show.preview_only && cur_step >= n_steps && idle > 0.8 {
             keep = false;
         }
     }
+    show.ink_width = pen_width_slide(&doc, ui.max_rect(), show.reading);
     for a in actions {
+        before_slide_change(app, &mut show, &a);
         if !show.apply(a, &doc, now) {
             keep = false;
         }
@@ -568,8 +725,8 @@ pub fn ui(app: &mut SlideApp, ui: &mut Ui) {
         painter.rect_filled(full, CornerRadius::ZERO, c);
     }
     // Pen.
-    let resp = ui.interact(full, ui.id().with("show_pen"), if show.pen { Sense::drag() } else { Sense::hover() });
-    if show.pen {
+    let resp = ui.interact(full, ui.id().with("show_pen"), if show.pen && !laser_on { Sense::drag() } else { Sense::hover() });
+    if show.pen && !laser_on {
         if resp.drag_started() {
             show.strokes.push(vec![]);
         }
@@ -579,6 +736,9 @@ pub fn ui(app: &mut SlideApp, ui: &mut Ui) {
             s.push(pos2((p.x - srect.min.x) / srect.width(), (p.y - srect.min.y) / srect.height()));
         }
         ctx.set_cursor_icon(egui::CursorIcon::Crosshair);
+    } else if laser_on {
+        ctx.set_cursor_icon(egui::CursorIcon::None);
+        ctx.request_repaint();
     } else if link.is_some() {
         ctx.set_cursor_icon(egui::CursorIcon::PointingHand);
     } else if now - show.last_move > 2.5 && !show.reading {
@@ -589,6 +749,35 @@ pub fn ui(app: &mut SlideApp, ui: &mut Ui) {
     for s in &show.strokes {
         let pts: Vec<Pos2> = s.iter().map(|q| pos2(srect.min.x + q.x * srect.width(), srect.min.y + q.y * srect.height())).collect();
         painter.add(egui::Shape::line(pts, Stroke::new(3.0, pen_col)));
+    }
+    if laser_on {
+        if let Some(p) = ctx.input(|i| i.pointer.hover_pos()) {
+            let nx = (p.x - srect.min.x) / srect.width().max(1.0);
+            let ny = (p.y - srect.min.y) / srect.height().max(1.0);
+            if show.record && (0.0..=1.0).contains(&nx) && (0.0..=1.0).contains(&ny) {
+                let ms = (now - show.slide_start).max(0.0) * 1000.0;
+                if ms.is_finite() {
+                    show.note_laser(nx as f64 * doc.slide_size.width, ny as f64 * doc.slide_size.height, ms.min(3_600_000.0) as u32);
+                }
+            }
+            let col = theme::to_color32(doc.show.laser_color);
+            painter.circle_filled(p, 7.0, col);
+            painter.circle_stroke(p, 11.0, Stroke::new(2.0, Color32::from_white_alpha(200)));
+        }
+    } else if !show.record
+        && let Some(sl) = doc.slides.get(show.state.slide)
+        && let Some(trace) = &sl.laser
+    {
+        let elapsed = (now - show.slide_start).max(0.0) * 1000.0;
+        if elapsed.is_finite()
+            && let Some((x, y)) = laser_pos(&trace.points, elapsed.min(3_600_000.0) as u32)
+        {
+            let k = srect.width() / doc.slide_size.width.max(1.0) as f32;
+            let p = pos2(srect.min.x + x as f32 * k, srect.min.y + y as f32 * k);
+            painter.circle_filled(p, 7.0, theme::to_color32(trace.color));
+            painter.circle_stroke(p, 11.0, Stroke::new(2.0, Color32::from_white_alpha(200)));
+            ctx.request_repaint();
+        }
     }
     // Reading view bar / on-screen controls.
     if show.reading {
@@ -611,32 +800,46 @@ pub fn ui(app: &mut SlideApp, ui: &mut Ui) {
         }
         if child.button("▶").clicked() {
             let a = show.state.next(&doc);
+            before_slide_change(app, &mut show, &a);
             if !show.apply(a, &doc, now) {
                 keep = false;
             }
         }
         if child.button("◀").clicked() {
             let a = show.state.prev(&doc);
+            before_slide_change(app, &mut show, &a);
             show.apply(a, &doc, now);
         }
     } else if now - show.last_move < 2.5 {
-        let bar = Rect::from_min_size(pos2(full.min.x + 20.0, full.max.y - 50.0), vec2(250.0, 34.0));
+        let bar = Rect::from_min_size(pos2(full.min.x + 20.0, full.max.y - 50.0), vec2(310.0, 34.0));
         painter.rect_filled(bar, CornerRadius::same(17), Color32::from_black_alpha(140));
         let mut child =
             ui.new_child(egui::UiBuilder::new().max_rect(bar.shrink2(vec2(10.0, 4.0))).layout(egui::Layout::left_to_right(egui::Align::Center)));
         let b = |ui: &mut Ui, s: &str| ui.add(egui::Button::new(egui::RichText::new(s).color(Color32::WHITE).size(15.0)).frame(false));
         if b(&mut child, "◀").clicked() {
             let a = show.state.prev(&doc);
+            before_slide_change(app, &mut show, &a);
             show.apply(a, &doc, now);
         }
         if b(&mut child, "▶").clicked() {
             let a = show.state.next(&doc);
+            before_slide_change(app, &mut show, &a);
             if !show.apply(a, &doc, now) {
                 keep = false;
             }
         }
         if b(&mut child, if show.pen { "✏ on" } else { "✏" }).clicked() {
             show.pen = !show.pen;
+            if show.pen {
+                show.laser = false;
+            }
+        }
+        if b(&mut child, if show.laser { "● on" } else { "●" }).on_hover_text("Laser pointer. Hold Ctrl to point without leaving it on.").clicked()
+        {
+            show.laser = !show.laser;
+            if show.laser {
+                show.pen = false;
+            }
         }
         if b(&mut child, "⬛").clicked() {
             show.blank = Some(Color32::BLACK);
@@ -646,7 +849,10 @@ pub fn ui(app: &mut SlideApp, ui: &mut Ui) {
         }
         ctx.request_repaint_after(std::time::Duration::from_millis(300));
     }
-    if show.rehearse {
+    if show.record {
+        let mic_samples = app.services.mic.as_ref().map(|m| m.captured()).unwrap_or(0);
+        keep = recording_bar(ui, &painter, &ctx, full, now, &mut show, mic_samples) && keep;
+    } else if show.rehearse {
         let t = now - show.slide_start;
         let total = now - show.show_start;
         let r = Rect::from_min_size(pos2(full.min.x + 12.0, full.min.y + 12.0), vec2(220.0, 30.0));
@@ -662,7 +868,7 @@ pub fn ui(app: &mut SlideApp, ui: &mut Ui) {
     }
     // Presenter view in a second window.
     if show.presenter && !show.reading && !show.ended {
-        presenter_window(&ctx, &mut show, &doc, now, &mut keep);
+        presenter_window(app, &ctx, &mut show, &doc, now, &mut keep);
     }
     if keep {
         app.show = Some(show);
@@ -671,15 +877,40 @@ pub fn ui(app: &mut SlideApp, ui: &mut Ui) {
         if !show.reading {
             ctx.send_viewport_cmd(egui::ViewportCommand::Fullscreen(false));
         }
-        if show.rehearse {
-            if let Some((_, tl)) = &show.timeline {
-                let _ = tl;
+        if show.rehearse || show.record {
+            if show.record {
+                take_narration(app, &mut show);
             }
+            if show.mic_tried {
+                app.stop_mic();
+            }
+            show.stash_ink(&doc, show.state.slide);
+            show.stash_laser(show.state.slide);
             show.timings.push((show.state.slide, now - show.slide_start));
             for (i, secs) in show.timings.clone() {
-                let _ = app.run("transition.timing", json!({"index": i, "after": (secs * 1000.0).round() as u64}));
+                let ms = if secs.is_finite() { (secs.max(0.0) * 1000.0).round() as u64 } else { 0 };
+                let _ = app.run("transition.timing", json!({"index": i, "after": ms}));
             }
-            app.set_status("Slide timings recorded.");
+            if show.record {
+                let c = doc.show.pen_color;
+                for (i, pts) in &show.recorded {
+                    let points: Vec<_> = pts.iter().map(|(x, y)| json!([x, y, 0.5])).collect();
+                    let _ = app.run("ink.stroke", json!({"index": i, "points": points, "width": show.ink_width, "color": [c.r, c.g, c.b]}));
+                }
+                for (i, wav) in &show.narration {
+                    let _ =
+                        app.run("show.narration", json!({"index": i, "name": "narration.wav", "data": deckcraft_engine::cmd::base64_encode(wav)}));
+                }
+                let lc = doc.show.laser_color;
+                for (i, pts) in &show.laser_saved {
+                    let points: Vec<_> = pts.iter().map(|(x, y, t)| json!([x, y, t])).collect();
+                    let _ = app.run("show.laser", json!({"index": i, "points": points, "color": [lc.r, lc.g, lc.b]}));
+                }
+                let _ = app.run("show.setup", json!({"useTimings": true}));
+                app.set_status(saved_status(!show.narration.is_empty(), !show.recorded.is_empty(), !show.laser_saved.is_empty()));
+            } else {
+                app.set_status("Slide timings recorded.");
+            }
         }
         let last = show.state.slide;
         let _ = app.run("slide.go", json!({"index": last}));
@@ -705,7 +936,7 @@ fn show_media(app: &mut SlideApp, show: &mut Show, doc: &Presentation) {
     }
     if let Some(i) = cur {
         for (id, _, clip) in crate::media::slide_media(doc, i) {
-            if clip.autoplay && !keep.contains(&id) {
+            if play_on_enter(&clip, doc.show.without_narration) && !keep.contains(&id) {
                 app.media.play(doc, id, &clip, None, crate::media::Owner::Show);
             }
         }
@@ -759,16 +990,23 @@ fn gif_hit(ctx: &egui::Context, ui: &Ui, show: &Show, doc: &Presentation, app: &
 }
 
 impl Show {
+    fn record_bar_hit(&self, ctx: &egui::Context) -> bool {
+        if !self.record {
+            return false;
+        }
+        ctx.input(|i| i.pointer.interact_pos()).is_some_and(|p| record_bar_rect(ctx.content_rect()).contains(p))
+    }
+
     fn reading_bar_hit(&self, ctx: &egui::Context) -> bool {
         // Clicks on the on-screen controls must not also advance.
         ctx.input(|i| i.pointer.interact_pos()).is_some_and(|p| {
             let r = ctx.content_rect();
-            (self.reading && p.y > r.max.y - 34.0) || (!self.reading && p.y > r.max.y - 56.0 && p.x < r.min.x + 280.0)
+            (self.reading && p.y > r.max.y - 34.0) || (!self.reading && p.y > r.max.y - 56.0 && p.x < r.min.x + 340.0)
         })
     }
 }
 
-fn presenter_window(ctx: &egui::Context, show: &mut Show, doc: &Presentation, now: f64, keep: &mut bool) {
+fn presenter_window(app: &mut SlideApp, ctx: &egui::Context, show: &mut Show, doc: &Presentation, now: f64, keep: &mut bool) {
     let cur = show.state.slide;
     let next = deckcraft_anim::show_order(doc).into_iter().find(|i| *i > cur);
     let cur_tex = show.tex.as_ref().map(|(_, t)| t.clone());
@@ -855,10 +1093,95 @@ fn presenter_window(ctx: &egui::Context, show: &mut Show, doc: &Presentation, no
         },
     );
     for a in actions {
+        before_slide_change(app, show, &a);
         if !show.apply(a, doc, now) {
             *keep = false;
         }
     }
+}
+
+fn before_slide_change(app: &mut SlideApp, show: &mut Show, action: &ShowAction) {
+    if show.record && matches!(action, ShowAction::Slide(_)) {
+        take_narration(app, show);
+    }
+}
+
+fn take_narration(app: &mut SlideApp, show: &mut Show) {
+    if !show.record || !show.mic_ok {
+        return;
+    }
+    let Some(mic) = app.services.mic.as_mut() else { return };
+    let (rate, samples) = mic.take();
+    if let Some(wav) = narration_wav(rate, &samples) {
+        let slide = show.state.slide;
+        show.narration.retain(|(i, _)| *i != slide);
+        show.narration.push((slide, wav));
+    }
+}
+
+/// Skip near-silence and clips shorter than 0.2 s so an idle microphone adds no shape.
+fn narration_wav(rate: u32, samples: &[f32]) -> Option<Vec<u8>> {
+    if !(8_000..=192_000).contains(&rate) {
+        return None;
+    }
+    let min_n = (rate as u64).saturating_mul(200) / 1000;
+    let mut sum = 0.0f64;
+    let mut n = 0u64;
+    for s in samples.iter().take(48_000 * 60 * 10) {
+        if s.is_finite() {
+            let v = *s as f64;
+            sum += v * v;
+            n += 1;
+        }
+    }
+    if n < min_n.max(1) {
+        return None;
+    }
+    let rms = (sum / n as f64).sqrt();
+    if !rms.is_finite() || rms < 0.008 {
+        return None;
+    }
+    deckcraft_media::wav_mono(rate, samples).ok()
+}
+
+fn play_on_enter(clip: &deckcraft_model::MediaClip, without_narration: bool) -> bool {
+    clip.autoplay && !(clip.narration && without_narration)
+}
+
+fn saved_status(narr: bool, ink: bool, laser: bool) -> &'static str {
+    match (narr, ink, laser) {
+        (false, false, false) => "Recording saved: slide timings.",
+        (true, false, false) => "Recording saved: slide timings and narration.",
+        (false, true, false) => "Recording saved: slide timings and ink.",
+        (false, false, true) => "Recording saved: slide timings and laser.",
+        (true, true, false) => "Recording saved: slide timings, narration and ink.",
+        (true, false, true) => "Recording saved: slide timings, narration and laser.",
+        (false, true, true) => "Recording saved: slide timings, ink and laser.",
+        (true, true, true) => "Recording saved: slide timings, narration, ink and laser.",
+    }
+}
+
+/// The laser dot at `elapsed_ms`, held briefly after the last sample.
+/// The laser dot: the button (or L while recording) leaves it on, and holding Ctrl shows it
+/// in any show. A blank screen hides it. It never draws ink.
+fn pointer_is_laser(sticky: bool, ctrl: bool, blank: bool) -> bool {
+    !blank && (sticky || ctrl)
+}
+
+fn laser_pos(points: &[deckcraft_model::LaserSample], elapsed_ms: u32) -> Option<(f64, f64)> {
+    let last = points.last()?;
+    if elapsed_ms > last.t_ms.saturating_add(300) {
+        return None;
+    }
+    let mut chosen = &points[0];
+    for p in points {
+        if p.t_ms <= elapsed_ms {
+            chosen = p;
+        } else {
+            break;
+        }
+    }
+    Some((chosen.x, chosen.y))
 }
 
 #[cfg(test)]
@@ -884,5 +1207,38 @@ mod tests {
         assert_eq!(tr.old.as_ref().map(TextureHandle::id), Some(red.id()));
         assert_eq!(tr.from, Some(0));
         assert!(show.tex.is_none(), "the new slide gets a texture of its own instead of overwriting the old one");
+    }
+
+    #[test]
+    fn narration_skips_silence_and_play_narrations_can_turn_it_off() {
+        let quiet = vec![0.0f32; 4000];
+        assert!(narration_wav(8000, &quiet).is_none());
+        assert!(narration_wav(8000, &[0.2; 100]).is_none());
+        let tone: Vec<f32> = (0..4000).map(|i| (i as f32 * 0.2).sin() * 0.3).collect();
+        assert!(narration_wav(8000, &tone).is_some());
+        let narr = deckcraft_model::MediaClip { autoplay: true, narration: true, ..Default::default() };
+        assert!(play_on_enter(&narr, false));
+        assert!(!play_on_enter(&narr, true));
+        let clip = deckcraft_model::MediaClip { autoplay: true, ..Default::default() };
+        assert!(play_on_enter(&clip, true));
+    }
+
+    #[test]
+    fn ctrl_shows_the_laser_without_a_trace_and_the_button_can_leave_it_on() {
+        assert!(pointer_is_laser(false, true, false));
+        assert!(pointer_is_laser(true, false, false));
+        assert!(!pointer_is_laser(false, false, false));
+        assert!(!pointer_is_laser(true, true, true));
+    }
+
+    #[test]
+    fn laser_follows_the_slide_clock_then_goes_out() {
+        let pts = vec![deckcraft_model::LaserSample { x: 1.0, y: 2.0, t_ms: 0 }, deckcraft_model::LaserSample { x: 9.0, y: 8.0, t_ms: 400 }];
+        assert_eq!(laser_pos(&pts, 100), Some((1.0, 2.0)));
+        assert_eq!(laser_pos(&pts, 400), Some((9.0, 8.0)));
+        assert_eq!(laser_pos(&pts, 700), Some((9.0, 8.0)));
+        assert_eq!(laser_pos(&pts, 701), None);
+        assert_eq!(saved_status(true, false, true), "Recording saved: slide timings, narration and laser.");
+        assert_eq!(saved_status(false, false, false), "Recording saved: slide timings.");
     }
 }

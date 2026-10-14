@@ -1733,8 +1733,12 @@ fn slide_show(app: &mut SlideApp, ui: &mut Ui) {
                 s.rehearse = true;
             }
         }
-        let r = big_button(ui, Icon::Record, "Record", false);
-        let _ = r.on_hover_text("Recording narration needs audio capture (coming soon)");
+        if big_button(ui, Icon::Record, "Record", true)
+            .on_hover_text("Records slide timings, the microphone and pen ink. Laser follows the pointer.")
+            .clicked()
+        {
+            let _ = app.run("show.record", json!({}));
+        }
     });
     group(ui, |ui| {
         rows(ui, |ui| {
@@ -1748,6 +1752,25 @@ fn slide_show(app: &mut SlideApp, ui: &mut Ui) {
             }
             let mut mc = app.session.active().is_none_or(|d| d.doc.show.show_media_controls);
             let _ = ui.checkbox(&mut mc, "Show Media Controls");
+            let clear = ui.button("Clear").on_hover_text("Clear Timing or Clear Narration");
+            egui::Popup::menu(&clear).show(|ui| {
+                if ui.button("Clear Timing on Current Slide").clicked() {
+                    run(app, "show.clearTiming", json!({}));
+                    ui.close();
+                }
+                if ui.button("Clear Timing on All Slides").clicked() {
+                    run(app, "show.clearTimingAll", json!({}));
+                    ui.close();
+                }
+                if ui.button("Clear Narration on Current Slide").clicked() {
+                    run(app, "show.clearNarration", json!({}));
+                    ui.close();
+                }
+                if ui.button("Clear Narration on All Slides").clicked() {
+                    run(app, "show.clearNarrationAll", json!({}));
+                    ui.close();
+                }
+            });
         });
     });
 }
@@ -1757,17 +1780,11 @@ fn record(app: &mut SlideApp, ui: &mut Ui) {
         let r = big_button(ui, Icon::Cameo, "Cameo", false);
         let _ = r.on_hover_text("Camera capture is not available yet");
         if big_button(ui, Icon::PlayFromStart, "From\nBeginning", true).clicked() {
-            app.start_show(0, false);
-            if let Some(s) = app.show.as_mut() {
-                s.rehearse = true;
-            }
+            let _ = app.run("show.record", json!({}));
         }
         if big_button(ui, Icon::PlayFromCurrent, "From\nCurrent Slide", true).clicked() {
             let i = app.session.active().map(|d| d.selection.slide).unwrap_or(0);
-            app.start_show(i, false);
-            if let Some(s) = app.show.as_mut() {
-                s.rehearse = true;
-            }
+            let _ = app.run("show.record", json!({"from": i}));
         }
     });
     group(ui, |ui| {
