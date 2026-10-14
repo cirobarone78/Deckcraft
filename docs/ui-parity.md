@@ -1,8 +1,8 @@
 # UI parity with PowerPoint
 
-> **Last reviewed:** 2026-10-10 · **Last updated:** 2026-10-12 · **Change:** minor (File tab / Backstage, #76; previous: off-slide objects in Normal view, #270) · **Target:** Microsoft PowerPoint for Mac 16.113 (Microsoft 365)
+> **Last reviewed:** 2026-10-14 · **Last updated:** 2026-10-14 · **Change:** minor (a picture dropped on the slide is centred on the pointer; previous: minor, File tab / Backstage, #76) · **Target:** Microsoft PowerPoint for Mac 16.113 (Microsoft 365)
 
-> **Last reviewed:** 2026-10-12 · **Last updated:** 2026-10-12 · **Change:** minor (text editing keys observed in PowerPoint for Windows, #268) · **Target:** Microsoft PowerPoint for Mac 16.113 (Microsoft 365)
+> **Last reviewed:** 2026-10-14 · **Last updated:** 2026-10-14 · **Change:** minor (a picture dropped on the slide is centred on the pointer; previous: minor, text editing keys, #268) · **Target:** Microsoft PowerPoint for Mac 16.113 (Microsoft 365)
 
 How DeckCraft looks and feels next to PowerPoint: the shell, the ribbon, menus, panes, dialogs,
 direct manipulation, keyboard and precision. Observations of PowerPoint are kept locally in
@@ -84,7 +84,7 @@ menu colours taken from the theme tokens (menu `chrome`, page `card`).
 | Exact size/position, lock aspect | yes | yes |
 | Rulers with indent markers and tab stops | yes | rulers yes; tab stops partial |
 | Context menus on shapes, slides, text, thumbnails | yes | yes, shorter |
-| Drag and drop of files and between thumbnails | yes | yes |
+| Drag and drop of files and between thumbnails | yes | yes: a picture dropped on the slide is centred on the pointer; a drop on the ribbon or thumbnails stays centred; a presentation opens |
 | Image paste from the clipboard | yes | macOS yes; Windows and Linux no (#53) |
 | Font menu: every installed family with its faces | yes | families yes; only Regular/Bold/Italic faces (#69) |
 
@@ -148,6 +148,7 @@ imitate Microsoft's. No pixel comparison against PowerPoint screenshots has been
 
 | Date | Change | Summary |
 |---|---|---|
+| 2026-10-14 | minor | A picture dropped from the Finder onto the slide is centred on the pointer. A presentation still opens |
 | 2026-10-12 | minor | File tab (Backstage) observed in PowerPoint for Windows and matched (#76); the start screen is File › Home |
 | 2026-10-12 | minor | Off-slide objects drawn and editable around the slide in Normal view (#270) |
 | 2026-10-12 | minor | Selection Pane matched to PowerPoint (#133): drag and drop, arrows, groups, eye, Lock |
