@@ -9,6 +9,7 @@
 
 mod custgeom;
 mod maps;
+mod odp;
 mod opc;
 mod png;
 pub(crate) mod read;
@@ -42,6 +43,16 @@ pub fn sniff(bytes: &[u8]) -> bool {
         return false;
     }
     zip::ZipArchive::new(std::io::Cursor::new(bytes)).map(|z| z.index_for_name("[Content_Types].xml").is_some()).unwrap_or(false)
+}
+
+/// Does this look like an OpenDocument presentation (`.odp`)?
+pub fn sniff_odp(bytes: &[u8]) -> bool {
+    odp::sniff(bytes)
+}
+
+/// Read an OpenDocument presentation (`.odp`): slides, text, shapes, pictures and notes.
+pub fn import_odp(bytes: &[u8]) -> Result<Presentation, PptxError> {
+    odp::import(bytes)
 }
 
 /// Read a `.pptx` / `.potx` / `.ppsx` package.

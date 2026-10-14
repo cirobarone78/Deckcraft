@@ -99,10 +99,14 @@ Detail in [file-format-parity.md](file-format-parity.md).
 - **Estimate:** 20–35 h (import only, from the public [MS-PPT] spec). Owner decision whether it's
   worth it.
 
-### No OpenDocument `.odp`
-- **Evidence:** PowerPoint opens and saves `.odp`.
+### OpenDocument `.odp` is import-only
+- **Evidence:** PowerPoint opens and saves `.odp`. `crates/pptx/src/odp.rs` imports pages, text
+  frames (fonts, bold/italic/underline, colour, lists), rectangles, ellipses, preset custom shapes,
+  lines, pictures, tables (widths, fills, merges), groups (flattened), rotation and notes; master
+  pages become layouts with their solid background and decorative shapes. Charts, gradient and
+  bitmap fills, animations and transitions are dropped, and there is no `.odp` save.
 - **Impact:** LibreOffice users and public-sector exchange.
-- **Estimate:** 12–20 h (read and write the common subset).
+- **Estimate:** 6–12 h (gradients, charts and transitions on import, then writing the common subset).
 
 ### PDF export rasterizes slide artwork
 - **Evidence:** `crates/pdf` places each slide as an image under a selectable text layer, links and
@@ -256,6 +260,8 @@ Detail in [localization-parity.md](localization-parity.md).
 
 | Date | Change | Summary |
 |---|---|---|
+| 2026-10-13 | minor | `.odp` import reads tables, master pages (as layouts) and page backgrounds |
+| 2026-10-13 | minor | `.odp` import (first slice: shapes, text, pictures, notes); the gap is now masters, tables and save |
 | 2026-10-13 | minor | Shape, picture and table rendering checked against PowerPoint on ~150 synthetic edge-case slides; 3-D bevels, cameras and face lighting now render approximately (gap narrowed to extrusion, rigs and the 3-D pane) |
 | 2026-10-12 | minor | IME composition in slide text and notes, and CJK interface text with real glyphs (#101): the IME gap is now Korean on the web and table-cell underlines |
 | 2026-10-12 | minor | EMF/WMF text, pattern and hatch brushes drawn; legacy OLE and ActiveX previews shown; the SVG gap keeps only EMF clip regions |
