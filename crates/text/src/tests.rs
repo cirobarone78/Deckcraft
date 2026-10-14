@@ -941,9 +941,12 @@ fn symbol_font_characters_draw_in_the_sym_font() {
     // PowerPoint stores a Symbol-font character as U+F0xx with `<a:sym typeface="Symbol"/>`:
     // U+F0DE is the Symbol font's double arrow (⇒). It must come from that font, not from
     // whichever installed font happens to map U+F0DE (Wingdings draws an arrow at another angle).
+    // Skipped unless the installed Symbol face actually covers U+F0DE (some builds of the font
+    // map the private-use code elsewhere), which is exactly when the layout uses it.
     let symbol = "Symbol";
-    if !FontDb::global().has_family(symbol) {
-        eprintln!("skipped: no Symbol font installed");
+    let db = FontDb::global();
+    if !db.has_family(symbol) || !db.face(symbol, "Regular").covers('\u{F0DE}') {
+        eprintln!("skipped: no Symbol font installed that covers U+F0DE");
         return;
     }
     let (p, mut sh) = setup("x\u{F0DE}y", 600.0, 300.0);
