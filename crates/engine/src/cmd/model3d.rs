@@ -232,7 +232,7 @@ fn save_as_picture(s: &mut Session, p: &Value) -> Result<Value> {
     let file = format!("{name}.{ext}");
     #[cfg(not(target_arch = "wasm32"))]
     if let Some(path) = str_param(p, "path") {
-        std::fs::write(path, &bytes).map_err(|e| EngineError::Other(format!("{path}: {e}")))?;
+        crate::io::write_file(path, &bytes).map_err(EngineError::Other)?;
         return Ok(json!({"name": file, "path": path}));
     }
     Ok(json!({"name": file, "data": base64_encode(&bytes)}))
@@ -321,9 +321,11 @@ fn companion(files: &[(String, Vec<u8>)], dir: Option<&std::path::Path>, name: &
         let inside = |p: &Path| !p.as_os_str().is_empty() && p.components().all(|c| matches!(c, Component::Normal(_) | Component::CurDir));
         let rel = Path::new(&norm);
         let tries = [inside(rel).then(|| dir.join(rel)), inside(Path::new(&base)).then(|| dir.join(&base))];
+        // Through `crate::io`, so an automation read root confines them like any other read.
         for p in tries.into_iter().flatten() {
-            if std::fs::metadata(&p).is_ok_and(|m| m.is_file() && m.len() <= 256 << 20)
-                && let Ok(b) = std::fs::read(&p)
+            let p = p.to_string_lossy();
+            if crate::io::file_len(&p).is_some_and(|n| n <= 256 << 20)
+                && let Ok(b) = crate::io::read_file(&p)
             {
                 return Some(b);
             }
@@ -378,5 +380,5 @@ fn insert(s: &mut Session, p: &Value) -> Result<Value> {
 }
 
 #[cfg(test)]
-#[path = "model3d_tests.rs"]
+#[path = "tests_model3d.rs"]
 mod tests;

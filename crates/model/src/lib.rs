@@ -8,6 +8,7 @@
 #![forbid(unsafe_code)]
 
 pub mod anim;
+pub mod bidi;
 pub mod chart;
 pub mod defaults;
 pub mod edit;
@@ -28,6 +29,7 @@ pub use deckcraft_geom::{Rect, Size, Xfrm};
 use serde::{Deserialize, Serialize};
 
 pub use anim::{AnimClass, AnimStart, Animation, Transition};
+pub use bidi::{first_strong_is_rtl, is_rtl_script};
 pub use chart::Chart;
 pub use model3d::Model3d;
 pub use style::{ColorBase, ColorRef, Effects, Fill, Line, ShapeStyle};
@@ -313,6 +315,10 @@ pub enum ShapeKind {
         xml: String,
         preview: Option<MediaId>,
         label: String,
+        /// The parts its XML points to (SmartArt data, an OLE embedding…), so a save writes them
+        /// back: (relationship id used in `xml`, relationship type, the part as a media item).
+        #[serde(default, skip_serializing_if = "Vec::is_empty")]
+        parts: Vec<(String, String, MediaId)>,
     },
 }
 
