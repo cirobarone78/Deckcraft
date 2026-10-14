@@ -1,6 +1,6 @@
 //! Design tokens (light, PowerPoint-like; and dark) and fonts for the UI.
 
-use craft_ui::theme::SuiteDarkPalette;
+use craft_ui::theme::SuitePalette;
 use egui::{Color32, CornerRadius, FontData, FontDefinitions, FontFamily, Stroke, Visuals};
 use serde::{Deserialize, Serialize};
 
@@ -78,7 +78,7 @@ impl Tokens {
         }
     }
     pub fn dark() -> Self {
-        let suite = SuiteDarkPalette::ARTCRAFT;
+        let suite = SuitePalette::ARTCRAFT_DARK;
         // ArtCraft native dark UI roles. Slide content, handles and guides stay semantic.
         Tokens {
             dark: true,
@@ -142,7 +142,7 @@ pub fn apply(ctx: &egui::Context, t: &Tokens) {
     v.widgets.inactive.bg_stroke = Stroke::NONE;
     v.widgets.hovered.weak_bg_fill = t.hover;
     v.widgets.hovered.bg_fill = t.hover;
-    v.widgets.hovered.bg_stroke = if t.dark { Stroke::new(1.0, SuiteDarkPalette::ARTCRAFT.focus) } else { Stroke::NONE };
+    v.widgets.hovered.bg_stroke = if t.dark { Stroke::new(1.0, SuitePalette::ARTCRAFT_DARK.focus) } else { Stroke::NONE };
     v.widgets.active.weak_bg_fill = t.pressed;
     v.widgets.active.bg_fill = t.pressed;
     v.widgets.open.weak_bg_fill = t.pressed;
@@ -243,7 +243,7 @@ pub fn to_color32(c: deckcraft_color::Rgba) -> Color32 {
 mod tests {
     #[test]
     fn shared_dark_adapter_maps_ui_roles() {
-        let suite = super::SuiteDarkPalette::ARTCRAFT;
+        let suite = super::SuitePalette::ARTCRAFT_DARK;
         let dark = super::Tokens::dark();
         for (actual, expected) in [
             (dark.chrome, suite.chrome),
