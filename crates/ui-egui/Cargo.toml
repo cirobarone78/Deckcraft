@@ -9,6 +9,7 @@ description = "DeckCraft egui frontend (PowerPoint-style UI); swappable — noth
 workspace = true
 
 [dependencies]
+craft-ui = { git = "https://github.com/storytold/craft-libs", rev = "8134693a69e0fca8ec7913ad5a95dedc05daad74" }
 deckcraft-geom = { workspace = true }
 deckcraft-color = { workspace = true }
 deckcraft-model = { workspace = true }

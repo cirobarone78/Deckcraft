@@ -1357,6 +1357,15 @@ mod tests {
     #[test]
     fn off_slide_objects_show_on_the_pasteboard_and_can_be_selected_and_moved() {
         let mut harness = canvas_harness();
+        if let Some(path) = std::env::var_os("DECKCRAFT_THEME_SCREENSHOT") {
+            harness.state_mut().ui.brightness = crate::theme::Brightness::Dark;
+            harness.state_mut().restyle = true;
+            harness.run_steps(4);
+            harness.render().unwrap().save(path).unwrap();
+            harness.state_mut().ui.brightness = crate::theme::Brightness::Light;
+            harness.state_mut().restyle = true;
+            harness.run_steps(2);
+        }
         let off =
             harness.state_mut().session.execute("shape.insert", &json!({"preset": "rect", "rect": [1000.0, 100.0, 120.0, 80.0]})).unwrap()["id"]
                 .as_u64()
