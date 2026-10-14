@@ -17,17 +17,27 @@ mod control_server;
 #[cfg(any(target_os = "windows", test))]
 mod graphics;
 mod logging;
+#[cfg(any(target_os = "macos", test))]
+mod native_menu;
 
 use deckcraft_engine::Session;
 use deckcraft_ui_egui::{Services, SlideApp};
 
-struct App(SlideApp);
+/// The app and, on macOS, its menu bar (File, Edit, View…), built on the first frame.
+struct App(SlideApp, #[cfg(target_os = "macos")] Option<native_menu::NativeMenu>);
 
 impl eframe::App for App {
     fn logic(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
         self.0.logic(ctx);
+        #[cfg(target_os = "macos")]
+        native_menu::NativeMenu::frame(&mut self.1, &mut self.0, ctx);
     }
     fn raw_input_hook(&mut self, _ctx: &egui::Context, raw: &mut egui::RawInput) {
+        // Cut / Copy / Paste / Select All chosen in the menu bar arrive as the keyboard's would.
+        #[cfg(target_os = "macos")]
+        if let Some(menu) = self.1.as_mut() {
+            raw.events.append(&mut menu.input);
+        }
         self.0.raw_input_hook(raw);
     }
     fn ui(&mut self, ui: &mut egui::Ui, _frame: &mut eframe::Frame) {
@@ -224,7 +234,11 @@ fn main() -> eframe::Result {
             if show {
                 app.start_show(0, false);
             }
-            Ok(Box::new(App(app)))
+            Ok(Box::new(App(
+                app,
+                #[cfg(target_os = "macos")]
+                None,
+            )))
         }),
     )
 }
