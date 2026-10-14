@@ -17,7 +17,7 @@
 use std::cell::{Cell, RefCell};
 use std::rc::Rc;
 
-use deckcraft_ui_egui::{Inbox, Services, SlideApp};
+use deckcraft_ui_egui::{Services, SlideApp};
 use wasm_bindgen::JsCast as _;
 use wasm_bindgen::JsValue;
 use wasm_bindgen::closure::Closure;
@@ -38,6 +38,10 @@ pub struct Bridge {
     saved: Rc<RefCell<Vec<String>>>,
     /// The unsaved-changes state last reported to the parent.
     reported: Rc<Cell<Option<bool>>>,
+    /// Files the parent sent, waiting for the next frame: (name, bytes).
+    opened: Rc<RefCell<Vec<(String, Vec<u8>)>>>,
+    /// The app's context, for a frame after a file opens.
+    ctx: Rc<RefCell<Option<egui::Context>>>,
 }
 
 impl Bridge {
@@ -49,13 +53,13 @@ impl Bridge {
             return None;
         }
         let origin = window.location().origin().ok()?;
-        Some(Self { window, parent, origin, saved: Rc::default(), reported: Rc::default() })
+        Some(Self { window, parent, origin, saved: Rc::default(), reported: Rc::default(), opened: Rc::default(), ctx: Rc::default() })
     }
 
     /// Send saved and exported files to the parent instead of downloading them, and hear files
     /// from it.
-    pub fn connect(&self, services: &mut Services, inbox: Inbox, ctx: egui::Context) {
-        self.listen(inbox, ctx);
+    pub fn connect(&self, services: &mut Services, ctx: egui::Context) {
+        self.listen(ctx);
         let bridge = self.clone();
         services.download = Some(Box::new(move |name: &str, bytes: &[u8]| {
             if let Err(e) = bridge.post_save(name, bytes) {
@@ -82,9 +86,20 @@ impl Bridge {
         self.send(&[("type", "deckcraft:failed".into()), ("error", error.into())]);
     }
 
-    /// After each frame: a presentation handed to the parent this frame counts as saved, and the
-    /// parent hears when unsaved changes appear or go away.
+    /// After each frame: files the parent sent open (or are inserted) like dropped files, a
+    /// presentation handed to the parent this frame counts as saved, and the parent hears when
+    /// unsaved changes appear or go away.
     pub fn sync(&self, app: &mut SlideApp) {
+        let opened = std::mem::take(&mut *self.opened.borrow_mut());
+        if !opened.is_empty() {
+            for (name, bytes) in opened {
+                app.open_or_insert_bytes(&name, &bytes);
+            }
+            // Show it: this runs after the frame was drawn.
+            if let Some(ctx) = &*self.ctx.borrow() {
+                ctx.request_repaint();
+            }
+        }
         let saved = std::mem::take(&mut *self.saved.borrow_mut());
         if saved.iter().any(|name| is_presentation(name))
             && let Some(doc) = app.session.active_mut()
@@ -110,9 +125,11 @@ impl Bridge {
         Ok(())
     }
 
-    fn listen(&self, inbox: Inbox, ctx: egui::Context) {
+    fn listen(&self, ctx: egui::Context) {
+        *self.ctx.borrow_mut() = Some(ctx.clone());
         let parent = self.parent.clone();
         let origin = self.origin.clone();
+        let opened = self.opened.clone();
         let on_message = Closure::<dyn FnMut(web_sys::MessageEvent)>::new(move |event: web_sys::MessageEvent| {
             if event.origin() != origin || !event.source().is_some_and(|s| js_sys::Object::is(&s, &parent)) {
                 return;
@@ -123,7 +140,7 @@ impl Bridge {
             }
             let name = string(&data, "name").filter(|n| !n.trim().is_empty()).unwrap_or_else(|| "Presentation.pptx".to_string());
             let Some(bytes) = bytes(&data) else { return };
-            inbox.lock().unwrap_or_else(|e| e.into_inner()).push((name, bytes));
+            opened.borrow_mut().push((name, bytes));
             ctx.request_repaint();
         });
         if self.window.add_event_listener_with_callback("message", on_message.as_ref().unchecked_ref()).is_ok() {

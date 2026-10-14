@@ -43,7 +43,7 @@ pub fn start() {
                     let inbox: Inbox = Inbox::default();
                     let mut services = services(inbox.clone(), cc.egui_ctx.clone());
                     if let Some(bridge) = &app_bridge {
-                        bridge.connect(&mut services, inbox.clone(), cc.egui_ctx.clone());
+                        bridge.connect(&mut services, cc.egui_ctx.clone());
                     }
                     let mut app = SlideApp::new(Session::new(), services);
                     let q = query();
