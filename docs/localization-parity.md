@@ -1,11 +1,18 @@
 # Localization parity with PowerPoint
 
-> **Last reviewed:** 2026-10-10 · **Last updated:** 2026-10-12 · **Change:** minor (IME composition and CJK interface text, #101; previous: major, created; string count measured from source, PowerPoint's localizations read from its bundle) · **Target:** Microsoft PowerPoint for Mac 16.113 (Microsoft 365)
+> **Last reviewed:** 2026-10-13 · **Last updated:** 2026-10-14 · **Change:** minor (Japanese dialog, pane and Home control labels; previous: shell catalog, #543) · **Target:** Microsoft PowerPoint for Mac 16.113 (Microsoft 365)
 
-DeckCraft's interface is English only today: strings are literals in the UI and engine code, with
-no catalog and no language switch. Requests: #15 (follow the system language), #30 and PR #34
-(Ukrainian, open). Dimension score: **~8% ready** (estimated: English complete, slide-text script
-support partly there), **55–90 h** to parity plus native-speaker review.
+DeckCraft's interface is English, with one catalog so far: the application shell (ribbon tabs,
+File menu, title bar, status bar and Preferences) can follow the system locale or an explicit
+choice (`system`, `en`, `ja`). On top of the shell in PR #543, Japanese also covers the fixed
+labels and controls in dialogs, task panes and the Home ribbon, including Selection actions and
+slide-size preset labels. The catalog has 402 entries (335 added after the 67-entry shell).
+Other ribbon tabs, gallery metadata, effect/color/gradient popups and engine diagnostics still
+have English labels. Some dialog details, such as proofing-language names and contributor tables,
+also remain English. Command ids and presentation content retain their original values. Requests: #15 (follow the system language; the shell does, the rest of
+the UI does not yet), #30 and PR #34 (Ukrainian, open). Dimension score: **~8% ready** (estimated:
+English complete, a Japanese shell, slide-text script support partly there), **55–90 h** to parity
+plus native-speaker review.
 
 ## How the numbers are measured
 
@@ -13,6 +20,10 @@ support partly there), **55–90 h** to parity plus native-speaker review.
   capitalized literals in `crates/ui-egui/src`, `crates/engine/src/cmd` and `crates/model/src`,
   including the 226 command labels). A catalog will refine the count; until then percentages are
   against this figure.
+- **Japanese catalog:** 402 sorted ids, with nonempty English/Japanese text and matching
+  placeholder names/order. Entries include context-specific labels and complete messages; this
+  count is not a percentage of the older literal estimate. The dimension score and hours have
+  not been re-measured, and independent native-speaker review is still pending.
 - **Script support** is about slide text (what users type and import), separately from the UI:
   bidi and shaping live in `crates/text` (UAX #9, HarfRust, UAX #14 line breaking).
 - **PowerPoint's languages:** `Contents/Resources/*.lproj` in PowerPoint 16.113.4: ar, cs, da, de,
@@ -32,14 +43,17 @@ support partly there), **55–90 h** to parity plus native-speaker review.
 | French | fr | 0 (0%) | no | full (Latin) | no | none | yes (fr, fr-CA) | 3–5 |
 | Portuguese | pt | 0 (0%) | no | full (Latin) | no | none | yes (pt-BR, pt-PT) | 3–5 |
 | Indonesian | id | 0 (0%) | no | full (Latin) | no | none | yes | 3–5 |
-| Japanese | ja | 0 (0%) | no | renders with system or craft-fonts Japanese faces; IME composition (#101); vertical text is rotated, not laid out vertically | no | none | yes | 4–7 |
+| Japanese | ja | 402 catalog entries: shell, Home controls, dialogs and task panes (partial UI) | fixed dialog/pane controls / Home tooltips / no help | renders with system or craft-fonts Japanese faces; IME composition (#101); vertical text is rotated, not laid out vertically | no | partial | yes | 4–7 |
 | German | de | 0 (0%) | no | full (Latin) | no | none | yes | 3–5 |
 | Korean | ko | 0 (0%) | no | system Hangul fonts, in the interface too; IME composition (#101) | no | none | yes | 4–7 |
 | Vietnamese | vi | 0 (0%) | no | stacked diacritics through HarfRust | no | none | **no** (Windows only) | 3–5 |
 
-Other languages shipped: **0** (Ukrainian is in review as PR #34). PowerPoint for Mac ships 16 more
-than the twelve above: Czech, Danish, Greek, Finnish, Hebrew, Hungarian, Italian, Dutch, Norwegian,
-Polish, Russian, Slovak, Swedish, Thai, Turkish and Traditional Chinese.
+Other interface languages shipped: **none beyond English and Japanese** (Ukrainian is in review as PR #34; Spanish,
+French and German are in review as PR #110; Simplified Chinese is not in this branch). A `ja` or
+`ja-JP` system locale selects Japanese. The web build has no system tag, so System stays English
+there until the user chooses a language. PowerPoint for Mac ships 16 more than the twelve above:
+Czech, Danish, Greek, Finnish, Hebrew, Hungarian, Italian, Dutch, Norwegian, Polish, Russian,
+Slovak, Swedish, Thai, Turkish and Traditional Chinese.
 
 Per-language hours assume the infrastructure exists: **8–14 h** once for a string catalog (copy a
 sibling app's approach, e.g. EffectCraft's menu and panel catalogs), a language setting that follows
@@ -57,5 +71,7 @@ common misspellings (`crates/engine/src/cmd/review.rs`); see [gaps.md](gaps.md#p
 
 | Date | Change | Summary |
 |---|---|---|
+| 2026-10-14 | minor | Japanese follow-up to #543: 335 additional catalog entries for dialogs, task panes, Selection actions, slide-size labels and Home controls; no coverage percentage or native-review claim |
+| 2026-10-13 | minor | Shell catalog: ribbon tabs, File menu, title bar, status bar and Preferences follow the system locale or `ja` |
 | 2026-10-12 | minor | IME composition for Chinese, Japanese and Korean, and interface text in any installed script (#101) |
 | 2026-10-10 | major | Created: twelve-language table, ~1,050 UI strings measured, PowerPoint for Mac's 26 languages from its bundle |
