@@ -373,10 +373,14 @@ fn pointer(app: &mut SlideApp, ui: &Ui, resp: &egui::Response, xf: Xf) {
     let p = xf.to_slide(pos);
     let ev = |kind| PointerEvent { kind, x: p.x, y: p.y, mods: m, tol };
     let primary = ui.input(|i| i.pointer.primary_pressed());
+    // A drag that started in the second window belongs to that window.
+    let foreign = app.doc_window.as_ref().is_some_and(|w| w.owns_drag());
     if resp.hovered() && !app.session.tool.dragging() {
         let _ = app.session.pointer(ev(PointerKind::Move));
     }
-    let r = if resp.triple_clicked() {
+    let r = if foreign {
+        Ok(serde_json::Value::Null)
+    } else if resp.triple_clicked() {
         app.session.pointer(ev(PointerKind::TripleClick))
     } else if resp.double_clicked() {
         app.session.pointer(ev(PointerKind::DoubleClick))
