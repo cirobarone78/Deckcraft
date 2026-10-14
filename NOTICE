@@ -27,3 +27,11 @@ Code dependencies
   https://github.com/pdeljanov/Symphonia.
 - The H.264, HEVC, VP9, AV1, Opus, MP4, Matroska and Ogg crates under crates/ are ported from
   FilmCraft (same owner, MIT OR Apache-2.0).
+- The shared Craft interface crates craft-ui and craft-cloud (the share dialog, the account
+  badge, the presence row and the cloud Open and Save pages) are built from source, pinned by git
+  revision, from https://github.com/wdunn001/craft-libs under MIT OR Apache-2.0.
+- The CollabCraft client crates craft-cloud-client and collabcraft-share (how the desktop app
+  reaches the cloud service) are built from source, pinned by git revision, from
+  https://github.com/wdunn001/collabcraft. That repository ships LICENSE-MIT and LICENSE-APACHE
+  while its Cargo metadata declares AGPL-3.0-or-later. The contradiction is upstream's to
+  settle.

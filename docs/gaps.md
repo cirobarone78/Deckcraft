@@ -1,6 +1,6 @@
 # Where DeckCraft falls short of PowerPoint
 
-> **Last reviewed:** 2026-10-10 · **Last updated:** 2026-10-13 · **Change:** minor (3-D bevel, camera and face lighting rendered; previous: minor, IME composition and CJK interface text landed, #101; previous: minor, core-workflow alpha gate added; stage stays alpha; before that: major, first itemized gap list; full re-measure against PowerPoint for Mac 16.113.4 and the open GitHub issues) · **Target:** Microsoft PowerPoint for Mac 16.113 (Microsoft 365)
+> **Last reviewed:** 2026-10-10 · **Last updated:** 2026-10-14 · **Change:** minor (cloud Open, Save As, sharing and the account badge landed; previous: 3-D bevel, camera and face lighting rendered; previous: minor, IME composition and CJK interface text landed, #101; previous: minor, core-workflow alpha gate added; stage stays alpha; before that: major, first itemized gap list; full re-measure against PowerPoint for Mac 16.113.4 and the open GitHub issues) · **Target:** Microsoft PowerPoint for Mac 16.113 (Microsoft 365)
 
 Every known shortfall, one entry each, ranked by how much it stops someone who presents with
 PowerPoint from switching. This is the work list: pick from the top. Numbers are summarized in
@@ -198,8 +198,16 @@ Detail in [ui-parity.md](ui-parity.md).
   blocker.**
 - **Format Shape pane thinner than PowerPoint's** (Fill/Line/Effects/Size/Text Box pages, picture
   and texture options, 3-D). 6–10 h. **Beta blocker.**
-- **File tab depth** (#76 landed the Backstage): no online templates, cloud places, printer
-  choice, video/GIF/CD exports or document protection. 4–8 h for the parts that need no cloud.
+- **File tab depth** (#76 landed the Backstage, cloud Open and Save As landed): no online
+  templates, printer choice, video/GIF/CD exports or document protection. 4–8 h.
+- **Nobody feeds the presence row.** The account badge draws who else is in the presentation when
+  something sets the roster. DeckCraft has no shared editing session. The row is therefore always
+  empty outside a test. Co-editing a deck through the CollabCraft relay is the work behind it.
+  20–40 h.
+- **A cloud save always writes DeckCraft's own format.** The shared pages encode a presentation
+  once and never pass the destination name to the encoder. A `.pptx` opened from cloud storage is
+  therefore written back as `.deckcraft` bytes under its own name. The Save page's name field says so under
+  it. That is the stopgap for now. The fix belongs in `craft-ui`. 2–4 h.
 - **Window chrome** (#71 macOS controls misaligned, #26 GNOME title bar, #41 system light/dark).
   2–4 h.
 - **Icon consistency across Craft apps** (#73, #56). 2–4 h; coordinate in craftrules.
@@ -256,6 +264,7 @@ Detail in [localization-parity.md](localization-parity.md).
 
 | Date | Change | Summary |
 |---|---|---|
+| 2026-10-14 | minor | Cloud Open, Save As, sharing, the account badge and Work together landed. The File tab gap loses cloud places. Three cloud gaps are added (presence roster, the one save format, no co-editing) |
 | 2026-10-13 | minor | Shape, picture and table rendering checked against PowerPoint on ~150 synthetic edge-case slides; 3-D bevels, cameras and face lighting now render approximately (gap narrowed to extrusion, rigs and the 3-D pane) |
 | 2026-10-12 | minor | IME composition in slide text and notes, and CJK interface text with real glyphs (#101): the IME gap is now Korean on the web and table-cell underlines |
 | 2026-10-12 | minor | EMF/WMF text, pattern and hatch brushes drawn; legacy OLE and ActiveX previews shown; the SVG gap keeps only EMF clip regions |
