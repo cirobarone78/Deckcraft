@@ -310,6 +310,9 @@ pub struct UiState {
     pub comment_focus: Option<(usize, usize)>,
     /// Quick Access Toolbar buttons, left to right.
     pub qat: Vec<qat::QatItem>,
+    /// Canvas shell: the strip of the current slide's states under the slide, shown even when it
+    /// has none yet (it always shows while it has some).
+    pub states_strip: bool,
 }
 
 impl Default for UiState {
@@ -340,6 +343,7 @@ impl Default for UiState {
             smartart_row: 0,
             smartart_focus: None,
             smartart_drafts: (0, vec![]),
+            states_strip: false,
             grayscale: false,
             comment_focus: None,
             qat: qat::defaults(),
@@ -1796,9 +1800,20 @@ impl SlideApp {
                     }
                 }
                 egui::Event::Ime(ime) => self.ime_event(&ime),
-                egui::Event::Copy => self.publish_clipboard(ctx, false, slides_keys),
+                // The slide list copies and cuts whole slides, a slide with its states.
+                egui::Event::Copy => {
+                    if slides_keys {
+                        thumbs::select_runs(self);
+                    }
+                    self.publish_clipboard(ctx, false, slides_keys);
+                }
                 egui::Event::Cut if nothing && !slides_keys => {}
-                egui::Event::Cut => self.publish_clipboard(ctx, true, slides_keys),
+                egui::Event::Cut => {
+                    if slides_keys {
+                        thumbs::select_runs(self);
+                    }
+                    self.publish_clipboard(ctx, true, slides_keys);
+                }
                 // ⇧⌘V (and ⌥⇧⌘V, the Mac's Paste and Match Style) pastes the text alone.
                 egui::Event::Paste(text) => {
                     if ctx.input(|i| i.modifiers.shift) {
@@ -1992,6 +2007,7 @@ impl SlideApp {
         self.sync_backstage();
         self.sync_shell_prefs();
         ribbon::title_bar(self, ui);
+        ribbon::doc_strip(self, ui);
         if self.ui.shell == Shell::Canvas && self.backstage.is_none() {
             canvas_shell::show(self, ui);
             self.finish_frame(&ctx, t0);

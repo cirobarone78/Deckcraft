@@ -250,11 +250,11 @@ fn styled_text_shows_its_style_and_unstyled_text_its_type_controls() {
     text_box(&mut h);
     assert!(h.query_by_label("Text style: Plain text").is_some(), "follows the presentation's default text style");
     assert!(h.query_by_label("Text styles").is_none(), "the chip itself opens the styles");
-    assert!(h.query_by_label("Weight").is_none(), "type controls are folded into the style");
+    assert!(h.query_by_label("Weight: Regular").is_none(), "type controls are folded into the style");
     // Its own size: no longer the style.
     h.state_mut().run("format.size", json!({"size": 31})).unwrap();
     h.run_steps(3);
-    assert!(h.query_by_label("Weight").is_some());
+    assert!(h.query_by_label("Weight: Regular").is_some());
     assert!(h.query_by_label("Text styles").is_some(), "a button applies a style");
 }
 
@@ -264,7 +264,7 @@ fn detaching_keeps_the_look_and_shows_the_type_controls() {
     let id = text_box(&mut h);
     let before = h.state_mut().session.execute("format.state", &json!({})).unwrap()["size"].clone();
     click(&mut h, "Detach style");
-    assert!(h.query_by_label("Weight").is_some(), "every type control");
+    assert!(h.query_by_label("Weight: Regular").is_some(), "every type control");
     assert!(h.query_by_label("Text style: Plain text").is_none());
     let sh = shape(h.state(), id);
     assert!(sh.text.unwrap().paragraphs[0].runs[0].props.size.is_some(), "the style's values are the text's own");
@@ -413,4 +413,42 @@ fn updating_a_style_from_the_selection_makes_the_text_follow_it() {
     assert!(shape(h.state(), id).text.unwrap().paragraphs[0].runs[0].props.size.is_none(), "the text follows the style");
     assert!(h.query_by_label("Text style: Plain text").is_some());
     assert_eq!(h.state().session.active().unwrap().history.undo.len(), undo + 1, "one undo step");
+}
+
+#[test]
+fn a_slides_placeholder_is_named_by_its_kind_without_a_tag_menu() {
+    let mut h = harness();
+    let title = h.state().session.active().unwrap().current_slide().unwrap().shapes[0].id.0;
+    h.state_mut().run("selection.select", json!({"ids": [title]})).unwrap();
+    h.run_steps(3);
+    assert!(h.query_by_label("Title placeholder").is_none());
+    assert!(h.query_by_label("Placeholder: what this box is on the slide's layout").is_none(), "tags are set in Slide Master view");
+}
+
+#[test]
+fn a_box_on_a_layout_is_tagged_from_the_same_menu() {
+    let mut h = harness();
+    h.state_mut().run("view.slideMaster", json!({"master": 0, "layout": 1})).unwrap();
+    h.run_steps(2);
+    let id = text_box(&mut h);
+    click(&mut h, "Placeholder: what this box is on the slide's layout");
+    assert!(h.query_by_label("Make this a placeholder").is_some());
+    assert!(h.query_by_label("Picture").is_some(), "a layout takes kinds its slides don't have yet");
+    click(&mut h, "Footer");
+    assert_eq!(shape(h.state(), id).ph_type(), Some(deckcraft_model::PhType::Footer));
+    h.get_by_label("Footer placeholder");
+}
+
+#[test]
+fn a_moved_placeholder_resets_from_the_header() {
+    let mut h = harness();
+    let title = h.state().session.active().unwrap().current_slide().unwrap().shapes[0].id.0;
+    h.state_mut().run("selection.select", json!({"ids": [title]})).unwrap();
+    h.run_steps(3);
+    assert!(h.query_by_label("Reset to layout").is_none(), "nothing to reset yet");
+    h.state_mut().run("shape.move", json!({"x": 40})).unwrap();
+    h.run_steps(3);
+    assert!(h.query_by_label("Apply to all").is_none(), "nothing that changes other slides");
+    click(&mut h, "Reset to layout");
+    assert!(shape(h.state(), title).xfrm.is_none(), "it follows its layout again");
 }

@@ -54,6 +54,8 @@ pub struct Row {
     pub dimmed: bool,
     pub locked: bool,
     pub parent: Option<u32>,
+    /// The placeholder it is on the slide's layout ("Title", "Body text"…), shown after the name.
+    pub tag: Option<String>,
 }
 
 /// The rows as listed: front-most first, children under their group unless it's folded.
@@ -72,6 +74,7 @@ pub fn rows(shapes: &[Shape], collapsed: &HashSet<u32>) -> Vec<Row> {
                 dimmed: dim,
                 locked: sh.locked,
                 parent,
+                tag: sh.ph_type().map(|k| crate::props::kind_name(k.xml(), false)),
             });
             if sh.is_group() && !collapsed.contains(&sh.id.0) {
                 rec(sh.children(), depth + 1, Some(sh.id.0), dim || sh.hidden, collapsed, out);
@@ -225,7 +228,16 @@ pub fn list_marked(app: &mut SlideApp, ui: &mut Ui, marked: &HashSet<u32>) {
             }
         } else {
             let color = if row.dimmed { t.text_faint } else { t.text };
-            painter.text(pos2(name_x, r.center().y), Align2::LEFT_CENTER, &row.name, theme::font(12.5), color);
+            let name = painter.text(pos2(name_x, r.center().y), Align2::LEFT_CENTER, &row.name, theme::font(12.5), color);
+            // A placeholder's kind as a small pill after its name.
+            if let Some(tag) = &row.tag {
+                let galley = painter.layout_no_wrap(tag.clone(), theme::font(10.5), t.text_dim);
+                let pill = Rect::from_min_size(pos2(name.max.x + 6.0, r.center().y - 8.0), vec2(galley.size().x + 10.0, 16.0));
+                if pill.max.x < name_rect.max.x {
+                    painter.rect_filled(pill, CornerRadius::same(8), t.hover);
+                    painter.galley(pos2(pill.min.x + 5.0, pill.center().y - galley.size().y / 2.0), galley, t.text_dim);
+                }
+            }
             if marked.contains(&row.id) {
                 painter.circle_filled(pos2(name_x - 7.0, r.center().y), 2.5, t.accent);
             }

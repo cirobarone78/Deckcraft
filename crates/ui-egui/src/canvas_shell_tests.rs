@@ -215,6 +215,27 @@ fn the_inspector_shows_a_title_size_in_pixels() {
     // slide's title is 60 pt, 120 px.
     h.get_by_label("Detach style").click();
     h.run_steps(3);
-    assert!(h.query_all_by_value("120 px").next().is_some(), "the size field reads 120 px");
+    assert!(h.query_all_by_value("120").next().is_some(), "the size field reads 120 (px, the unit the panel uses)");
     assert!(h.query_by_label("45%").is_some(), "the zoom reads 45%");
+}
+
+#[test]
+fn the_sidebar_opens_and_closes_the_slide_masters() {
+    let mut h = harness(Shell::Canvas);
+    h.get_by_label("Edit slide masters and layouts").click();
+    h.run_steps(3);
+    let target = |h: &Harness<'static, SlideApp>| h.state().session.active().unwrap().selection.target;
+    assert!(matches!(target(&h), deckcraft_engine::Target::Layout { .. }), "opens on the slide's layout");
+    let layouts = |h: &Harness<'static, SlideApp>| h.state().session.active().unwrap().doc.masters[0].layouts.len();
+    let n = layouts(&h);
+    h.get_by_label("New layout").click();
+    h.run_steps(3);
+    assert_eq!(layouts(&h), n + 1);
+    let name = format!("{} Slide Master", h.state().session.active().unwrap().doc.masters[0].name);
+    h.get_by_label(&name).click();
+    h.run_steps(3);
+    assert_eq!(target(&h), deckcraft_engine::Target::Master { master: 0 }, "the master itself can be picked");
+    h.get_by_label("Close masters").click();
+    h.run_steps(3);
+    assert_eq!(target(&h), deckcraft_engine::Target::Slides);
 }

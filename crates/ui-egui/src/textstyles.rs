@@ -300,7 +300,8 @@ pub enum Edit {
     Size(f64),
     Bold(bool),
     Italic(bool),
-    Color(deckcraft_model::ColorRef),
+    /// A colour as commands take it (`#RRGGBB`, or a theme colour object).
+    Color(Value),
     LineSpacing(f64),
 }
 
@@ -355,7 +356,7 @@ pub fn edit_commands(app: &SlideApp, style: &TextStyle, edit: &Edit) -> Vec<(&'s
         Edit::Size(s) => v.push(("master.textStyle", with("size", json!(s), false))),
         Edit::Bold(b) => v.push(("master.textStyle", with("bold", json!(b), true))),
         Edit::Italic(b) => v.push(("master.textStyle", with("italic", json!(b), true))),
-        Edit::Color(c) => v.push(("master.textStyle", with("color", crate::ribbon::cref_param(c), true))),
+        Edit::Color(c) => v.push(("master.textStyle", with("color", c.clone(), true))),
         Edit::LineSpacing(l) => v.push(("master.textStyle", with("lineSpacing", json!({"lines": l}), false))),
     }
     // Copies: select each and format it the same way.
@@ -366,7 +367,7 @@ pub fn edit_commands(app: &SlideApp, style: &TextStyle, edit: &Edit) -> Vec<(&'s
         Edit::Size(s) => ("format.size", json!({"size": s})),
         Edit::Bold(b) => ("format.bold", json!({"on": b})),
         Edit::Italic(b) => ("format.italic", json!({"on": b})),
-        Edit::Color(c) => ("format.color", json!({"color": crate::ribbon::cref_param(c)})),
+        Edit::Color(c) => ("format.color", json!({"color": c})),
         Edit::LineSpacing(l) => ("format.lineSpacing", json!({"lines": l})),
     };
     // Detached text keeps its values when the style changes.

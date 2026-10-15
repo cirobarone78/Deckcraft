@@ -173,19 +173,13 @@ pub fn animate(app: &mut SlideApp, ui: &mut Ui) {
     let run = run_of(&doc, cur);
     ui.label(egui::RichText::new("States").font(theme::bold(13.0)).color(t.text));
     ui.add_space(2.0);
-    if run.len() < 2 {
-        ui.label(
-            egui::RichText::new(
-                "Add a state, then change the copy: move, resize, recolour or delete layers. Morph animates from one state to the next.",
-            )
-            .font(theme::font(12.0))
-            .color(t.text_dim),
-        );
-        ui.add_space(6.0);
+    let hint = if run.len() < 2 {
+        "Add a state, then change the copy: move, resize, recolour or delete layers. Morph animates from one state to the next."
     } else {
-        strip(app, ui, &doc, run.clone(), cur);
-        ui.add_space(6.0);
-    }
+        "The states are in the strip under the slide: click one to edit it, + to add one after it."
+    };
+    ui.label(egui::RichText::new(hint).font(theme::font(12.0)).color(t.text_dim));
+    ui.add_space(6.0);
     ui.horizontal(|ui| {
         if ui
             .add(egui::Button::new("+ Add state").stroke(Stroke::new(1.0, t.border)))
@@ -202,6 +196,7 @@ pub fn animate(app: &mut SlideApp, ui: &mut Ui) {
         transition(app, ui, &doc, cur);
         layer_changes(app, ui, &doc, cur);
     }
+    build_section(app, ui);
     section(ui, "Effects on this slide");
     let id = ui.id().with("states-effects");
     let mut open: bool = ui.data_mut(|d| d.get_temp(id).unwrap_or(false));
@@ -231,38 +226,270 @@ pub fn add_state(app: &mut SlideApp) {
     app.run_as_one("Add State", cmds);
 }
 
-/// The states as small numbered thumbnails; click one to go to it.
-fn strip(app: &mut SlideApp, ui: &mut Ui, doc: &std::sync::Arc<Presentation>, run: Range<usize>, cur: usize) {
+// ----- Working with states -----------------------------------------------------------------
+
+/// Add a state after slide `i`: a copy of it that enters with Morph.
+pub fn add_state_after(app: &mut SlideApp, i: usize) {
+    let _ = app.run("slide.go", json!({"index": i}));
+    add_state(app);
+}
+
+/// `transition.set` parameters giving slide `index` the transition `tr` a run started with (no
+/// transition when it had Morph or none).
+fn head_transition(tr: Option<&deckcraft_model::Transition>, index: usize) -> serde_json::Value {
+    match tr.filter(|t| t.kind != "morph" && t.kind != "none") {
+        Some(t) => json!({"kind": t.kind, "option": t.option, "duration": t.duration_ms, "index": index}),
+        None => json!({"kind": "none", "index": index}),
+    }
+}
+
+fn morph_ms(doc: &Presentation, i: usize) -> u32 {
+    doc.slides.get(i).and_then(|s| s.transition.as_ref()).filter(|t| t.kind == "morph").map(|t| t.duration_ms).unwrap_or(1000)
+}
+
+/// Delete state `i`. When it's the first, the next state takes its place and its transition, so
+/// it doesn't join the slide before the run.
+pub fn delete_state(app: &mut SlideApp, i: usize) {
+    let Some(doc) = app.session.active().map(|d| d.doc.clone()) else { return };
+    let run = run_of(&doc, i);
+    if run.len() < 2 {
+        return;
+    }
+    let mut cmds = vec![("slide.delete", json!({"index": i}))];
+    if i == run.start {
+        cmds.push(("transition.set", head_transition(doc.slides.get(i).and_then(|s| s.transition.as_ref()), i)));
+    }
+    app.run_as_one("Delete State", cmds);
+    let _ = app.run("slide.go", json!({"index": i.min(run.end - 2)}));
+}
+
+/// Swap state `i` with the one before it (or after it, `forth`). The run keeps its first slide's
+/// transition at its start and Morph after it.
+pub fn move_state(app: &mut SlideApp, i: usize, forth: bool) {
+    let Some(doc) = app.session.active().map(|d| d.doc.clone()) else { return };
+    let run = run_of(&doc, i);
+    let j = if forth { i + 1 } else { i.wrapping_sub(1) };
+    if !run.contains(&i) || !run.contains(&j) {
+        return;
+    }
+    let mut cmds = vec![("slide.move", json!({"from": i, "to": j}))];
+    let s = run.start;
+    if i == s || j == s {
+        // The state that becomes first takes the run's transition; the old first one is reached
+        // with the Morph that state had.
+        let head = doc.slides.get(s).and_then(|x| x.transition.as_ref());
+        cmds.push(("transition.set", head_transition(head, s)));
+        cmds.push(("transition.set", json!({"kind": "morph", "duration": morph_ms(&doc, s + 1), "index": s + 1})));
+    }
+    app.run_as_one("Move State", cmds);
+    let _ = app.run("slide.go", json!({"index": j}));
+}
+
+// ----- The strip under the slide -------------------------------------------------------------
+
+/// Height of the strip's thumbnails.
+pub const STRIP_THUMB_H: f32 = 54.0;
+
+/// Should the strip show: the slide has states, or it was turned on.
+pub fn strip_shown(app: &SlideApp) -> bool {
+    let Some(st) = app.session.active() else { return false };
+    st.selection.target == deckcraft_engine::Target::Slides
+        && !st.doc.slides.is_empty()
+        && (app.ui.states_strip || run_of(&st.doc, st.selection.slide).len() > 1)
+}
+
+/// The current slide's states in a row under the slide (canvas shell): click one to edit it, + after
+/// one adds a state there, the chip between two states holds Morph's timing, and a state's menu
+/// moves or deletes it.
+pub fn strip_bar(app: &mut SlideApp, ui: &mut Ui) {
     let t = Tokens::get(ui.ctx());
+    let Some(st) = app.session.active() else { return };
+    let doc = st.doc.clone();
+    let cur = st.selection.slide;
+    let run = run_of(&doc, cur);
+    let th = STRIP_THUMB_H;
+    let tw = th * (doc.slide_size.width / doc.slide_size.height.max(1.0)) as f32;
     let ppp = ui.ctx().pixels_per_point();
-    let tw = 76.0;
-    let th = tw * (doc.slide_size.height / doc.slide_size.width.max(1.0)) as f32;
     let mut budget = 3u32;
-    ui.horizontal_wrapped(|ui| {
-        ui.spacing_mut().item_spacing = vec2(6.0, 6.0);
-        for (k, i) in run.enumerate() {
-            let (r, resp) = ui.allocate_exact_size(vec2(tw, th + 16.0), Sense::click());
-            let img = Rect::from_min_size(r.min, vec2(tw, th));
-            match app.textures.thumb(ui.ctx(), doc, i, (tw * ppp).round() as u32, &mut budget) {
-                Some(tex) => {
-                    ui.painter().image(tex.id(), img, Rect::from_min_max(pos2(0.0, 0.0), pos2(1.0, 1.0)), Color32::WHITE);
+    egui::ScrollArea::horizontal().id_salt("canvas_states_strip").auto_shrink([false, true]).show(ui, |ui| {
+        ui.horizontal(|ui| {
+            ui.spacing_mut().item_spacing.x = 6.0;
+            let (lr, _) = ui.allocate_exact_size(vec2(44.0, th), Sense::hover());
+            ui.painter().text(pos2(lr.min.x, lr.center().y), Align2::LEFT_CENTER, "States", theme::bold(12.0), t.text_dim);
+            for (k, i) in run.clone().enumerate() {
+                if k > 0 {
+                    timing_chip(app, ui, &doc, i, k);
                 }
-                None => {
-                    ui.painter().rect_filled(img, CornerRadius::ZERO, Color32::WHITE);
-                    ui.ctx().request_repaint();
+                let (r, resp) = ui.allocate_exact_size(vec2(tw, th), Sense::click());
+                match app.textures.thumb(ui.ctx(), &doc, i, (tw * ppp).round() as u32, &mut budget) {
+                    Some(tex) => {
+                        ui.painter().image(tex.id(), r, Rect::from_min_max(pos2(0.0, 0.0), pos2(1.0, 1.0)), Color32::WHITE);
+                    }
+                    None => {
+                        ui.painter().rect_filled(r, CornerRadius::ZERO, Color32::WHITE);
+                        ui.ctx().request_repaint();
+                    }
+                }
+                let on = i == cur;
+                let stroke = if on { Stroke::new(2.0, t.accent) } else { Stroke::new(1.0, if resp.hovered() { t.text_faint } else { t.border }) };
+                ui.painter().rect_stroke(r, CornerRadius::same(3), stroke, egui::StrokeKind::Outside);
+                // The state's number in a corner badge.
+                let badge = Rect::from_min_size(r.min + vec2(3.0, 3.0), vec2(16.0, 14.0));
+                ui.painter().rect_filled(badge, CornerRadius::same(4), if on { t.accent } else { t.card });
+                ui.painter().text(
+                    badge.center(),
+                    Align2::CENTER_CENTER,
+                    format!("{}", k + 1),
+                    theme::bold(10.0),
+                    if on { t.accent_text } else { t.text },
+                );
+                builds_ticks(ui, &doc, i, r, &t);
+                let label = format!("State {}", k + 1);
+                resp.widget_info(|| egui::WidgetInfo::selected(egui::WidgetType::Button, true, on, &label));
+                if resp.clicked() && !on {
+                    let _ = app.run("slide.go", json!({"index": i}));
+                }
+                let n = run.len();
+                resp.on_hover_text(format!("{label}: click to edit it")).context_menu(|ui| {
+                    if ui.add_enabled(k > 0, egui::Button::new("Move Left")).clicked() {
+                        move_state(app, i, false);
+                        ui.close();
+                    }
+                    if ui.add_enabled(k + 1 < n, egui::Button::new("Move Right")).clicked() {
+                        move_state(app, i, true);
+                        ui.close();
+                    }
+                    if ui.button("Add State After").clicked() {
+                        add_state_after(app, i);
+                        ui.close();
+                    }
+                    ui.separator();
+                    if ui.add_enabled(n > 1, egui::Button::new("Delete State")).clicked() {
+                        delete_state(app, i);
+                        ui.close();
+                    }
+                });
+                // + after each state adds one there.
+                let (pr, presp) = ui.allocate_exact_size(vec2(20.0, th), Sense::click());
+                let c = pr.center();
+                ui.painter().circle(c, 9.0, if presp.hovered() { t.hover } else { Color32::TRANSPARENT }, Stroke::new(1.0, t.border));
+                ui.painter().line_segment([c - vec2(4.0, 0.0), c + vec2(4.0, 0.0)], Stroke::new(1.5, t.text_dim));
+                ui.painter().line_segment([c - vec2(0.0, 4.0), c + vec2(0.0, 4.0)], Stroke::new(1.5, t.text_dim));
+                let plus = format!("Add a state after state {}", k + 1);
+                presp.widget_info(|| egui::WidgetInfo::labeled(egui::WidgetType::Button, true, &plus));
+                if presp.on_hover_text(&plus).clicked() {
+                    add_state_after(app, i);
                 }
             }
-            let on = i == cur;
-            let stroke = if on { Stroke::new(2.0, t.accent) } else { Stroke::new(1.0, if resp.hovered() { t.text_faint } else { t.border }) };
-            ui.painter().rect_stroke(img, CornerRadius::same(2), stroke, egui::StrokeKind::Outside);
-            let label = format!("State {}", k + 1);
-            ui.painter().text(pos2(r.min.x, r.max.y - 1.0), Align2::LEFT_BOTTOM, &label, theme::font(11.0), if on { t.text } else { t.text_dim });
-            resp.widget_info(|| egui::WidgetInfo::selected(egui::WidgetType::Button, true, on, &label));
-            if resp.clicked() {
-                let _ = app.run("slide.go", json!({"index": i}));
+        });
+    });
+}
+
+/// Between two states: how long Morph takes to the later one; click for its options.
+fn timing_chip(app: &mut SlideApp, ui: &mut Ui, doc: &Presentation, i: usize, k: usize) {
+    let t = Tokens::get(ui.ctx());
+    let Some(tr) = doc.slides.get(i).and_then(|s| s.transition.clone()) else { return };
+    let secs = tr.duration_ms as f64 / 1000.0;
+    let text = format!("{}s", (secs * 100.0).round() / 100.0);
+    let galley = ui.painter().layout_no_wrap(text, theme::font(11.0), t.text_dim);
+    let (r, resp) = ui.allocate_exact_size(vec2(galley.size().x + 22.0, STRIP_THUMB_H), Sense::click());
+    let pill = Rect::from_center_size(r.center(), vec2(r.width(), 20.0));
+    ui.painter().rect_filled(pill, CornerRadius::same(10), if resp.hovered() { t.selected } else { t.hover });
+    // An arrow pointing on to the next state, then the time.
+    let y = pill.center().y;
+    ui.painter().line_segment([pos2(pill.min.x + 5.0, y), pos2(pill.min.x + 12.0, y)], Stroke::new(1.2, t.text_dim));
+    ui.painter().line_segment([pos2(pill.min.x + 9.5, y - 2.5), pos2(pill.min.x + 12.0, y)], Stroke::new(1.2, t.text_dim));
+    ui.painter().line_segment([pos2(pill.min.x + 9.5, y + 2.5), pos2(pill.min.x + 12.0, y)], Stroke::new(1.2, t.text_dim));
+    ui.painter().galley(pos2(pill.min.x + 15.0, y - galley.size().y / 2.0), galley, t.text_dim);
+    let label = format!("Morph into state {}", k + 1);
+    resp.widget_info(|| egui::WidgetInfo::labeled(egui::WidgetType::Button, true, &label));
+    let resp = resp.on_hover_text(format!("{label}: timing"));
+    egui::Popup::menu(&resp).width(220.0).close_behavior(egui::PopupCloseBehavior::CloseOnClickOutside).show(|ui| {
+        ui.label(egui::RichText::new(&label).font(theme::bold(12.5)));
+        ui.horizontal(|ui| {
+            ui.label("Duration");
+            if let Some(v) = crate::widgets::spinner(ui, &format!("strip-duration-{i}"), secs, 0.25, " s", 60.0) {
+                let ms = (v.clamp(0.01, 59.0) * 1000.0).round();
+                let _ = app.run("transition.timing", json!({"duration": ms, "index": i}));
+            }
+        });
+        ui.horizontal_wrapped(|ui| {
+            ui.label("Animate");
+            let cur_opt = if tr.option.is_empty() { "objects" } else { tr.option.as_str() };
+            for (id, l) in MORPH_OPTIONS {
+                if ui.selectable_label(cur_opt == id, l).clicked() {
+                    let _ = app.run("transition.options", json!({"option": id, "index": i}));
+                }
+            }
+        });
+        if ui.button("Stop being a state").on_hover_text("Turn Morph off: this slide starts its own run").clicked() {
+            let _ = app.run("transition.set", json!({"kind": "none", "index": i}));
+            ui.close();
+        }
+    });
+}
+
+/// Build effects for text, as `animation.build` takes them.
+const BUILDS: [(&str, &str); 6] = [("none", "None"), ("appear", "Appear"), ("fade", "Fade"), ("fly", "Fly in"), ("wipe", "Wipe"), ("zoom", "Zoom")];
+
+/// The clicks slide `sl` takes to play: one per on-click effect, and one per paragraph of a
+/// text build.
+pub fn build_steps(sl: &Slide) -> usize {
+    use deckcraft_model::anim::AnimStart;
+    sl.animations
+        .iter()
+        .filter(|a| a.trigger.is_none() && a.start == AnimStart::OnClick)
+        .map(|a| {
+            if !deckcraft_engine::cmd::animation::is_build(a) {
+                return 1;
+            }
+            let Some(t) = deckcraft_model::find_shape(&sl.shapes, a.shape).and_then(|s| s.text.as_ref()) else { return 1 };
+            let filled: Vec<u8> = t.paragraphs.iter().filter(|p| p.runs.iter().any(|r| !r.text.trim().is_empty())).map(|p| p.level).collect();
+            let top = filled.iter().copied().min().unwrap_or(0);
+            filled.iter().filter(|l| **l == top).count().max(1)
+        })
+        .sum()
+}
+
+/// Build the selected text box's paragraphs one per click (bullets coming in one at a time).
+fn build_section(app: &mut SlideApp, ui: &mut Ui) {
+    let t = Tokens::get(ui.ctx());
+    let Some(st) = app.session.active() else { return };
+    let shapes = st.selected_shapes();
+    let [sh] = shapes.as_slice() else { return };
+    if !sh.text.as_ref().is_some_and(|x| !x.is_empty()) || !matches!(sh.kind, deckcraft_model::ShapeKind::Shape) {
+        return;
+    }
+    let id = sh.id;
+    let now = st
+        .current_slide()
+        .and_then(|sl| sl.animations.iter().find(|a| a.shape == id && deckcraft_engine::cmd::animation::is_build(a)).map(|a| a.effect.clone()))
+        .unwrap_or_else(|| "none".into());
+    section(ui, "Build text");
+    ui.label(egui::RichText::new("Paragraphs come in one per click, as the slide plays.").font(theme::font(12.0)).color(t.text_dim));
+    ui.add_space(4.0);
+    ui.horizontal_wrapped(|ui| {
+        for (effect, label) in BUILDS {
+            if ui.selectable_label(now == effect, label).clicked() && now != effect {
+                let _ = app.run("animation.build", json!({"effect": effect, "ids": [id.0]}));
             }
         }
     });
+}
+
+/// Under a state's thumbnail, a tick for each step of the text builds on that slide: one per
+/// click, as the slide plays.
+fn builds_ticks(ui: &Ui, doc: &Presentation, i: usize, r: Rect, t: &Tokens) {
+    let n = doc.slides.get(i).map(|s| build_steps(s)).unwrap_or(0);
+    if n == 0 {
+        return;
+    }
+    let y = r.max.y - 5.0;
+    let shown = n.min(12);
+    for k in 0..shown {
+        let x = r.max.x - 6.0 - (shown - 1 - k) as f32 * 5.0;
+        ui.painter().circle_filled(pos2(x, y), 1.8, t.accent);
+    }
 }
 
 /// How this state is reached from the one before: Morph's duration and what it pairs.

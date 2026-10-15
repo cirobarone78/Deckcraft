@@ -15,9 +15,6 @@ use crate::ribbon::cref_param;
 use crate::theme::{self, Tokens};
 use crate::{SlideApp, widgets};
 
-/// Letter spacing presets, in points (the values PowerPoint's Character Spacing menu uses).
-const SPACING: [(&str, f64); 5] = [("Very tight", -3.0), ("Tight", -1.5), ("Normal", 0.0), ("Loose", 3.0), ("Very loose", 6.0)];
-
 fn run(app: &mut SlideApp, id: &str, p: Value) {
     if id.starts_with("format.") {
         // While typing with a bare caret, the panel formats the whole box.
@@ -32,26 +29,19 @@ pub fn design(app: &mut SlideApp, ui: &mut Ui) {
     let editing = st.selection.text.as_ref().is_some_and(|t| !t.notes);
     let shapes: Vec<deckcraft_model::Shape> = st.selected_shapes().into_iter().cloned().collect();
     if shapes.is_empty() && !editing {
-        text_styles(app, ui);
-        section(ui, "Slide");
-        slide(app, ui);
+        if st.selection.target == deckcraft_engine::Target::Slides {
+            text_styles(app, ui);
+            slide(app, ui);
+        } else {
+            template(app, ui);
+            text_styles(app, ui);
+        }
         return;
     }
     crate::props::show(app, ui);
 }
 
 // ----- Layout helpers ---------------------------------------------------------------------
-
-/// A section: hairline above, bold title, optional icon at the right.
-fn section(ui: &mut Ui, title: &str) {
-    let t = Tokens::get(ui.ctx());
-    ui.add_space(6.0);
-    let y = ui.cursor().min.y;
-    ui.painter().hline(ui.max_rect().x_range().expand(12.0), y, Stroke::new(1.0, t.separator));
-    ui.add_space(10.0);
-    ui.label(egui::RichText::new(title).font(theme::bold(13.0)).color(t.text));
-    ui.add_space(4.0);
-}
 
 fn caption(ui: &mut Ui, text: &str) {
     let t = Tokens::get(ui.ctx());
@@ -160,74 +150,6 @@ pub fn weight_commands(base: &str, style: &str) -> Vec<(&'static str, Value)> {
     }
 }
 
-/// Font, weight, size, line height and letter spacing.
-pub(crate) fn type_basics(app: &mut SlideApp, ui: &mut Ui, st: &Value, en: bool) {
-    let font = st.get("font").and_then(Value::as_str).unwrap_or("").to_string();
-    let bold = st.get("bold").and_then(Value::as_bool).unwrap_or(false);
-    let (base, styles, current) = weights(&font, bold);
-    let w = ui.available_width();
-    let families = crate::ribbon::font_families(app);
-    widgets::dropdown(ui, "insp-font", if base.is_empty() { "Font" } else { &base }, w, en, |ui| {
-        for f in families {
-            if ui.selectable_label(f == base, &f).clicked() {
-                run(app, "format.font", json!({"family": f}));
-                ui.close();
-            }
-        }
-    });
-    ui.add_space(6.0);
-    let half = (w - 8.0) / 2.0;
-    ui.horizontal(|ui| {
-        ui.vertical(|ui| {
-            ui.set_width(half);
-            caption(ui, "Weight");
-            widgets::dropdown(ui, "insp-weight", &current, half, en, |ui| {
-                for s in &styles {
-                    if ui.selectable_label(*s == current, s).clicked() {
-                        for (id, p) in weight_commands(&base, s) {
-                            run(app, id, p);
-                        }
-                        ui.close();
-                    }
-                }
-            });
-        });
-        ui.vertical(|ui| {
-            caption(ui, "Size");
-            let u = crate::units::small(app);
-            let size = st.get("size").and_then(Value::as_f64).unwrap_or(18.0);
-            if let Some(v) = widgets::spinner(ui, "insp-size", u.show(size), 1.0, u.suffix, half - 14.0) {
-                run(app, "format.size", json!({"size": u.to_pt(v).clamp(1.0, 4000.0)}));
-            }
-        });
-    });
-    ui.add_space(4.0);
-    ui.horizontal(|ui| {
-        ui.vertical(|ui| {
-            ui.set_width(half);
-            caption(ui, "Line height");
-            let pct = match st.get("lineSpacing") {
-                Some(v) if v.get("kind").and_then(Value::as_str) == Some("pct") => v.get("v").and_then(Value::as_f64).unwrap_or(1.0) * 100.0,
-                _ => 100.0,
-            };
-            if let Some(v) = widgets::spinner(ui, "insp-lh", pct.round(), 5.0, "%", half - 14.0) {
-                run(app, "format.lineSpacing", json!({"lines": (v / 100.0).clamp(0.1, 9.99)}));
-            }
-        });
-        ui.vertical(|ui| {
-            caption(ui, "Letter spacing");
-            widgets::dropdown(ui, "insp-spacing", "Spacing", half, en, |ui| {
-                for (l, pt) in SPACING {
-                    if ui.button(l).clicked() {
-                        run(app, "format.spacing", json!({"pt": pt}));
-                        ui.close();
-                    }
-                }
-            });
-        });
-    });
-}
-
 /// Bold, italic, underline, strikethrough, lists and (when `color`) the text colour.
 pub(crate) fn type_extras(app: &mut SlideApp, ui: &mut Ui, st: &Value, en: bool, color: bool) {
     let flag = |k: &str| st.get(k).and_then(Value::as_bool).unwrap_or(false);
@@ -296,19 +218,391 @@ pub(crate) fn style_menu(app: &mut SlideApp, button: &egui::Response, current: &
     });
 }
 
-/// Nothing selected: the slide's layout, then its background.
+/// Nothing selected: the slide's layout, then its background, in the property panel's fields.
 fn slide(app: &mut SlideApp, ui: &mut Ui) {
+    use crate::props::{GAP, caption, cols, pick_wide};
     let Some(st) = app.session.active() else { return };
     let layout =
         st.current_slide().and_then(|s| st.doc.masters.first().and_then(|m| m.layouts.iter().find(|l| l.id == s.layout))).map(|l| l.name.clone());
-    let t = Tokens::get(ui.ctx());
+    let hide = st.current_slide().map(|s| !s.show_master_shapes).unwrap_or(false);
+    let own = st.current_slide().and_then(|s| s.background.clone());
+    let full = cols(ui) * 2.0 + GAP;
+    // Reset: the slide's placeholders back on their layout's positions, sizes and formatting.
+    if crate::props::section(ui, "Slide", false, &[(Icon::Revert, "Reset slide to its layout")]) == Some(0) {
+        run(app, "slide.reset", json!({}));
+    }
     caption(ui, "Layout");
-    let w = ui.available_width();
-    let r =
-        ui.add_sized(vec2(w, 26.0), egui::Button::new(layout.unwrap_or_else(|| "Layout".into())).fill(t.field_bg).stroke(Stroke::new(1.0, t.border)));
-    egui::Popup::menu(&r).width(420.0).show(|ui| crate::ribbon::layout_menu(app, ui, "slide.layout"));
-    section(ui, "Background");
-    crate::panes::background(app, ui);
+    pick_wide(ui, "Layout", &layout.unwrap_or_else(|| "Layout".into()), full, 420.0, true, |ui| crate::ribbon::layout_menu(app, ui, "slide.layout"));
+    background_editor(app, ui, own, Some("Follow the layout"), true, Some(hide));
+}
+
+/// The background of what's being edited (slide, layout or master): what it shows, how it's
+/// filled, and a colour row that always works (picking a colour gives it a solid background).
+/// `follow`: the label for having none of its own (None on the master, which always has one);
+/// `apply_all`: offer giving every slide this background; `hide`: the Hide background graphics
+/// box and its state.
+fn background_editor(
+    app: &mut SlideApp,
+    ui: &mut Ui,
+    own: Option<deckcraft_model::Background>,
+    follow: Option<&str>,
+    apply_all: bool,
+    hide: Option<bool>,
+) {
+    use crate::props::{GAP, caption, cols, pick};
+    let full = cols(ui) * 2.0 + GAP;
+    let shown = shown_background(app);
+    crate::props::section(ui, "Background", false, &[]);
+    let sc = scheme(app);
+    let fill = match &own {
+        Some(deckcraft_model::Background::Fill { fill }) => Some(fill.clone()),
+        _ => None,
+    };
+    let kind = match (&own, &fill) {
+        (_, Some(Fill::Solid { .. })) => "solid",
+        (_, Some(Fill::Gradient(_))) => "gradient",
+        (_, Some(Fill::Picture(_))) => "picture",
+        (_, Some(Fill::Pattern(_))) => "pattern",
+        (Some(deckcraft_model::Background::Ref { .. }), _) => "theme",
+        _ => "auto",
+    };
+    let mut kinds: Vec<(&str, &str)> = vec![];
+    match follow {
+        Some(f) => kinds.push((f, "auto")),
+        None => kinds.push(("Theme background", "auto")),
+    }
+    if kind == "theme" {
+        kinds.push(("Theme background style", "theme"));
+    }
+    kinds.extend([("Solid", "solid"), ("Gradient", "gradient"), ("Picture…", "picture"), ("Pattern", "pattern")]);
+    let label = kinds.iter().find(|k| k.1 == kind).map(|k| k.0.trim_end_matches('…')).unwrap_or("Background");
+    let mut chose = None;
+    pick(ui, "Background", label, full, true, |ui| {
+        for (l, k) in &kinds {
+            if ui.selectable_label(*k == kind, *l).clicked() {
+                chose = Some(*k);
+                ui.close();
+            }
+        }
+    });
+    match chose.filter(|k| *k != kind || *k == "picture") {
+        Some("solid") => run(app, "design.background", json!({"color": format!("#{}", shown.hex())})),
+        Some("gradient") => {
+            let mut g = crate::fillui::default_gradient(deckcraft_model::ColorRef::scheme(deckcraft_color::SchemeSlot::Bg2), 90.0);
+            g.rotate_with_shape = false;
+            run(app, "design.background", json!({"gradient": crate::fillui::gradient_json(&g)}));
+        }
+        Some("picture") => {
+            if let Some(pick) = app.services.pick_open.as_mut()
+                && let Some(path) = pick("picture")
+                && let Some(Ok(bytes)) = app.services.read.as_ref().map(|r| r(&path))
+            {
+                run(app, "design.background", json!({"picture": deckcraft_engine::cmd::base64_encode(&bytes)}));
+            }
+        }
+        Some("pattern") => run(app, "design.background", json!({"pattern": {"preset": "pct20", "fg": "accent1", "bg": "bg1"}})),
+        Some("theme") => {}
+        Some(_) => run(app, "design.background", json!({"reset": true})),
+        None => {}
+    }
+    // What Apply to All re-applies: this background as command params.
+    let mut current: Option<Value> = None;
+    ui.add_space(6.0);
+    match &fill {
+        Some(Fill::Gradient(g)) => {
+            current = Some(json!({"gradient": crate::fillui::gradient_json(g)}));
+            if let Some(ng) = crate::fillui::gradient_editor(ui, "bg-grad", g, &sc) {
+                run(app, "design.background", json!({"gradient": crate::fillui::gradient_json(&ng)}));
+            }
+        }
+        Some(Fill::Pattern(pt)) => {
+            current = Some(json!({"pattern": {"preset": pt.preset, "fg": cref_param(&pt.fg), "bg": cref_param(&pt.bg)}}));
+            caption(ui, "Pattern");
+            pick(ui, "Pattern", &pt.preset, full, true, |ui| {
+                for preset in ["pct5", "pct20", "pct50", "ltHorz", "ltVert", "smGrid", "dkDnDiag", "wave", "dotGrid", "weave"] {
+                    if ui.selectable_label(pt.preset == preset, preset).clicked() {
+                        run(app, "design.background", json!({"pattern": {"preset": preset, "fg": cref_param(&pt.fg), "bg": cref_param(&pt.bg)}}));
+                        ui.close();
+                    }
+                }
+            });
+            for (label, fg) in [("Foreground", true), ("Background", false)] {
+                caption(ui, label);
+                let c = if fg { &pt.fg } else { &pt.bg };
+                let (picked, _) = crate::props::color_row(app, ui, label, Some(c.resolve(&sc, None)), None, None, full);
+                if let Some(v) = picked {
+                    let (f, b) = if fg { (v, cref_param(&pt.bg)) } else { (cref_param(&pt.fg), v) };
+                    run(app, "design.background", json!({"pattern": {"preset": pt.preset, "fg": f, "bg": b}}));
+                }
+            }
+        }
+        Some(Fill::Picture(_)) => {
+            if ui.button("Replace picture…").clicked()
+                && let Some(pick) = app.services.pick_open.as_mut()
+                && let Some(path) = pick("picture")
+                && let Some(Ok(bytes)) = app.services.read.as_ref().map(|r| r(&path))
+            {
+                run(app, "design.background", json!({"picture": deckcraft_engine::cmd::base64_encode(&bytes)}));
+            }
+        }
+        other => {
+            // Solid, or following the layout / master / theme: the colour shown, and picking one
+            // gives this its own solid background.
+            if let Some(Fill::Solid { color }) = other {
+                current = Some(json!({"color": cref_param(color)}));
+            }
+            caption(ui, "Color");
+            let (picked, _) = crate::props::color_row(app, ui, "Background", Some(shown), None, None, full);
+            if let Some(c) = picked {
+                run(app, "design.background", json!({"color": c}));
+            }
+        }
+    }
+    if let Some(hide) = hide {
+        ui.add_space(6.0);
+        let mut h = hide;
+        if ui.checkbox(&mut h, "Hide background graphics").on_hover_text("Leave out the pictures and shapes on the layout and master").changed() {
+            run(app, "design.hideBackgroundGraphics", json!({"hide": h}));
+        }
+    }
+    ui.add_space(6.0);
+    let c = cols(ui);
+    let t = Tokens::get(ui.ctx());
+    let button = |ui: &mut Ui, label: &str, en: bool| {
+        let b =
+            egui::Button::new(egui::RichText::new(label).font(theme::font(12.5))).fill(t.field).corner_radius(egui::CornerRadius::same(6)).truncate();
+        ui.add_enabled_ui(en, |ui| ui.add_sized(vec2(c, crate::props::ROW_H), b)).inner
+    };
+    ui.horizontal(|ui| {
+        ui.spacing_mut().item_spacing.x = GAP;
+        if apply_all
+            && button(ui, "Apply to all", current.is_some()).on_hover_text("Give every slide this background").clicked()
+            && let Some(Value::Object(mut o)) = current.clone()
+        {
+            o.insert("all".into(), json!(true));
+            run(app, "design.background", Value::Object(o));
+        }
+        let tip = match follow {
+            Some(f) => format!("{f} again"),
+            None => "Back to the theme's background".into(),
+        };
+        if button(ui, "Reset", own.is_some()).on_hover_text(tip).clicked() {
+            run(app, "design.background", json!({"reset": true}));
+        }
+    });
+}
+
+/// The colour the background being edited shows (its first colour for a gradient or pattern).
+fn shown_background(app: &SlideApp) -> deckcraft_color::Rgba {
+    use deckcraft_engine::Target;
+    use deckcraft_model::resolve::{self, Ctx};
+    let white = deckcraft_color::Rgba::rgb(255, 255, 255);
+    let Some(st) = app.session.active() else { return white };
+    let doc = &st.doc;
+    let (ctx, slide) = match st.selection.target {
+        Target::Slides => match doc.slides.get(st.selection.slide) {
+            Some(sl) => (Ctx::for_slide(doc, sl), Some(sl.as_ref())),
+            None => (None, None),
+        },
+        Target::Master { master } => (doc.masters.get(master).map(|m| Ctx::for_master(doc, m)), None),
+        Target::Layout { master, layout } => (doc.masters.get(master).and_then(|m| m.layouts.get(layout).map(|l| Ctx::for_layout(doc, m, l))), None),
+        Target::Handout | Target::NotesMaster => (None, None),
+    };
+    let Some(ctx) = ctx else { return white };
+    let (fill, ph) = resolve::background(&ctx, slide);
+    match fill {
+        Fill::Solid { color } => ctx.color(&color, ph),
+        Fill::Gradient(g) => g.stops.first().map(|s| ctx.color(&s.color, ph)).unwrap_or(white),
+        Fill::Pattern(p) => ctx.color(&p.bg, ph),
+        _ => white,
+    }
+}
+
+// ----- Slide master and layouts (Slide Master view) ----------------------------------------
+
+/// Nothing selected in Slide Master view: the master or layout's name, its background, and the
+/// theme's colours and fonts (the master's, shared by its layouts and slides).
+fn template(app: &mut SlideApp, ui: &mut Ui) {
+    use crate::props::{GAP, caption, cols};
+    use deckcraft_engine::Target;
+    let t = Tokens::get(ui.ctx());
+    let Some(st) = app.session.active() else { return };
+    let doc = st.doc.clone();
+    let target = st.selection.target;
+    let (mi, li) = match target {
+        Target::Master { master } => (master, None),
+        Target::Layout { master, layout } => (master, Some(layout)),
+        Target::Slides | Target::Handout | Target::NotesMaster => return,
+    };
+    let Some(m) = doc.masters.get(mi) else { return };
+    let full = cols(ui) * 2.0 + GAP;
+    match li.and_then(|l| m.layouts.get(l)) {
+        Some(l) => {
+            ui.label(egui::RichText::new("Layout").font(theme::bold(13.0)).color(t.text));
+            ui.add_space(4.0);
+            caption(ui, "Name");
+            let key = ui.id().with(("layout-name", mi, li));
+            let mut name: String = ui.data_mut(|d| d.get_temp(key)).unwrap_or_else(|| l.name.clone());
+            let r = egui::Frame::NONE.fill(t.field).corner_radius(CornerRadius::same(6)).inner_margin(egui::Margin::symmetric(8, 6)).show(ui, |ui| {
+                ui.add(egui::TextEdit::singleline(&mut name).frame(egui::Frame::NONE).font(theme::font(12.5)).desired_width(full - 16.0))
+            });
+            let te = r.inner;
+            if te.has_focus() {
+                ui.data_mut(|d| d.insert_temp(key, name.clone()));
+            } else {
+                ui.data_mut(|d| d.remove::<String>(key));
+            }
+            if te.lost_focus() && !name.trim().is_empty() && name.trim() != l.name {
+                let _ = app.run("master.renameLayout", json!({"name": name.trim()}));
+            }
+            let used = doc.slides.iter().filter(|s| s.layout == l.id).count();
+            ui.add_space(4.0);
+            let note = match used {
+                0 => "No slides use this layout yet".to_string(),
+                1 => "1 slide uses this layout".to_string(),
+                n => format!("{n} slides use this layout"),
+            };
+            ui.label(egui::RichText::new(note).font(theme::font(11.5)).color(t.caption));
+            let own = l.background.clone();
+            let hide = !l.show_master_shapes;
+            background_editor(app, ui, own, Some("Follow the master"), false, Some(hide));
+        }
+        None => {
+            ui.label(egui::RichText::new(format!("{} Slide Master", m.name)).font(theme::bold(13.0)).color(t.text));
+            ui.add_space(2.0);
+            ui.label(
+                egui::RichText::new("What every layout and slide starts from: background, theme colours and fonts, text styles.")
+                    .font(theme::font(11.5))
+                    .color(t.caption),
+            );
+            background_editor(app, ui, m.background.clone(), None, false, None);
+        }
+    }
+    theme_colors(app, ui, m);
+    theme_fonts(app, ui, m);
+}
+
+/// The theme's twelve colours: a scheme to start from, and each colour's own swatch and hex.
+fn theme_colors(app: &mut SlideApp, ui: &mut Ui, m: &deckcraft_model::Master) {
+    use crate::props::{GAP, caption, cols, pick};
+    use deckcraft_color::SchemeSlot as S;
+    let c = cols(ui);
+    crate::props::section(ui, "Theme colors", false, &[]);
+    let colors = &m.theme.colors;
+    pick(ui, "Color scheme", &colors.name, c * 2.0 + GAP, true, |ui| {
+        for sc in deckcraft_model::theme::builtin_color_schemes() {
+            if ui.selectable_label(sc.name == colors.name, &sc.name).clicked() {
+                let _ = app.run("design.colors", json!({"name": sc.name}));
+                ui.close();
+            }
+        }
+    });
+    ui.add_space(4.0);
+    let slots = [
+        (S::Dk1, "dk1", "Text dark"),
+        (S::Lt1, "lt1", "Background light"),
+        (S::Dk2, "dk2", "Text dark 2"),
+        (S::Lt2, "lt2", "Background light 2"),
+        (S::Accent1, "accent1", "Accent 1"),
+        (S::Accent2, "accent2", "Accent 2"),
+        (S::Accent3, "accent3", "Accent 3"),
+        (S::Accent4, "accent4", "Accent 4"),
+        (S::Accent5, "accent5", "Accent 5"),
+        (S::Accent6, "accent6", "Accent 6"),
+        (S::Hlink, "hlink", "Link"),
+        (S::FolHlink, "folHlink", "Visited link"),
+    ];
+    for pair in slots.chunks(2) {
+        ui.horizontal(|ui| {
+            ui.spacing_mut().item_spacing.x = GAP;
+            for (slot, xml, label) in pair {
+                ui.vertical(|ui| {
+                    ui.set_width(c);
+                    caption(ui, label);
+                    if let Some(hex) = slot_color(ui, xml, colors.get(*slot), c) {
+                        let _ = app.run("design.colors", json!({"colors": {*xml: hex}}));
+                    }
+                });
+            }
+        });
+    }
+}
+
+/// A theme colour: a swatch that opens a colour picker, and its hex. Returns `#RRGGBB` when changed.
+fn slot_color(ui: &mut Ui, id: &str, c: deckcraft_color::Rgba, width: f32) -> Option<String> {
+    let t = Tokens::get(ui.ctx());
+    let (r, _) = ui.allocate_exact_size(vec2(width, crate::props::ROW_H), Sense::hover());
+    ui.painter().rect_filled(r, CornerRadius::same(6), t.field);
+    let sw = Rect::from_center_size(pos2(r.min.x + 15.0, r.center().y), vec2(14.0, 14.0));
+    let sresp = ui.interact(sw.expand(3.0), ui.id().with(("theme-slot", id)), Sense::click());
+    ui.painter().rect(sw, CornerRadius::same(2), theme::to_color32(c), Stroke::new(1.0, Color32::from_black_alpha(25)), egui::StrokeKind::Inside);
+    sresp.widget_info(|| egui::WidgetInfo::labeled(egui::WidgetType::Button, true, format!("Theme color {id}")));
+    let mut out = None;
+    widgets::color_popup(&sresp).show(|ui| {
+        let pid = ui.id().with(("theme-slot-pick", id));
+        let (mut col, mut pending): (Color32, bool) = ui.data_mut(|d| d.get_temp(pid)).unwrap_or((theme::to_color32(c), false));
+        if egui::widgets::color_picker::color_picker_color32(ui, &mut col, egui::widgets::color_picker::Alpha::Opaque) {
+            pending = true;
+        }
+        if pending && !ui.input(|i| i.pointer.any_down()) {
+            pending = false;
+            out = Some(format!("#{:02X}{:02X}{:02X}", col.r(), col.g(), col.b()));
+        }
+        ui.data_mut(|d| d.insert_temp(pid, (col, pending)));
+    });
+    let hex_rect = Rect::from_min_max(pos2(sw.max.x + 8.0, r.min.y), r.max).shrink2(vec2(0.0, 6.0));
+    let tkey = ui.id().with(("theme-slot-hex", id));
+    let now = format!("{:02X}{:02X}{:02X}", c.r, c.g, c.b);
+    let mut text: String = ui.data_mut(|d| d.get_temp(tkey)).unwrap_or_else(|| now.clone());
+    let mut child = ui.new_child(egui::UiBuilder::new().max_rect(hex_rect).layout(egui::Layout::left_to_right(egui::Align::Center)));
+    let te = child.add_sized(
+        hex_rect.size(),
+        egui::TextEdit::singleline(&mut text)
+            .frame(egui::Frame::NONE)
+            .font(theme::font(12.5))
+            .text_color(t.text)
+            .id(ui.id().with(("theme-slot-edit", id))),
+    );
+    if te.has_focus() {
+        ui.data_mut(|d| d.insert_temp(tkey, text.clone()));
+    } else {
+        ui.data_mut(|d| d.remove::<String>(tkey));
+    }
+    if te.lost_focus()
+        && let Some(h) = crate::props::parse_hex(&text)
+        && h[1..] != now
+    {
+        out = Some(h);
+    }
+    out
+}
+
+/// The theme's heading and body fonts.
+fn theme_fonts(app: &mut SlideApp, ui: &mut Ui, m: &deckcraft_model::Master) {
+    use crate::props::{GAP, caption, cols, pick};
+    let c = cols(ui);
+    crate::props::section(ui, "Theme fonts", false, &[]);
+    let (major, minor) = (m.theme.fonts.major.latin.clone(), m.theme.fonts.minor.latin.clone());
+    let families = crate::ribbon::font_families(app);
+    ui.horizontal(|ui| {
+        ui.spacing_mut().item_spacing.x = GAP;
+        for (label, heading) in [("Headings", true), ("Body", false)] {
+            ui.vertical(|ui| {
+                ui.set_width(c);
+                caption(ui, label);
+                let now = if heading { &major } else { &minor };
+                pick(ui, label, now, c, true, |ui| {
+                    for f in &families {
+                        if ui.selectable_label(f == now, f).clicked() {
+                            let (a, b) = if heading { (f.clone(), minor.clone()) } else { (major.clone(), f.clone()) };
+                            let _ = app.run("design.fonts", json!({"major": a, "minor": b}));
+                            ui.close();
+                        }
+                    }
+                });
+            });
+        }
+    });
 }
 
 // ----- Text styles (nothing selected) ------------------------------------------------------
@@ -357,28 +651,34 @@ fn text_styles(app: &mut SlideApp, ui: &mut Ui) {
 
 /// Edit one style; every change applies to the whole presentation.
 fn style_editor(app: &mut SlideApp, ui: &mut Ui, doc: &deckcraft_model::Presentation, s: &crate::textstyles::TextStyle) {
+    use crate::props::{GAP, Prefix, caption, cols, number, pick, seg_group};
     use crate::textstyles::Edit;
     let t = Tokens::get(ui.ctx());
-    if ui.add(egui::Button::new("‹ Text styles").frame(false)).clicked() {
-        edit_text_style(ui.ctx(), None);
-    }
-    ui.add_space(2.0);
-    let size = (s.size() as f32 * 0.5).clamp(14.0, 28.0);
-    ui.label(egui::RichText::new(s.name).font(if s.bold() { theme::bold(size) } else { theme::font(size) }).color(t.text));
+    // Header: back to the list, then the style's name in its own weight.
+    ui.horizontal(|ui| {
+        ui.spacing_mut().item_spacing.x = 4.0;
+        if crate::props::icon_button(ui, Icon::ChevronLeft, "Back to text styles", true).clicked() {
+            edit_text_style(ui.ctx(), None);
+        }
+        let font = if s.bold() { theme::bold(17.0) } else { theme::font(17.0) };
+        ui.label(egui::RichText::new(s.name).font(font).color(t.text));
+    });
     let n = crate::textstyles::copies(doc, s).len();
     let reach = match n {
         0 => format!("Changes all {} text in this presentation.", s.name),
         1 => format!("Changes all {} text, and 1 copy of it.", s.name),
         n => format!("Changes all {} text, and {n} copies of it.", s.name),
     };
-    caption(ui, &reach);
-    ui.add_space(6.0);
+    note(ui, &reach);
+    ui.add_space(8.0);
+
+    let mut edits: Vec<Edit> = vec![];
     let family = s.family(doc);
-    let w = ui.available_width();
+    let c = cols(ui);
+    let full = c * 2.0 + GAP;
     caption(ui, "Font");
     let families = crate::ribbon::font_families(app);
-    let mut edits: Vec<Edit> = vec![];
-    widgets::dropdown(ui, "style-font", &family, w, true, |ui| {
+    pick(ui, "Font", &family, full, true, |ui| {
         for f in families {
             if ui.selectable_label(f == family, &f).clicked() {
                 edits.push(Edit::Font(f));
@@ -387,18 +687,19 @@ fn style_editor(app: &mut SlideApp, ui: &mut Ui, doc: &deckcraft_model::Presenta
         }
     });
     match s.theme_font() {
-        Some(true) => caption(ui, "The theme's heading font: every style and shape in it changes too."),
-        Some(false) => caption(ui, "The theme's body font: every style and shape in it changes too."),
+        Some(true) => note(ui, "The theme's heading font: every style and shape using it changes too."),
+        Some(false) => note(ui, "The theme's body font: every style and shape using it changes too."),
         None => {}
     }
     ui.add_space(4.0);
-    let half = (w - 8.0) / 2.0;
     let (base, weights, cur) = weights(&family, s.bold());
+    let u = crate::units::small(app);
     ui.horizontal(|ui| {
+        ui.spacing_mut().item_spacing.x = GAP;
         ui.vertical(|ui| {
-            ui.set_width(half);
+            ui.set_width(c);
             caption(ui, "Weight");
-            widgets::dropdown(ui, "style-weight", &cur, half, true, |ui| {
+            pick(ui, "Weight", &cur, c, true, |ui| {
                 for wname in &weights {
                     if ui.selectable_label(*wname == cur, wname).clicked() {
                         match wname.as_str() {
@@ -421,28 +722,30 @@ fn style_editor(app: &mut SlideApp, ui: &mut Ui, doc: &deckcraft_model::Presenta
         });
         ui.vertical(|ui| {
             caption(ui, "Size");
-            let u = crate::units::small(app);
-            if let Some(v) = widgets::spinner(ui, "style-size", u.show(s.size()), 1.0, u.suffix, half - 14.0) {
+            if let Some(v) =
+                number(ui, "style-size", Prefix::Text("Aa"), (u.show(s.size()) * 100.0).round() / 100.0, "", c, 1.0, (1.0, u.show(4000.0)), true)
+            {
                 edits.push(Edit::Size(u.to_pt(v).clamp(1.0, 4000.0)));
             }
         });
     });
     ui.add_space(4.0);
     ui.horizontal(|ui| {
+        ui.spacing_mut().item_spacing.x = GAP;
         ui.vertical(|ui| {
-            ui.set_width(half);
+            ui.set_width(c);
             caption(ui, "Line height");
             let pct = match s.line_spacing {
                 Some(deckcraft_model::text::Spacing::Pct(v)) => v * 100.0,
                 _ => 100.0,
             };
-            if let Some(v) = widgets::spinner(ui, "style-lh", pct.round(), 5.0, "%", half - 14.0) {
+            if let Some(v) = number(ui, "style-lh", Prefix::Icon(Icon::LineSpacing), pct.round(), "%", c, 1.0, (10.0, 999.0), true) {
                 edits.push(Edit::LineSpacing((v / 100.0).clamp(0.1, 9.99)));
             }
         });
         ui.vertical(|ui| {
             caption(ui, "Style");
-            if seg(ui, Icon::Italic, "Italic", s.italic(), true).clicked() {
+            if seg_group(ui, &[(Icon::Italic, "Italic", s.italic())], c, true).is_some() {
                 edits.push(Edit::Italic(!s.italic()));
             }
         });
@@ -450,12 +753,13 @@ fn style_editor(app: &mut SlideApp, ui: &mut Ui, doc: &deckcraft_model::Presenta
     ui.add_space(4.0);
     caption(ui, "Color");
     let sc = scheme(app);
-    let swatch = match &s.run.fill {
-        Some(Fill::Solid { color }) => Some(theme::to_color32(color.resolve(&sc, None))),
-        _ => Some(t_auto(ui)),
+    let rgba = match &s.run.fill {
+        Some(Fill::Solid { color }) => color.resolve(&sc, None),
+        _ => deckcraft_color::Rgba::BLACK,
     };
-    if let Some(Some(c)) = color_field(app, ui, "Text color", swatch, None) {
-        edits.push(Edit::Color(c));
+    let (picked, _) = crate::props::color_row(app, ui, "Style", Some(rgba), None, None, full);
+    if let Some(col) = picked {
+        edits.push(Edit::Color(col));
     }
     if !edits.is_empty() {
         let mut cmds = vec![];
@@ -464,6 +768,18 @@ fn style_editor(app: &mut SlideApp, ui: &mut Ui, doc: &deckcraft_model::Presenta
         }
         app.run_as_one(&format!("Edit Text Style: {}", s.name), cmds);
     }
+}
+
+/// A dim note under a field, wrapped with room between its lines.
+fn note(ui: &mut Ui, text: &str) {
+    let t = Tokens::get(ui.ctx());
+    ui.add_space(2.0);
+    let mut job = egui::text::LayoutJob::single_section(
+        text.to_string(),
+        egui::TextFormat { font_id: theme::font(11.5), color: t.text_dim, line_height: Some(15.0), ..Default::default() },
+    );
+    job.wrap.max_width = ui.available_width();
+    ui.label(job);
 }
 
 #[cfg(test)]

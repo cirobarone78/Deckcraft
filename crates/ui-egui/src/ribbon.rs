@@ -75,15 +75,9 @@ pub fn title_bar(app: &mut SlideApp, ui: &mut Ui) {
         let has_doc = app.session.active().is_some();
         let dirty = app.session.active().is_some_and(|d| d.is_dirty());
         crate::qat::show(app, &mut child);
-        if app.session.documents().len() > 1 {
-            // Between the buttons at the left and the ones at the right.
-            let area = Rect::from_min_max(pos2(child.cursor().min.x + 12.0, rect.min.y), pos2(rect.max.x - 230.0, rect.max.y));
-            doc_tabs(app, ui, area);
-        } else {
-            let title =
-                app.session.active().map(|d| format!("{}{}", d.title(), if dirty { " — Edited" } else { "" })).unwrap_or_else(|| "DeckCraft".into());
-            ui.painter().text(rect.center(), Align2::CENTER_CENTER, title, theme::font(13.0), t.text);
-        }
+        let title =
+            app.session.active().map(|d| format!("{}{}", d.title(), if dirty { " — Edited" } else { "" })).unwrap_or_else(|| "DeckCraft".into());
+        ui.painter().text(rect.center(), Align2::CENTER_CENTER, title, theme::font(13.0), t.text);
         // Right side.
         let mut right = ui.new_child(
             egui::UiBuilder::new()
@@ -124,85 +118,138 @@ pub fn title_bar(app: &mut SlideApp, ui: &mut Ui) {
     });
 }
 
-/// One tab per open presentation, centred in `area`: its name (a dot while it has unsaved
-/// changes), a close button on the current tab and on hover, then + for a new presentation.
-/// Click a tab to switch to it (⌃Tab and ⌘` go to the next one), middle-click to close it.
-fn doc_tabs(app: &mut SlideApp, ui: &mut Ui, area: Rect) {
-    let t = Tokens::get(ui.ctx());
-    let docs: Vec<(String, bool, Option<String>)> = app.session.documents().iter().map(|d| (d.title(), d.is_dirty(), d.path.clone())).collect();
-    let active = app.session.active_index();
-    let n = docs.len() as f32;
-    let plus_w = 28.0;
-    let w = ((area.width() - plus_w) / n).clamp(80.0, 220.0);
-    let total = w * n + plus_w;
-    let x0 = (area.center().x - total / 2.0).max(area.min.x);
-    let h = 26.0;
-    let mut switch = None;
-    let mut close = None;
-    for (i, (title, dirty, path)) in docs.iter().enumerate() {
-        let r = Rect::from_min_size(pos2(x0 + i as f32 * w, area.center().y - h / 2.0), vec2(w - 4.0, h));
-        if r.max.x > area.max.x {
-            break;
-        }
-        let on = active == Some(i);
-        let resp = ui.interact(r, ui.id().with(("doc-tab", i)), Sense::click());
-        let x_r = Rect::from_center_size(pos2(r.max.x - 13.0, r.center().y), vec2(18.0, 18.0));
-        let x_resp = ui.interact(x_r, ui.id().with(("doc-tab-close", i)), Sense::click());
-        let hovered = resp.hovered() || x_resp.hovered();
-        if on {
-            ui.painter().rect(r, CornerRadius::same(6), t.card, Stroke::new(1.0, t.border), egui::StrokeKind::Inside);
-        } else if hovered {
-            ui.painter().rect_filled(r, CornerRadius::same(6), t.hover);
-        }
-        let mut text_x = r.min.x + 10.0;
-        if *dirty {
-            ui.painter().circle_filled(pos2(text_x + 3.0, r.center().y), 3.0, t.text_dim);
-            text_x += 11.0;
-        }
-        let text_r = Rect::from_min_max(pos2(text_x, r.min.y), pos2(x_r.min.x - 2.0, r.max.y));
-        let font = if on { theme::bold(12.5) } else { theme::font(12.5) };
-        ui.painter().with_clip_rect(text_r).text(
-            pos2(text_r.min.x, r.center().y),
-            Align2::LEFT_CENTER,
-            title,
-            font,
-            if on { t.text } else { t.text_dim },
-        );
-        if on || hovered {
-            if x_resp.hovered() {
-                ui.painter().rect_filled(x_r, CornerRadius::same(4), t.pressed);
-            }
-            icons::paint(ui.painter(), x_r.shrink(4.0), Icon::Close, t.text_dim, false);
-        }
-        x_resp.widget_info(|| egui::WidgetInfo::labeled(egui::WidgetType::Button, true, format!("Close {title}")));
-        resp.widget_info(|| egui::WidgetInfo::selected(egui::WidgetType::Button, true, on, title));
-        let tip = path.clone().unwrap_or_else(|| format!("{title} (not saved yet)"));
-        if x_resp.clicked() || resp.middle_clicked() {
-            close = Some(i);
-        } else if resp.on_hover_text(tip).clicked() {
-            switch = Some(i);
-        }
+/// Height of the document tab row.
+pub const TABS_H: f32 = 30.0;
+
+/// The tab row under the title bar while more than one presentation is open, as in canvas
+/// editors: Home, then one tab per presentation (an icon and its name, fading out when it's
+/// long; a dot while it has unsaved changes, the close button on hover and on the current tab),
+/// then + for a new one. Click a tab to switch to it (⌃Tab and ⌘` go to the next one),
+/// middle-click to close it.
+pub fn doc_strip(app: &mut SlideApp, ui: &mut Ui) {
+    if app.session.documents().len() < 2 {
+        return;
     }
-    let plus = Rect::from_min_size(pos2(x0 + w * n, area.center().y - 12.0), vec2(24.0, 24.0));
-    if plus.max.x <= area.max.x + plus_w {
+    let t = Tokens::get(ui.ctx());
+    // The row's empty part is a shade darker than the tabs; the current tab is the colour of
+    // what's under it.
+    let strip_bg = if t.dark { Color32::from_rgb(0x1F, 0x1F, 0x1F) } else { Color32::from_rgb(0xE2, 0xE2, 0xE2) };
+    let tab_bg = t.chrome;
+    let current_bg = if app.ui.shell == crate::Shell::Canvas { t.card } else { t.chrome };
+    let divider = if t.dark { Color32::from_rgb(0x3A, 0x3A, 0x3A) } else { Color32::from_rgb(0xD4, 0xD4, 0xD4) };
+    egui::Panel::top("doc_tabs").exact_size(TABS_H).frame(egui::Frame::NONE.fill(strip_bg)).show(ui, |ui| {
+        let area = ui.max_rect();
+        let docs: Vec<(String, bool, Option<String>)> = app.session.documents().iter().map(|d| (d.title(), d.is_dirty(), d.path.clone())).collect();
+        let active = if app.backstage_open() { None } else { app.session.active_index() };
+        let home_w = 40.0;
+        let plus_w = 32.0;
+        let n = docs.len() as f32;
+        let w = ((area.width() - home_w - plus_w) / n).clamp(72.0, 176.0);
+        let p = ui.painter().clone();
+        // Home.
+        let home = Rect::from_min_size(area.min, vec2(home_w, area.height()));
+        let hresp = ui.interact(home, ui.id().with("doc-tab-home"), Sense::click());
+        let home_on = app.backstage_open();
+        p.rect_filled(
+            home,
+            CornerRadius::ZERO,
+            if home_on {
+                current_bg
+            } else if hresp.hovered() {
+                t.hover
+            } else {
+                tab_bg
+            },
+        );
+        icons::paint_mono(&p, Rect::from_center_size(home.center(), vec2(15.0, 15.0)), Icon::Home, t.text_dim, false);
+        p.vline(home.max.x, area.y_range(), Stroke::new(1.0, divider));
+        hresp.widget_info(|| egui::WidgetInfo::selected(egui::WidgetType::Button, true, home_on, "Home tab"));
+        if hresp.on_hover_text("Home").clicked() {
+            let _ = app.run("app.home", json!({}));
+        }
+        let mut switch = None;
+        let mut close = None;
+        let mut x = home.max.x;
+        for (i, (title, dirty, path)) in docs.iter().enumerate() {
+            let r = Rect::from_min_size(pos2(x, area.min.y), vec2(w, area.height()));
+            if r.max.x > area.max.x - plus_w {
+                break;
+            }
+            x = r.max.x;
+            let on = active == Some(i);
+            let resp = ui.interact(r, ui.id().with(("doc-tab", i)), Sense::click());
+            let x_r = Rect::from_center_size(pos2(r.max.x - 14.0, r.center().y), vec2(18.0, 18.0));
+            let x_resp = ui.interact(x_r, ui.id().with(("doc-tab-close", i)), Sense::click());
+            let hovered = resp.hovered() || x_resp.hovered();
+            let bg = if on {
+                current_bg
+            } else if hovered {
+                t.hover
+            } else {
+                tab_bg
+            };
+            p.rect_filled(r, CornerRadius::ZERO, bg);
+            p.vline(r.max.x, area.y_range(), Stroke::new(1.0, divider));
+            let ink = if on { t.text } else { t.text_dim };
+            icons::paint_mono(&p, Rect::from_center_size(pos2(r.min.x + 18.0, r.center().y), vec2(15.0, 15.0)), Icon::Deck, ink, false);
+            // The name, faded out where it meets the close button.
+            let text_r = Rect::from_min_max(pos2(r.min.x + 32.0, r.min.y), pos2(r.max.x - 26.0, r.max.y));
+            let galley = p.layout_no_wrap(title.clone(), theme::font(12.0), ink);
+            let long = galley.size().x > text_r.width();
+            p.with_clip_rect(text_r).galley(pos2(text_r.min.x, r.center().y - galley.size().y / 2.0), galley, ink);
+            if long {
+                fade_out(&p, Rect::from_min_max(pos2(text_r.max.x - 18.0, r.min.y), text_r.max), bg);
+            }
+            if on || hovered {
+                if x_resp.hovered() {
+                    p.rect_filled(x_r, CornerRadius::same(4), t.pressed);
+                }
+                icons::paint_mono(&p, x_r.shrink(4.5), Icon::Close, t.text_dim, false);
+            } else if *dirty {
+                p.circle_filled(x_r.center(), 3.0, t.text_dim);
+            }
+            x_resp.widget_info(|| egui::WidgetInfo::labeled(egui::WidgetType::Button, true, format!("Close {title}")));
+            resp.widget_info(|| egui::WidgetInfo::selected(egui::WidgetType::Button, true, on, title));
+            let tip = path.clone().unwrap_or_else(|| format!("{title} (not saved yet)"));
+            if x_resp.clicked() || resp.middle_clicked() {
+                close = Some(i);
+            } else if resp.on_hover_text(tip).clicked() {
+                switch = Some(i);
+            }
+        }
+        // New presentation.
+        let plus = Rect::from_min_size(pos2(x, area.min.y), vec2(plus_w, area.height()));
         let resp = ui.interact(plus, ui.id().with("doc-tab-new"), Sense::click());
         if resp.hovered() {
-            ui.painter().rect_filled(plus, CornerRadius::same(5), t.hover);
+            p.rect_filled(plus.shrink(4.0), CornerRadius::same(5), t.hover);
         }
-        icons::paint(ui.painter(), plus.shrink(5.0), Icon::Plus, t.text_dim, false);
+        icons::paint_mono(&p, Rect::from_center_size(plus.center(), vec2(14.0, 14.0)), Icon::Plus, t.text_dim, false);
         resp.widget_info(|| egui::WidgetInfo::labeled(egui::WidgetType::Button, true, "New Presentation"));
         if resp.on_hover_text("New Presentation (⌘N)").clicked() {
             run(app, "file.new", json!({}));
         }
-    }
-    if let Some(i) = switch.or(close) {
-        run(app, "window.next", json!({"index": i}));
-        app.backstage = None;
-        app.slides_focus = false;
-    }
-    if close.is_some() {
-        app.close_presentation();
-    }
+        if let Some(i) = switch.or(close) {
+            run(app, "window.next", json!({"index": i}));
+            app.backstage = None;
+            app.slides_focus = false;
+        }
+        if close.is_some() {
+            app.close_presentation();
+        }
+    });
+}
+
+/// Fade the right edge of `r` into `bg` (long names in tabs).
+fn fade_out(p: &egui::Painter, r: Rect, bg: Color32) {
+    let mut mesh = egui::Mesh::default();
+    let clear = Color32::from_rgba_unmultiplied(bg.r(), bg.g(), bg.b(), 0);
+    mesh.colored_vertex(r.left_top(), clear);
+    mesh.colored_vertex(r.right_top(), bg);
+    mesh.colored_vertex(r.right_bottom(), bg);
+    mesh.colored_vertex(r.left_bottom(), clear);
+    mesh.add_triangle(0, 1, 2);
+    mesh.add_triangle(0, 2, 3);
+    p.add(egui::Shape::mesh(mesh));
 }
 
 /// Which contextual tabs apply to the selection.

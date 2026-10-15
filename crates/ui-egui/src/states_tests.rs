@@ -125,7 +125,7 @@ fn the_animate_tab_adds_and_walks_states() {
     h.get_by_label("+ Add state").click();
     h.run_steps(4);
     assert_eq!(doc(h.state()).slides.len(), 2);
-    assert!(h.query_by_label("State 2").is_some());
+    assert!(h.query_by_label("State 2").is_some(), "the strip under the slide shows the states");
     assert!(h.query_by_label("Transition from the previous state").is_some());
     h.get_by_label("Words").click();
     h.run_steps(3);
@@ -133,4 +133,121 @@ fn the_animate_tab_adds_and_walks_states() {
     h.get_by_label("State 1").click();
     h.run_steps(3);
     assert_eq!(h.state().session.active().unwrap().selection.slide, 0);
+}
+
+fn canvas(app: SlideApp) -> Harness<'static, SlideApp> {
+    let mut app = app;
+    app.run("view.shell", json!({"shell": "canvas"})).unwrap();
+    let mut h = Harness::builder().with_size(egui::vec2(1400.0, 1000.0)).build_ui_state(
+        |ui, app: &mut SlideApp| {
+            app.logic(ui.ctx());
+            app.ui(ui);
+        },
+        app,
+    );
+    h.run_steps(3);
+    h
+}
+
+fn morph(app: &SlideApp, i: usize) -> bool {
+    is_state_step(&doc(app), i)
+}
+
+#[test]
+fn the_strip_adds_states_after_any_state() {
+    let (app, _) = app_with_box();
+    let mut h = canvas(app);
+    assert!(h.query_by_label("State 1").is_none(), "no strip for a slide without states");
+    h.get_by_label("States under the slide").click();
+    h.run_steps(3);
+    h.get_by_label("Add a state after state 1").click();
+    h.run_steps(3);
+    h.get_by_label("Add a state after state 1").click();
+    h.run_steps(3);
+    let d = doc(h.state());
+    assert_eq!(d.slides.len(), 3);
+    assert_eq!(run_of(&d, 0), 0..3);
+    assert_eq!(h.state().session.active().unwrap().selection.slide, 1, "the new state went in after the first");
+    assert!(h.query_by_label("Morph into state 2").is_some(), "timing between states");
+    h.state_mut().ui.states_strip = false;
+    h.run_steps(2);
+    assert!(h.query_by_label("State 3").is_some(), "the strip stays while there are states");
+}
+
+#[test]
+fn moving_and_deleting_the_first_state_keeps_the_run_apart() {
+    let (mut app, _) = app_with_box();
+    app.run("transition.set", json!({"kind": "fade"})).unwrap();
+    // A plain slide before the run.
+    app.run("slide.new", json!({})).unwrap();
+    app.run("slide.move", json!({"from": 1, "to": 0})).unwrap();
+    app.run("slide.go", json!({"index": 1})).unwrap();
+    add_state(&mut app);
+    add_state(&mut app);
+    let d = doc(&app);
+    assert_eq!(run_of(&d, 1), 1..4);
+    let first = d.slides[1].id;
+    move_state(&mut app, 1, true);
+    let d = doc(&app);
+    assert_eq!(d.slides[2].id, first, "the first state moved one on");
+    assert_eq!(d.slides[1].transition.as_ref().unwrap().kind, "fade", "the run's transition stays at its start");
+    assert!(morph(&app, 2) && morph(&app, 3));
+    assert_eq!(run_of(&d, 1), 1..4);
+    delete_state(&mut app, 1);
+    let d = doc(&app);
+    assert_eq!(d.slides.len(), 3);
+    assert!(!morph(&app, 1), "the new first state doesn't join the slide before");
+    assert_eq!(run_of(&d, 1), 1..3);
+    app.run("edit.undo", json!({})).unwrap();
+    assert_eq!(doc(&app).slides.len(), 4, "one undo step");
+}
+
+#[test]
+fn the_slide_list_shows_a_slide_and_its_states_once() {
+    let (mut app, _) = app_with_box();
+    add_state(&mut app);
+    add_state(&mut app);
+    app.run("slide.new", json!({})).unwrap();
+    let mut h = canvas(app);
+    h.state_mut().run("slide.go", json!({"index": 0})).unwrap();
+    h.run_steps(3);
+    // ↓ goes past the states to the next entry.
+    h.state_mut().slides_focus = true;
+    assert!(crate::thumbs::slide_key(h.state_mut(), egui::Key::ArrowDown, deckcraft_engine::Mods::default()));
+    assert_eq!(h.state().session.active().unwrap().selection.slide, 3);
+    // ⌘↑ moves the plain slide before the whole run.
+    let cmd = deckcraft_engine::Mods { cmd: true, ..Default::default() };
+    assert!(crate::thumbs::slide_key(h.state_mut(), egui::Key::ArrowUp, cmd));
+    let d = doc(h.state());
+    assert_eq!(run_of(&d, 1), 1..4, "the run moved together");
+    assert_eq!(h.state().session.active().unwrap().selection.slide, 0);
+    // Deleting the run's entry deletes its states with it.
+    h.state_mut().run("slide.go", json!({"index": 2})).unwrap();
+    crate::thumbs::select_runs(h.state_mut());
+    h.state_mut().run("slide.delete", json!({})).unwrap();
+    assert_eq!(doc(h.state()).slides.len(), 1);
+}
+
+#[test]
+fn block_moves_keep_order() {
+    use crate::thumbs::block_moves;
+    assert_eq!(block_moves(2..4, 0), vec![(2, 0), (3, 1)]);
+    assert_eq!(block_moves(0..2, 5), vec![(0, 4), (0, 4)]);
+    assert!(block_moves(1..3, 2).is_empty() && block_moves(1..3, 3).is_empty() && block_moves(1..3, 1).is_empty());
+}
+
+#[test]
+fn a_text_build_counts_a_click_per_paragraph() {
+    let mut app = SlideApp::new(Session::with_new(), Services::default());
+    let id = app.run("insert.textBox", json!({"rect": [50, 50, 300, 100], "text": "One\nTwo\nThree"})).unwrap()["id"].as_u64().unwrap();
+    app.run("selection.select", json!({"ids": [id]})).unwrap();
+    app.ui.inspector_tab = "animate".into();
+    let mut h = canvas(app);
+    h.get_by_label("Fade").click();
+    h.run_steps(3);
+    let d = doc(h.state());
+    assert_eq!(build_steps(&d.slides[0]), 3);
+    h.get_by_label("None").click();
+    h.run_steps(3);
+    assert_eq!(build_steps(&doc(h.state()).slides[0]), 0);
 }

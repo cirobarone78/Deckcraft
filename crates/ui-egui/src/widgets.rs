@@ -162,7 +162,7 @@ pub fn icon_toggle(ui: &mut Ui, icon: Icon, tip: &str, enabled: bool, on: bool) 
     }
     icons::paint(&painter, rect.shrink(3.0), icon, t.text, !enabled);
     // Named for screen readers (and tests) by its tooltip.
-    resp.widget_info(|| egui::WidgetInfo::labeled(egui::WidgetType::Button, enabled, tip));
+    resp.widget_info(|| egui::WidgetInfo::selected(egui::WidgetType::Button, enabled, on, tip));
     resp.on_hover_text(tip)
 }
 
@@ -350,6 +350,20 @@ pub fn color_grid(ui: &mut Ui, scheme: &ColorScheme, none_label: Option<&str>) -
     {
         out = Some(None);
     }
+    // Any colour: a saturation / value square and hue bar. The colour applies when the pointer is
+    // let go, so a drag is one change.
+    ui.label(egui::RichText::new("Custom").font(theme::bold(12.0)));
+    let pid = ui.id().with("picker");
+    let (mut c, mut pending): (Color32, bool) = ui.data_mut(|d| d.get_temp(pid)).unwrap_or((Color32::from_rgb(0x33, 0x66, 0xCC), false));
+    ui.spacing_mut().slider_width = 200.0;
+    if egui::widgets::color_picker::color_picker_color32(ui, &mut c, egui::widgets::color_picker::Alpha::Opaque) {
+        pending = true;
+    }
+    if pending && !ui.input(|i| i.pointer.any_down()) {
+        pending = false;
+        out = Some(Some(ColorRef::rgb(Rgba::rgb(c.r(), c.g(), c.b()))));
+    }
+    ui.data_mut(|d| d.insert_temp(pid, (c, pending)));
     // "More Colors…": a hex field.
     let id = ui.id().with("hex");
     let mut hex: String = ui.data_mut(|d| d.get_temp::<String>(id).unwrap_or_default());
@@ -562,7 +576,7 @@ mod tests {
     fn the_eyedroppers_colour_comes_back_through_the_menu_that_asked() {
         let picked = RefCell::new(None);
         let scheme = deckcraft_model::Theme::default().colors;
-        let mut harness = egui_kittest::Harness::builder().with_size(vec2(400.0, 500.0)).build_ui(|ui| {
+        let mut harness = egui_kittest::Harness::builder().with_size(vec2(400.0, 800.0)).build_ui(|ui| {
             theme::install_fonts(ui.ctx());
             let r = ui.button("Pick");
             color_popup(&r).show(|ui| {
