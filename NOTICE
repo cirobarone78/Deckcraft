@@ -72,3 +72,9 @@ Code dependencies
   https://github.com/pdeljanov/Symphonia.
 - The H.264, HEVC, VP9, AV1, Opus, MP4, Matroska and Ogg crates under crates/ are ported from
   FilmCraft (same owner, MIT OR Apache-2.0).
+
+Equation engine: equaSHion, copyright (c) 2026 ArtCraft Team and WordCraft contributors,
+modified by shuff57 and @hajdukste. MIT OR Apache-2.0; full notices and licences in
+vendor/equashion/. No upstream equaSHion font assets are included.
+STIX Two Math v2.13b171: The STIX Fonts Project Authors, SIL Open Font License 1.1.
+Installed into the external craft-fonts checkout with its OFL.txt; see ATTRIBUTION.md.
