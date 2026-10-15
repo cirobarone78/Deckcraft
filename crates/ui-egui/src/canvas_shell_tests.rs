@@ -73,6 +73,17 @@ fn switching_layouts_leaves_the_presentation_alone() {
 }
 
 #[test]
+fn the_app_opens_on_the_design_tab() {
+    let ui = crate::UiState { inspector_tab: "animate".into(), ..Default::default() };
+    let saved = serde_json::to_value(&ui).unwrap();
+    assert!(saved.get("inspectorTab").is_none(), "the tab isn't saved");
+    let back: crate::UiState = serde_json::from_value(saved).unwrap();
+    assert_eq!(back.inspector_tab, "design");
+    let old: crate::UiState = serde_json::from_value(json!({"inspectorTab": "animate"})).unwrap();
+    assert_eq!(old.inspector_tab, "design", "settings saved with Animate open still open on Design");
+}
+
+#[test]
 fn the_views_are_exclusive_and_animate_is_a_panel_tab() {
     let mut h = harness(Shell::Canvas);
     let now = |h: &Harness<'static, SlideApp>| super::view(h.state());

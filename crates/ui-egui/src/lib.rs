@@ -278,7 +278,9 @@ impl Shell {
 pub struct UiState {
     pub brightness: theme::Brightness,
     pub shell: Shell,
-    /// Canvas shell inspector tab: `design` or `animate`.
+    /// Canvas shell inspector tab: `design` or `animate`. Not saved: the app always opens on
+    /// Design.
+    #[serde(skip)]
     pub inspector_tab: String,
     pub tab: String,
     pub ribbon_collapsed: bool,
