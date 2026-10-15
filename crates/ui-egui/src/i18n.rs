@@ -17,11 +17,12 @@ pub enum Language {
     Es,
     Fr,
     Pt,
+    PtBr,
     De,
 }
 
 impl Language {
-    pub const ALL: [Self; 8] = [Self::System, Self::En, Self::Uk, Self::Ru, Self::Es, Self::Fr, Self::Pt, Self::De];
+    pub const ALL: [Self; 9] = [Self::System, Self::En, Self::Uk, Self::Ru, Self::Es, Self::Fr, Self::Pt, Self::PtBr, Self::De];
 
     pub fn label(self) -> &'static str {
         match self {
@@ -31,12 +32,20 @@ impl Language {
             Self::Ru => "Русский",
             Self::Es => "Español",
             Self::Fr => "Français",
-            Self::Pt => "Português",
+            Self::Pt => "Português (Portugal)",
+            Self::PtBr => "Português (Brasil)",
             Self::De => "Deutsch",
         }
     }
 
     pub fn from_locale(locale: &str) -> Self {
+        let lower = locale.to_ascii_lowercase();
+        if lower.starts_with("pt-br") || lower.starts_with("pt_br") {
+            return Self::PtBr;
+        }
+        if lower.starts_with("pt-pt") || lower.starts_with("pt_pt") {
+            return Self::Pt;
+        }
         let language = locale.split(['-', '_', '.', '@']).next().unwrap_or("");
         match language.to_ascii_lowercase().as_str() {
             "uk" => Self::Uk,
@@ -71,6 +80,7 @@ const RU_CATALOG: &str = include_str!("i18n/ru.tsv");
 const ES_CATALOG: &str = include_str!("i18n/es.tsv");
 const FR_CATALOG: &str = include_str!("i18n/fr.tsv");
 const PT_CATALOG: &str = include_str!("i18n/pt.tsv");
+const PT_BR_CATALOG: &str = include_str!("i18n/pt_BR.tsv");
 const DE_CATALOG: &str = include_str!("i18n/de.tsv");
 
 static UK: OnceLock<HashMap<String, String>> = OnceLock::new();
@@ -78,6 +88,7 @@ static RU: OnceLock<HashMap<String, String>> = OnceLock::new();
 static ES: OnceLock<HashMap<String, String>> = OnceLock::new();
 static FR: OnceLock<HashMap<String, String>> = OnceLock::new();
 static PT: OnceLock<HashMap<String, String>> = OnceLock::new();
+static PT_BR: OnceLock<HashMap<String, String>> = OnceLock::new();
 static DE: OnceLock<HashMap<String, String>> = OnceLock::new();
 
 fn parse_catalog(text: &str) -> HashMap<String, String> {
@@ -95,6 +106,7 @@ fn catalog(language: Language) -> Option<&'static HashMap<String, String>> {
         Language::Es => Some(ES.get_or_init(|| parse_catalog(ES_CATALOG))),
         Language::Fr => Some(FR.get_or_init(|| parse_catalog(FR_CATALOG))),
         Language::Pt => Some(PT.get_or_init(|| parse_catalog(PT_CATALOG))),
+        Language::PtBr => Some(PT_BR.get_or_init(|| parse_catalog(PT_BR_CATALOG))),
         Language::De => Some(DE.get_or_init(|| parse_catalog(DE_CATALOG))),
         _ => None,
     }
@@ -146,8 +158,8 @@ pub fn format(source: &str, values: &[String]) -> String {
 }
 
 /// "{n} {word}" with the word inflected for the interface language: English (one, other),
-/// Ukrainian and Russian (one, few, many), Spanish, French, Portuguese and German (one, other;
-/// French keeps the singular for 0).
+/// Ukrainian and Russian (one, few, many), Spanish, French, European and Brazilian Portuguese
+/// and German (one, other; French keeps the singular for 0).
 #[allow(clippy::too_many_arguments)]
 pub fn count(
     n: usize,
@@ -157,22 +169,36 @@ pub fn count(
     spanish: (&str, &str),
     french: (&str, &str),
     portuguese: (&str, &str),
+    portuguese_br: (&str, &str),
     german: (&str, &str),
 ) -> String {
     let word = match CURRENT.get() {
         Language::Uk => slavic(n, ukrainian),
         Language::Ru => slavic(n, russian),
         Language::Es => one_other(n, spanish),
-        Language::Fr => if n <= 1 { french.0 } else { french.1 },
+        Language::Fr => {
+            if n <= 1 {
+                french.0
+            } else {
+                french.1
+            }
+        }
         Language::Pt => one_other(n, portuguese),
+        Language::PtBr => one_other(n, portuguese_br),
         Language::De => one_other(n, german),
-        Language::En | Language::System => if n == 1 { english.0 } else { english.1 },
+        Language::En | Language::System => {
+            if n == 1 {
+                english.0
+            } else {
+                english.1
+            }
+        }
     };
     format!("{n} {word}")
 }
 
 /// Ukrainian/Russian integer forms: 1/21; 2–4/22–24; 0/5–19.
-fn slavic<'a>(n: usize, forms: [&'a str; 3]) -> &'a str {
+fn slavic(n: usize, forms: [&str; 3]) -> &str {
     match (n % 10, n % 100) {
         (1, last) if last != 11 => forms[0],
         (2..=4, last) if !(12..=14).contains(&last) => forms[1],
@@ -194,6 +220,7 @@ pub fn recovered(n: usize) -> String {
         ("presentación sin guardar", "presentaciones sin guardar"),
         ("présentation non enregistrée", "présentations non enregistrées"),
         ("apresentação não salva", "apresentações não salvas"),
+        ("apresentação não salva", "apresentações não salvas"),
         ("nicht gespeicherte Präsentation", "nicht gespeicherte Präsentationen"),
     );
     format("Recovered {} from the last session", &[amount])
@@ -204,7 +231,7 @@ mod tests {
     use super::*;
 
     /// The languages that ship a catalog.
-    const TRANSLATED: [Language; 6] = [Language::Uk, Language::Ru, Language::Es, Language::Fr, Language::Pt, Language::De];
+    const TRANSLATED: [Language; 7] = [Language::Uk, Language::Ru, Language::Es, Language::Fr, Language::Pt, Language::PtBr, Language::De];
 
     fn placeholders(text: &str) -> Vec<&str> {
         let mut out = vec![];
@@ -301,10 +328,7 @@ mod tests {
                         .unwrap();
                     let key: String = serde_json::from_str(&format!("\"{}\"", &tail[..end])).unwrap();
                     for language in TRANSLATED {
-                        assert!(
-                            catalog(language).unwrap().contains_key(&key),
-                            "missing literal translation in {language:?}: {key}"
-                        );
+                        assert!(catalog(language).unwrap().contains_key(&key), "missing literal translation in {language:?}: {key}");
                     }
                     rest = &tail[end + 1..];
                 }
@@ -327,6 +351,9 @@ mod tests {
         app.run("app.language", serde_json::json!({"language": "ru"})).unwrap();
         assert_eq!(app.ui.interface_language, Language::Ru);
         assert_eq!(tr("File"), "Файл");
+        app.run("app.language", serde_json::json!({"language": "pt-BR"})).unwrap();
+        assert_eq!(app.ui.interface_language, Language::PtBr);
+        assert_eq!(tr("File"), "Arquivo");
         set_current(Language::En);
     }
 
@@ -365,9 +392,16 @@ mod tests {
     fn translated_interface_preview() {
         let dir = std::env::var("DECKCRAFT_I18N_SHOTS").unwrap();
         std::fs::create_dir_all(&dir).unwrap();
-        for (code, language) in
-            [("en", Language::En), ("uk", Language::Uk), ("ru", Language::Ru), ("es", Language::Es), ("fr", Language::Fr), ("pt", Language::Pt), ("de", Language::De)]
-        {
+        for (code, language) in [
+            ("en", Language::En),
+            ("uk", Language::Uk),
+            ("ru", Language::Ru),
+            ("es", Language::Es),
+            ("fr", Language::Fr),
+            ("pt", Language::Pt),
+            ("pt-BR", Language::PtBr),
+            ("de", Language::De),
+        ] {
             for (name, dialog) in [("editor", None), ("preferences", Some("preferences")), ("table", Some("table"))] {
                 let mut app = crate::SlideApp::new(deckcraft_engine::Session::new(), crate::Services::default());
                 app.run("file.new", serde_json::json!({})).unwrap();
@@ -398,7 +432,12 @@ mod tests {
             ("fr", Language::Fr),
             ("fr_FR.UTF-8", Language::Fr),
             ("pt", Language::Pt),
-            ("pt-BR", Language::Pt),
+            ("pt-PT", Language::Pt),
+            ("pt_PT@euro", Language::Pt),
+            ("PT", Language::Pt),
+            ("pt-BR", Language::PtBr),
+            ("pt_br", Language::PtBr),
+            ("pt-BR.UTF-8", Language::PtBr),
             ("de", Language::De),
             ("de-AT", Language::De),
         ] {
@@ -409,12 +448,19 @@ mod tests {
         }
         assert_eq!(Language::Uk.resolve(Some("en")), Language::Uk);
         assert_eq!(Language::Ru.resolve(Some("uk")), Language::Ru);
+        assert_eq!(Language::PtBr.resolve(Some("pt-BR")), Language::PtBr);
+        assert_eq!(Language::PtBr.resolve(Some("pt-PT")), Language::PtBr);
+        assert_eq!(Language::Pt.label(), "Português (Portugal)");
+        assert_eq!(Language::PtBr.label(), "Português (Brasil)");
         let old: crate::UiState = serde_json::from_str("{}").unwrap();
         assert_eq!(old.interface_language, Language::System);
         let mut ui = old;
         ui.interface_language = Language::Ru;
         let round_trip: crate::UiState = serde_json::from_str(&serde_json::to_string(&ui).unwrap()).unwrap();
         assert_eq!(round_trip.interface_language, Language::Ru);
+        ui.interface_language = Language::PtBr;
+        let round_trip: crate::UiState = serde_json::from_str(&serde_json::to_string(&ui).unwrap()).unwrap();
+        assert_eq!(round_trip.interface_language, Language::PtBr);
     }
 
     #[test]
@@ -427,6 +473,7 @@ mod tests {
             (ES_CATALOG, "es"),
             (FR_CATALOG, "fr"),
             (PT_CATALOG, "pt"),
+            (PT_BR_CATALOG, "pt_BR"),
             (DE_CATALOG, "de"),
         ] {
             assert_eq!(source_count(constant), expected, "{text} catalog row count");
@@ -454,6 +501,9 @@ mod tests {
         assert!(format("Saved {path}", std::slice::from_ref(&user)).ends_with(&user));
         set_current(Language::Ru);
         assert_eq!(tr("File"), "Файл");
+        set_current(Language::PtBr);
+        assert_eq!(tr("File"), "Arquivo");
+        assert_eq!(tr_context("Insert", "@ribbon:Insert"), "Inserir");
         set_current(Language::En);
         assert_eq!(tr("File"), "File");
     }
@@ -475,7 +525,17 @@ mod tests {
             (111, "слайдів"),
         ] {
             assert_eq!(
-                count(n, ("slide", "slides"), ["слайд", "слайди", "слайдів"], ["слайд", "слайда", "слайдов"], ("diapositiva", "diapositivas"), ("diapositive", "diapositives"), ("slide", "slides"), ("Folie", "Folien")),
+                count(
+                    n,
+                    ("slide", "slides"),
+                    ["слайд", "слайди", "слайдів"],
+                    ["слайд", "слайда", "слайдов"],
+                    ("diapositiva", "diapositivas"),
+                    ("diapositive", "diapositives"),
+                    ("slide", "slides"),
+                    ("slide", "slides"),
+                    ("Folie", "Folien")
+                ),
                 format!("{n} {word}")
             );
         }
@@ -484,7 +544,19 @@ mod tests {
 
     #[test]
     fn russian_and_western_counts_use_their_own_forms() {
-        let forms = |n| count(n, ("slide", "slides"), ["слайд", "слайди", "слайдів"], ["слайд", "слайда", "слайдов"], ("diapositiva", "diapositivas"), ("diapositive", "diapositives"), ("slide", "slides"), ("Folie", "Folien"));
+        let forms = |n| {
+            count(
+                n,
+                ("slide", "slides"),
+                ["слайд", "слайди", "слайдів"],
+                ["слайд", "слайда", "слайдов"],
+                ("diapositiva", "diapositivas"),
+                ("diapositive", "diapositives"),
+                ("slide", "slides"),
+                ("slide", "slides"),
+                ("Folie", "Folien"),
+            )
+        };
         set_current(Language::Ru);
         for (n, word) in [
             (0, "слайдов"),
@@ -514,6 +586,24 @@ mod tests {
         set_current(Language::Es);
         assert_eq!(forms(0), "0 diapositivas");
         assert_eq!(forms(1), "1 diapositiva");
+        set_current(Language::PtBr);
+        assert_eq!(forms(0), "0 slides");
+        assert_eq!(forms(1), "1 slide");
+        assert_eq!(forms(3), "3 slides");
+        assert_eq!(
+            count(
+                2,
+                ("presentation", "presentations"),
+                ["презентації", "презентацій", "презентацій"],
+                ["презентацию", "презентации", "презентаций"],
+                ("presentación", "presentaciones"),
+                ("présentation", "présentations"),
+                ("apresentação", "apresentações"),
+                ("apresentação", "apresentações"),
+                ("Präsentation", "Präsentationen")
+            ),
+            "2 apresentações"
+        );
         set_current(Language::En);
     }
 }

@@ -269,7 +269,17 @@ fn body(app: &mut SlideApp, ui: &mut Ui, d: &mut Dialog) -> bool {
             let what = if names.len() == 1 {
                 format!("“{}”", names[0])
             } else {
-                crate::i18n::count(names.len(), ("presentation", "presentations"), ["презентації", "презентацій", "презентацій"], ["презентацию", "презентации", "презентаций"], ("presentación", "presentaciones"), ("présentation", "présentations"), ("apresentação", "apresentações"), ("Präsentation", "Präsentationen"))
+                crate::i18n::count(
+                    names.len(),
+                    ("presentation", "presentations"),
+                    ["презентації", "презентацій", "презентацій"],
+                    ["презентацию", "презентации", "презентаций"],
+                    ("presentación", "presentaciones"),
+                    ("présentation", "présentations"),
+                    ("apresentação", "apresentações"),
+                    ("apresentação", "apresentações"),
+                    ("Präsentation", "Präsentationen"),
+                )
             };
             ui.label(
                 egui::RichText::new(crate::i18n::format("Do you want to save the changes you made to {what}?", std::slice::from_ref(&what))).strong(),
@@ -609,7 +619,17 @@ fn body(app: &mut SlideApp, ui: &mut Ui, d: &mut Dialog) -> bool {
                     ui.label(format!(
                         "{} ({})",
                         s.name,
-                        crate::i18n::count(s.slides.len(), ("slide", "slides"), ["слайд", "слайди", "слайдів"], ["слайд", "слайда", "слайдов"], ("diapositiva", "diapositivas"), ("diapositive", "diapositives"), ("slide", "slides"), ("Folie", "Folien"))
+                        crate::i18n::count(
+                            s.slides.len(),
+                            ("slide", "slides"),
+                            ["слайд", "слайди", "слайдів"],
+                            ["слайд", "слайда", "слайдов"],
+                            ("diapositiva", "diapositivas"),
+                            ("diapositive", "diapositives"),
+                            ("slide", "slides"),
+                            ("slide", "slides"),
+                            ("Folie", "Folien")
+                        )
                     ));
                     if ui.small_button(crate::i18n::tr("Delete")).clicked() {
                         let _ = app.run("show.customShow", json!({"name": s.name, "delete": true}));
@@ -755,6 +775,7 @@ fn body(app: &mut SlideApp, ui: &mut Ui, d: &mut Dialog) -> bool {
                                 crate::i18n::Language::Es => "es",
                                 crate::i18n::Language::Fr => "fr",
                                 crate::i18n::Language::Pt => "pt",
+                                crate::i18n::Language::PtBr => "pt-BR",
                                 crate::i18n::Language::De => "de",
                             };
                             let _ = app.run("app.language", json!({"language": code}));

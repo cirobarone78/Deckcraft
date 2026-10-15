@@ -1,8 +1,11 @@
 # Localization parity with PowerPoint
 
-> **Last reviewed:** 2026-10-10 · **Last updated:** 2026-10-10 · **Change:** minor (Ukrainian UI catalog and language selection) · **Target:** Microsoft PowerPoint for Mac 16.113 (Microsoft 365)
+> **Last reviewed:** 2026-10-10 · **Last updated:** 2026-10-15 · **Change:** minor (Brazilian Portuguese UI catalog; European and Brazilian Portuguese now distinct languages) · **Target:** Microsoft PowerPoint for Mac 16.113 (Microsoft 365)
 
-DeckCraft's interface supports English and Ukrainian through `crates/ui-egui/src/i18n/uk.tsv`.
+DeckCraft's interface supports English plus translated catalogs under `crates/ui-egui/src/i18n/`
+(currently uk, ru, es, fr, pt, pt_BR, de). European (`pt`) and Brazilian (`pt-BR`) Portuguese are
+separate languages: `pt-BR`/`pt_BR` system locales select the Brazilian catalog, `pt-PT` and bare
+`pt` the European one, and the picker labels them "Português (Portugal)" and "Português (Brasil)".
 Preferences offers the system language or an explicit choice; desktop choices persist across
 restarts. Menus, ribbon, command palette, panels, dialogs and presenter controls are translated,
 with English fallback. Presentation content, custom placeholder prompts and command IDs keep
@@ -34,14 +37,15 @@ support partly there), **55–90 h** to parity plus native-speaker review.
 | Hindi | hi | 0 (0%) | no | Devanagari shaping through HarfRust, untested; no bundled Devanagari font | no | none | **no** (Windows only) | 4–7 |
 | Arabic | ar | 0 (0%) | no | bidi, contextual shaping, kashida justification, RTL bullets and caret (#4); **UI not mirrored**; browser export shows boxes (#81) | no | none | yes | 10–16 (incl. UI mirroring) |
 | French | fr | 0 (0%) | no | full (Latin) | no | none | yes (fr, fr-CA) | 3–5 |
-| Portuguese | pt | 0 (0%) | no | full (Latin) | no | none | yes (pt-BR, pt-PT) | 3–5 |
+| Portuguese (European) | pt | UI catalog; coverage checked by tests | UI captions; diagnostics retain original wording | full (Latin) | no | available; English fallback | yes (pt-BR, pt-PT) | — |
+| Brazilian Portuguese | pt-BR | UI catalog; coverage checked by tests | UI captions; diagnostics retain original wording | full (Latin) | no | available; English fallback | yes (pt-BR, pt-PT) | — |
 | Indonesian | id | 0 (0%) | no | full (Latin) | no | none | yes | 3–5 |
 | Japanese | ja | 0 (0%) | no | renders with system or craft-fonts Japanese faces; no IME composition; vertical text is rotated, not laid out vertically | no | none | yes | 4–7 |
 | German | de | 0 (0%) | no | full (Latin) | no | none | yes | 3–5 |
 | Korean | ko | 0 (0%) | no | system Hangul fonts; no IME composition | no | none | yes | 4–7 |
 | Vietnamese | vi | 0 (0%) | no | stacked diacritics through HarfRust | no | none | **no** (Windows only) | 3–5 |
 
-Other languages shipped: **1 (Ukrainian)**. PowerPoint for Mac ships 16 more
+Other languages shipped: **7 (Ukrainian, Russian, Spanish, French, European Portuguese, Brazilian Portuguese, German)** — all with English fallback; the non-Ukrainian catalogs come from #110 and this PR's pt-BR and still await native review. PowerPoint for Mac ships 16 more
 than the twelve above: Czech, Danish, Greek, Finnish, Hebrew, Hungarian, Italian, Dutch, Norwegian,
 Polish, Russian, Slovak, Swedish, Thai, Turkish and Traditional Chinese.
 

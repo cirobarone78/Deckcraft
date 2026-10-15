@@ -1,6 +1,6 @@
 # Where DeckCraft falls short of PowerPoint
 
-> **Last reviewed:** 2026-10-10 · **Last updated:** 2026-10-10 · **Change:** minor (localization gap narrowed after Ukrainian UI) · **Target:** Microsoft PowerPoint for Mac 16.113 (Microsoft 365)
+> **Last reviewed:** 2026-10-10 · **Last updated:** 2026-10-15 · **Change:** minor (localization gap narrowed after Brazilian Portuguese UI) · **Target:** Microsoft PowerPoint for Mac 16.113 (Microsoft 365)
 
 Every known shortfall, one entry each, ranked by how much it stops someone who presents with
 PowerPoint from switching. This is the work list: pick from the top. Numbers are summarized in
@@ -218,10 +218,11 @@ Detail in [hardware-parity.md](hardware-parity.md).
 
 Detail in [localization-parity.md](localization-parity.md).
 
-- **Target languages beyond English missing.** English and Ukrainian now have a UI catalog and
-  system-language selection (#15, #30). PowerPoint for Mac ships 26 languages. Additional
-  translations need 3–16 h per language plus native review. Beta needs at least Simplified
-  Chinese, Spanish, French, German and Japanese (~30–45 h).
+- **Target languages beyond English missing.** English, Ukrainian, Russian, Spanish, French,
+  European and Brazilian Portuguese and German now have a UI catalog and system-language selection
+  (#15, #30); the non-Ukrainian catalogs await native review. PowerPoint for Mac ships 26
+  languages. Additional translations need 3–16 h per language plus native review. Beta needs at
+  least Simplified Chinese, Spanish, French, German and Japanese (~30–45 h).
 - **No IME composition in text editing** (CJK input). 3–6 h.
 - **UI isn't mirrored for right-to-left languages.** 6–10 h.
 - **Browser build draws Arabic and Hebrew as missing-glyph boxes in exports** (#81). 1–2 h.

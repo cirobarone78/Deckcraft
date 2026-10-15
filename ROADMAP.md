@@ -2,7 +2,7 @@
 
 **Stage: alpha** · next: beta, ~20 points and ~120–210 h away
 
-> **Last reviewed:** 2026-10-10 · **Last updated:** 2026-10-10 · **Change:** minor (Ukrainian UI catalog and language selection) · **Target:** Microsoft PowerPoint for Mac 16.113 (Microsoft 365)
+> **Last reviewed:** 2026-10-10 · **Last updated:** 2026-10-15 · **Change:** minor (Brazilian Portuguese UI catalog; pt and pt-BR are distinct languages) · **Target:** Microsoft PowerPoint for Mac 16.113 (Microsoft 365)
 
 DeckCraft aims at full PowerPoint parity, and to be better: faster, open (a documented zip+JSON
 format plus PPTX), scriptable by agents (CLI, JSON control channel, MCP), and available everywhere
@@ -99,14 +99,17 @@ Presentation content and command IDs retain their original values. Detail:
 | Arabic | ar | 0% (slide text: bidi and shaping done) | none | 10–16 |
 | French | fr | 0% | none | 3–5 |
 | Portuguese | pt | 0% | none | 3–5 |
+| Brazilian Portuguese | pt-BR | UI catalog; coverage checked by tests | available; native review pending | — |
 | Indonesian | id | 0% | none | 3–5 |
 | Japanese | ja | 0% | none | 4–7 |
 | German | de | 0% | none | 3–5 |
 | Korean | ko | 0% | none | 4–7 |
 | Vietnamese | vi | 0% | none | 3–5 |
 
-Other languages shipped: **Ukrainian (uk)**, with English fallback and bundled Cyrillic glyph
-coverage. PowerPoint for Mac ships 26 languages; additional catalogs and native review remain.
+Other languages shipped: **7 (uk, ru, es, fr, pt, pt-BR, de)**, each with English fallback; the
+Cyrillic glyph coverage is bundled for Ukrainian. European and Brazilian Portuguese are distinct
+languages in the picker and in locale routing (`pt-BR` selects the Brazilian catalog). PowerPoint
+for Mac ships 26 languages; additional catalogs and native review remain.
 
 ## Upcoming
 
@@ -132,6 +135,7 @@ app's JSON control channel (`deckcraft --control PORT`).
 | Date | What landed |
 |---|---|
 | 2026-10-10 | Ukrainian UI catalog, system-language detection and persisted language choice (#15, #30); translated placeholder prompts preserve presentation content |
+| 2026-10-15 | Brazilian Portuguese (pt-BR) UI catalog; European and Brazilian Portuguese are distinct languages in the picker, persisted setting and locale routing |
 | 2026-10-10 | Progress docs restructured to the craftrules standard; full re-measure (breadth 79%, ready ~55%, mainstream ~53%, essentials ~62%, alpha). Landed: Animation Painter (#54), Morph geometry outlines (#27), animated GIF playback (#39), hyperlink colour and following links in the show (#37, #45), date fields in their own format (#36), flipped shapes keep readable text (#35), show transition fix (#46), start screen from the Home button (#49), MCP export lists PDF (#65), OmaStore manifest (#57) |
 | 2026-10-09 | v0.4.0 released. UAX #9 bidi and Arabic shaping (#4), Morph with Words and Characters (#5), tables grow to fit and PDF cell text (#14), rotating log file (#7), DX12 default on Windows (#16), H.264/HEVC overflow hardening (#2), PPTX sniffing anywhere in the zip (#19) |
 | 2026-10-08 | v0.2.0 and v0.3.0 released: Windows arm64, Flatpak aarch64, AppImage zsync updates, branded DMG |

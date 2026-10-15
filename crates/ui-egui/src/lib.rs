@@ -364,6 +364,7 @@ impl SlideApp {
                     "es" => i18n::Language::Es,
                     "fr" => i18n::Language::Fr,
                     "pt" => i18n::Language::Pt,
+                    "pt-BR" => i18n::Language::PtBr,
                     "de" => i18n::Language::De,
                     _ => return Err("unknown interface language".into()),
                 };
