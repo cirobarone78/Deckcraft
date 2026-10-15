@@ -237,6 +237,16 @@ pub struct Guide {
     pub to: f64,
 }
 
+impl ToolState {
+    /// The layers a move drag is carrying.
+    pub fn moving_ids(&self) -> Option<&[ShapeId]> {
+        match &self.drag {
+            Some(Drag::Move { ids, moved: true, .. }) => Some(ids),
+            _ => None,
+        }
+    }
+}
+
 #[derive(Clone, Debug, Default)]
 pub struct ToolState {
     pub kind: ToolKind,
@@ -442,6 +452,33 @@ impl Session {
         None
     }
 
+    /// With layers of a group selected: the layer of that group (or the group inside it holding
+    /// the layer) under `p`.
+    fn in_context_hit(&self, st: &crate::DocState, p: Point, tol: f64) -> Option<Hit> {
+        let list = st.shapes();
+        let first = *st.selection.shapes.first()?;
+        let parent = deckcraft_model::parent_of(list, first).flatten()?;
+        let Hit::Shape { id: leaf, text } = self.deep_hit(st, p, tol)? else { return None };
+        // Walk up from the layer hit to the parent's child that holds it.
+        let mut cur = leaf;
+        for _ in 0..64 {
+            match deckcraft_model::parent_of(list, cur).flatten() {
+                Some(up) if up == parent => return Some(Hit::Shape { id: cur, text: text && cur == leaf }),
+                Some(up) => cur = up,
+                None => return None,
+            }
+        }
+        None
+    }
+
+    /// The innermost layer under `p`, inside groups.
+    pub fn deep_shape_at(&self, p: Point, tol: f64) -> Option<ShapeId> {
+        match self.deep_hit(self.active()?, p, tol)? {
+            Hit::Shape { id, .. } => Some(id),
+            _ => None,
+        }
+    }
+
     /// The innermost layer under `p`, looking inside groups (topmost first), as a shape hit.
     fn deep_hit(&self, st: &crate::DocState, p: Point, tol: f64) -> Option<Hit> {
         fn rec(st: &crate::DocState, shapes: &[Shape], p: Point, tol: f64, depth: usize, through: bool) -> Option<Hit> {
@@ -594,6 +631,16 @@ impl Session {
         }
         let mut hit = self.hit_test(p, tol);
         let deep = mods.cmd && self.prefs.cmd_deep_select;
+        // Inside a group: with a layer of a group selected, a click on another layer of the same
+        // group picks that layer (canvas editors' selection context); Esc steps back out.
+        if !deep
+            && self.prefs.cmd_deep_select
+            && let Some(Hit::Shape { .. }) = hit
+            && let Some(st) = self.active()
+            && let Some(h) = self.in_context_hit(st, p, tol)
+        {
+            hit = Some(h);
+        }
         // ⌘-click (canvas editors): the innermost layer under the pointer, inside groups.
         if deep
             && matches!(hit, Some(Hit::Shape { .. }) | None)

@@ -10,16 +10,21 @@ pub mod animtimeline;
 pub mod backstage;
 pub mod canvas;
 pub mod canvas_shell;
+pub mod colorpick;
 pub mod control;
 pub mod credits;
 pub mod dialogs;
 pub mod doc_window;
 pub mod eyedropper;
+pub mod field_math;
 pub mod fillui;
+pub mod form;
 pub mod icons;
 pub mod inspector;
+pub mod measure_overlay;
 pub mod media;
 pub mod menus;
+pub mod native_menu;
 pub mod notes;
 pub mod opening;
 pub mod panes;
@@ -505,7 +510,10 @@ pub struct SlideApp {
     /// A presentation being read in the background, with its progress window ([`opening`]).
     pub opening: Option<opening::Opening>,
     /// A brief notice over the bottom of the window (missing fonts on opening a file).
-    pub toast: Option<toast::Toast>,
+    /// Notices showing (see `toast.rs`).
+    pub toasts: Vec<toast::Toast>,
+    /// The macOS menu bar, when the desktop app installed one (else the menus are in the window).
+    pub native_menu: Option<native_menu::NativeMenu>,
     /// Documents (by uid) whose missing fonts have been mentioned.
     fonts_noted: std::collections::HashSet<u64>,
     pub perf: Perf,
@@ -607,7 +615,8 @@ impl SlideApp {
             media: media::MediaHost::new(audio_out),
             status: None,
             opening: None,
-            toast: None,
+            toasts: Vec::new(),
+            native_menu: None,
             fonts_noted: Default::default(),
             perf: Perf { frame_ms: 0.0, render_ms: 0.0, fps: 0.0 },
             synthetic: vec![],
@@ -683,13 +692,18 @@ impl SlideApp {
     }
 
     pub fn set_status(&mut self, msg: impl Into<String>) {
-        self.status = Some((msg.into(), now_ms()));
+        let msg = msg.into();
+        // The canvas layout has no status bar: the message is a notice there.
+        if self.ui.shell == Shell::Canvas && !msg.is_empty() {
+            toast::post(self, "DeckCraft", msg.clone(), false);
+        }
+        self.status = Some((msg, now_ms()));
     }
 
     /// A message that must be seen wherever the user is: a toast, which also shows over the start
     /// screen and the File tab, where there is no status bar.
     pub fn notify(&mut self, msg: impl Into<String>) {
-        self.toast = Some(toast::Toast { text: msg.into(), at: now_ms() });
+        toast::post(self, "DeckCraft", msg.into(), false);
     }
 
     /// The transient status message while it is fresh; clears it once stale. Both the status bar
@@ -1626,6 +1640,7 @@ impl SlideApp {
 
     /// Per-frame logic before layout: styles, control requests, screenshots, shortcuts.
     pub fn logic(&mut self, ctx: &egui::Context) {
+        native_menu::run(self, ctx);
         let scale = self.ui.ui_scale.clamp(0.5, 3.0);
         if (ctx.zoom_factor() - scale).abs() > 1e-3 {
             ctx.set_zoom_factor(scale);
@@ -1738,6 +1753,9 @@ impl SlideApp {
 
     /// Inject synthetic events (one pointer event per frame).
     pub fn raw_input_hook(&mut self, raw: &mut egui::RawInput) {
+        if let Some(menu) = self.native_menu.as_mut() {
+            menu.raw_input(raw);
+        }
         if self.synthetic.is_empty() {
             return;
         }
@@ -2024,6 +2042,11 @@ impl SlideApp {
         self.sync_backstage();
         self.sync_shell_prefs();
         ribbon::title_bar(self, ui);
+        // The menus: in the macOS menu bar when there is one, else under the title bar (canvas
+        // layout; the ribbon has its own tabs).
+        if self.native_menu.is_none() && self.ui.shell == Shell::Canvas && self.backstage.is_none() {
+            native_menu::bar_ui(self, ui);
+        }
         ribbon::doc_strip(self, ui);
         if self.ui.shell == Shell::Canvas && self.backstage.is_none() {
             canvas_shell::show(self, ui);
@@ -2411,18 +2434,18 @@ mod tests {
             SlideApp::new(Session::with_new(), Services::default()),
         );
         harness.run_steps(2);
-        assert!(harness.state().toast.is_none(), "a new presentation has nothing to say");
+        assert!(harness.state().toasts.is_empty(), "a new presentation has nothing to say");
         harness.state_mut().session.execute("file.openBytes", &json!({"name": "a.pptx", "data": data})).unwrap();
         harness.run_steps(2);
-        let text = harness.state().toast.as_ref().map(|t| t.text.clone()).unwrap_or_default();
+        let text = harness.state().toasts.first().map(|t| t.text.clone()).unwrap_or_default();
         assert!(text.starts_with("Qqq Nonexistent Sans isn't installed"), "{text}");
         assert!(harness.query_by_label_contains("Qqq Nonexistent Sans isn't installed").is_some());
         // Closed, it stays closed for that document.
         harness.get_by_label("Close").click();
         harness.run_steps(2);
-        assert!(harness.state().toast.is_none());
+        assert!(harness.state().toasts.is_empty());
         harness.run_steps(2);
-        assert!(harness.state().toast.is_none());
+        assert!(harness.state().toasts.is_empty());
     }
 
     /// #115: Change Picture replaced nothing — it inserted a second picture.
@@ -3135,7 +3158,7 @@ mod tests {
             harness.run_steps(1);
         }
         harness.run_steps(2);
-        assert!(harness.state().toast.is_some(), "the open error was raised");
+        assert!(!harness.state().toasts.is_empty(), "the open error was raised");
         assert!(harness.get_all_by_label_contains("missing.deckcraft").count() >= 2, "the open error is drawn on the page, next to the entry");
     }
 

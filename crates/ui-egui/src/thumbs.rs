@@ -223,7 +223,8 @@ pub(crate) fn list(app: &mut SlideApp, ui: &mut Ui) {
             }
             app.thumb_drag = Some((from, to));
             let y = rects.iter().find(|(i, _)| *i == to).map(|(_, r)| r.min.y + 2.0).or_else(|| rects.last().map(|(_, r)| r.max.y)).unwrap_or(0.0);
-            ui.painter().line_segment([pos2(26.0, y), pos2(width, y)], Stroke::new(2.0, t.accent));
+            let x0 = ui.min_rect().left() + 26.0;
+            crate::widgets::insertion_line(ui.painter(), x0, ui.min_rect().left() + width - 4.0, y, t.accent);
         }
         if ui.input(|i| i.pointer.any_released()) {
             if let Some((from, to)) = app.thumb_drag.take()

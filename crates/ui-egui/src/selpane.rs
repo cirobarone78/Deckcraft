@@ -56,6 +56,26 @@ pub struct Row {
     pub parent: Option<u32>,
     /// The placeholder it is on the slide's layout ("Title", "Body text"…), shown after the name.
     pub tag: Option<String>,
+    /// What kind of layer it is, as a small icon before the name.
+    pub icon: crate::icons::Icon,
+}
+
+/// The icon a layer's row shows for its kind.
+pub fn kind_icon(sh: &Shape) -> crate::icons::Icon {
+    use crate::icons::Icon;
+    use deckcraft_model::ShapeKind;
+    match &sh.kind {
+        ShapeKind::Group { .. } => Icon::Group,
+        ShapeKind::Picture { .. } => Icon::Picture,
+        ShapeKind::Table(_) => Icon::Table,
+        ShapeKind::Chart(_) => Icon::Chart,
+        ShapeKind::Media(m) if !m.video => Icon::Audio,
+        ShapeKind::Media(_) => Icon::Video,
+        ShapeKind::Connector { .. } => Icon::LayerLine,
+        _ if sh.is_line() => Icon::LayerLine,
+        ShapeKind::Shape if sh.text_box || sh.ph.is_some() => Icon::LayerText,
+        _ => Icon::LayerShape,
+    }
 }
 
 /// The rows as listed: front-most first, children under their group unless it's folded.
@@ -75,6 +95,7 @@ pub fn rows(shapes: &[Shape], collapsed: &HashSet<u32>) -> Vec<Row> {
                 locked: sh.locked,
                 parent,
                 tag: sh.ph_type().map(|k| crate::props::kind_name(k.xml(), false)),
+                icon: kind_icon(sh),
             });
             if sh.is_group() && !collapsed.contains(&sh.id.0) {
                 rec(sh.children(), depth + 1, Some(sh.id.0), dim || sh.hidden, collapsed, out);
@@ -175,11 +196,12 @@ pub fn list_marked(app: &mut SlideApp, ui: &mut Ui, marked: &HashSet<u32>) {
         let sel = selected.contains(&row.id);
         resp.widget_info(|| WidgetInfo::selected(WidgetType::SelectableLabel, true, sel, &row.name));
         let painter = ui.painter_at(r);
+        // The whole row, its eye and lock included, counts as hovered.
+        let hovered = ui.rect_contains_pointer(r);
         if sel {
-            painter.rect_filled(r, CornerRadius::same(3), t.selected);
-            painter.rect_stroke(r.shrink(0.5), CornerRadius::same(3), Stroke::new(1.0, t.text_faint), egui::StrokeKind::Inside);
-        } else if resp.hovered() {
-            painter.rect_filled(r, CornerRadius::same(3), t.hover);
+            painter.rect_filled(r, CornerRadius::same(5), t.selected_row);
+        } else if hovered {
+            painter.rect_filled(r, CornerRadius::same(5), t.hover);
         }
         let x0 = r.min.x + 4.0 + INDENT * row.depth as f32;
         // Group chevron.
@@ -191,17 +213,38 @@ pub fn list_marked(app: &mut SlideApp, ui: &mut Ui, marked: &HashSet<u32>) {
             cresp.widget_info(|| WidgetInfo::labeled(WidgetType::Button, true, &label));
             icons::paint(&painter, cr, if open { Icon::ChevronDown } else { Icon::ChevronRight }, t.text_dim, false);
             if cresp.clicked() {
-                if open {
-                    app.selpane.collapsed.insert(row.id);
-                } else {
-                    app.selpane.collapsed.remove(&row.id);
+                // ⌥-click: the groups inside it too, as in canvas editors.
+                let mut ids = vec![row.id];
+                if ui.input(|i| i.modifiers.alt)
+                    && let Some(st) = app.session.active()
+                    && let Some(g) = deckcraft_model::find_shape(st.shapes(), deckcraft_model::ShapeId(row.id))
+                {
+                    nested_groups(g.children(), &mut ids, 0);
+                }
+                for id in ids {
+                    if open {
+                        app.selpane.collapsed.insert(id);
+                    } else {
+                        app.selpane.collapsed.remove(&id);
+                    }
                 }
             }
         }
-        let name_x = x0 + 16.0;
-        let eye = Rect::from_center_size(pos2(r.max.x - 34.0, r.center().y), vec2(16.0, 16.0));
-        let lock = Rect::from_center_size(pos2(r.max.x - 12.0, r.center().y), vec2(16.0, 16.0));
-        let name_rect = Rect::from_min_max(pos2(name_x, r.min.y + 2.0), pos2(eye.min.x - 6.0, r.max.y - 2.0));
+        // The layer's kind, then its name.
+        let kind_r = Rect::from_center_size(pos2(x0 + 24.0, r.center().y), vec2(14.0, 14.0));
+        let kind_ink = if row.dimmed || row.hidden {
+            t.text_faint
+        } else if sel {
+            t.text
+        } else {
+            t.text_dim
+        };
+        icons::paint_mono(&painter, kind_r, row.icon, kind_ink, false);
+        let name_x = x0 + 38.0;
+        // As in canvas editors: the eye at the right end, the lock before it.
+        let eye = Rect::from_center_size(pos2(r.max.x - 14.0, r.center().y), vec2(16.0, 16.0));
+        let lock = Rect::from_center_size(pos2(r.max.x - 38.0, r.center().y), vec2(16.0, 16.0));
+        let name_rect = Rect::from_min_max(pos2(name_x, r.min.y + 2.0), pos2(lock.min.x - 6.0, r.max.y - 2.0));
         let renaming = app.selpane.renaming.as_ref().filter(|(id, _)| *id == row.id).map(|(_, s)| s.clone());
         if let Some(mut buf) = renaming {
             let edit_id = ui.id().with(("rename", row.id));
@@ -227,7 +270,7 @@ pub fn list_marked(app: &mut SlideApp, ui: &mut Ui, marked: &HashSet<u32>) {
                 *s = buf;
             }
         } else {
-            let color = if row.dimmed { t.text_faint } else { t.text };
+            let color = if row.dimmed || row.hidden { t.text_faint } else { t.text };
             let name = painter.text(pos2(name_x, r.center().y), Align2::LEFT_CENTER, &row.name, theme::font(12.5), color);
             // A placeholder's kind as a small pill after its name.
             if let Some(tag) = &row.tag {
@@ -239,13 +282,17 @@ pub fn list_marked(app: &mut SlideApp, ui: &mut Ui, marked: &HashSet<u32>) {
                 }
             }
             if marked.contains(&row.id) {
-                painter.circle_filled(pos2(name_x - 7.0, r.center().y), 2.5, t.accent);
+                painter.circle_filled(pos2(name_x - 4.0, r.center().y), 2.5, t.accent);
             }
         }
-        // Eye and padlock.
-        let ink = if row.dimmed { t.text_faint } else { t.text_dim };
-        icons::paint(&painter, eye, if row.hidden { Icon::EyeOff } else { Icon::Eye }, ink, false);
-        icons::paint(&painter, lock, if row.locked { Icon::Lock } else { Icon::Unlock }, ink, false);
+        // Eye and padlock: shown while the row is hovered, and always when hidden or locked.
+        let ink = if row.dimmed { t.text_faint } else { t.text };
+        if hovered || row.hidden {
+            icons::paint_mono(&painter, eye, if row.hidden { Icon::EyeOff } else { Icon::Eye }, ink, false);
+        }
+        if hovered || row.locked {
+            icons::paint_mono(&painter, lock, if row.locked { Icon::Lock } else { Icon::Unlock }, ink, false);
+        }
         let eye_resp = ui.interact(eye.expand(3.0), ui.id().with(("eye", row.id)), Sense::click());
         let eye_label = format!("{} {}", if row.hidden { "Show" } else { "Hide" }, row.name);
         eye_resp.widget_info(|| WidgetInfo::labeled(WidgetType::Button, true, &eye_label));
@@ -285,11 +332,7 @@ pub fn list_marked(app: &mut SlideApp, ui: &mut Ui, marked: &HashSet<u32>) {
         app.selpane.drag = Some((dragged, target));
         if let Some((_, y)) = target {
             let (x0, x1) = (ui.min_rect().left(), ui.min_rect().left() + width);
-            let p = ui.painter();
-            let s = Stroke::new(2.0, t.accent);
-            p.line_segment([pos2(x0, y), pos2(x1, y)], s);
-            p.line_segment([pos2(x0, y - 4.0), pos2(x0, y + 4.0)], s);
-            p.line_segment([pos2(x1, y - 4.0), pos2(x1, y + 4.0)], s);
+            crate::widgets::insertion_line(ui.painter(), x0, x1, y, t.accent);
         }
         if released {
             app.selpane.drag = None;
@@ -309,6 +352,17 @@ pub fn list_marked(app: &mut SlideApp, ui: &mut Ui, marked: &HashSet<u32>) {
     let rest = ui.available_size();
     if rest.y > 0.0 {
         ui.allocate_exact_size(vec2(width, rest.y.min(400.0)), Sense::hover());
+    }
+}
+
+/// The ids of the groups among `shapes`, at every depth.
+fn nested_groups(shapes: &[deckcraft_model::Shape], out: &mut Vec<u32>, depth: usize) {
+    if depth > 64 {
+        return;
+    }
+    for s in shapes.iter().filter(|s| s.is_group()) {
+        out.push(s.id.0);
+        nested_groups(s.children(), out, depth + 1);
     }
 }
 

@@ -47,7 +47,8 @@ fn the_layout_choice_is_kept_with_the_ui_state() {
 #[test]
 fn the_canvas_shell_replaces_the_ribbon_with_sidebar_inspector_and_toolbar() {
     let h = harness(Shell::Canvas);
-    assert!(h.query_by_label("File").is_none(), "no ribbon tabs");
+    assert!(h.query_by_label("Home").is_none() && h.query_by_label("Transitions").is_none(), "no ribbon tabs");
+    assert!(h.query_by_label("File").is_some() && h.query_by_label("Arrange").is_some(), "the menus under the title bar (no native menu here)");
     for label in ["Layers", "Sort", "Animate", "Present", "Select (V)", "Text box (T)"] {
         assert!(h.query_all_by_label(label).next().is_some(), "`{label}` is shown");
     }

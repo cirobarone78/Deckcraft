@@ -464,3 +464,48 @@ fn a_moved_placeholder_resets_from_the_header() {
     click(&mut h, "Reset to layout");
     assert!(shape(h.state(), title).xfrm.is_none(), "it follows its layout again");
 }
+
+/// Select all of the focused field's text, type `text` and press `end` (Enter or Escape).
+fn type_into_field(h: &mut Harness<'static, SlideApp>, text: &str, end: egui::Key) {
+    let cmd = egui::Modifiers { command: true, mac_cmd: true, ..Default::default() };
+    h.event(egui::Event::Key { key: egui::Key::A, physical_key: None, pressed: true, repeat: false, modifiers: cmd });
+    h.event(egui::Event::Text(text.into()));
+    h.run_steps(1);
+    h.event(egui::Event::Key { key: end, physical_key: None, pressed: true, repeat: false, modifiers: Default::default() });
+    h.run_steps(3);
+}
+
+#[test]
+fn fields_take_arithmetic_relative_edits_and_escape() {
+    let mut h = harness();
+    let id = rect_selected(&mut h, "rect");
+    // W reads 300 (150 pt).
+    focus_field(&mut h, "300");
+    type_into_field(&mut h, "100+50", egui::Key::Enter);
+    assert_eq!(shape(h.state(), id).xfrm.unwrap().w, 75.0, "150 px is 75 pt");
+    focus_field(&mut h, "150");
+    type_into_field(&mut h, "*2", egui::Key::Enter);
+    assert_eq!(shape(h.state(), id).xfrm.unwrap().w, 150.0, "doubled");
+    focus_field(&mut h, "300");
+    type_into_field(&mut h, "50%", egui::Key::Enter);
+    assert_eq!(shape(h.state(), id).xfrm.unwrap().w, 75.0, "half");
+    focus_field(&mut h, "150");
+    type_into_field(&mut h, "999", egui::Key::Escape);
+    assert_eq!(shape(h.state(), id).xfrm.unwrap().w, 75.0, "Escape leaves it");
+}
+
+#[test]
+fn a_relative_edit_on_mixed_values_moves_each_layer_by_it() {
+    let mut h = harness();
+    let ids = three_selected(&mut h);
+    let xs = |h: &Harness<'static, SlideApp>| ids.iter().map(|i| shape(h.state(), *i).xfrm.unwrap().x).collect::<Vec<_>>();
+    let before = xs(&h);
+    // X reads Mixed (the hint); the first Mixed field is X.
+    h.query_all_by_label("Mixed").next().or_else(|| h.query_all_by_value("").next()).expect("a Mixed field").click();
+    h.run_steps(3);
+    type_into_field(&mut h, "+20", egui::Key::Enter);
+    let after = xs(&h);
+    for (b, a) in before.iter().zip(&after) {
+        assert!((a - b - 10.0).abs() < 0.01, "each moved 20 px (10 pt): {before:?} → {after:?}");
+    }
+}

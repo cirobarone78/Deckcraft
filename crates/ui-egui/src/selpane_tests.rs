@@ -253,3 +253,20 @@ fn arrow_keys_move_through_the_list_and_collapse_hides_children() {
     h.run_steps(2);
     assert!(h.query_by_label("D").is_some());
 }
+
+#[test]
+fn option_clicking_a_chevron_folds_the_groups_inside_too() {
+    let (mut h, ids) = harness();
+    // A group of G and C: H holds G (D, E) and C.
+    let h_id = h.state_mut().session.execute("arrange.group", &json!({"ids": [ids[5], ids[2]]})).unwrap()["id"].as_u64().unwrap() as u32;
+    h.state_mut().session.execute("shape.rename", &json!({"id": h_id, "name": "H"})).unwrap();
+    h.run_steps(3);
+    let alt = Modifiers { alt: true, ..Modifiers::NONE };
+    h.get_by_label("Collapse H").click_modifiers(alt);
+    h.run_steps(3);
+    let folded = &h.state().selpane.collapsed;
+    assert!(folded.contains(&h_id) && folded.contains(&ids[5]), "H and the G inside it: {folded:?}");
+    h.get_by_label("Expand H").click_modifiers(alt);
+    h.run_steps(3);
+    assert!(h.state().selpane.collapsed.is_empty(), "⌥ opens them all again");
+}

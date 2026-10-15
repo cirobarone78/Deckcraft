@@ -29,5 +29,13 @@ arboard = { workspace = true, features = ["image-data"] }
 image = { workspace = true }
 cpal = "0.16"
 
+[target.'cfg(target_os = "macos")'.dependencies]
+# The macOS menu bar (mac_menu.rs): muda, a standalone native menu crate from the tauri-apps org
+# (not Tauri: no webview), AppKit menus behind a safe API. Pinned as PhotoCraft pins it.
+muda = { version = "=0.21.1", default-features = false }
+# Safe AppKit calls only (how a menu item was chosen, Hide); already in Cargo.lock through winit.
+objc2 = "0.6"
+objc2-app-kit = { version = "0.3", default-features = false, features = ["std", "NSApplication", "NSEvent", "NSResponder"] }
+
 [target.'cfg(all(unix, not(target_os = "macos")))'.dependencies]
 winit = { version = "0.30", default-features = false, features = ["x11"] }

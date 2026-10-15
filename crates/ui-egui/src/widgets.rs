@@ -354,30 +354,13 @@ pub fn color_grid(ui: &mut Ui, scheme: &ColorScheme, none_label: Option<&str>) -
     // let go, so a drag is one change.
     ui.label(egui::RichText::new("Custom").font(theme::bold(12.0)));
     let pid = ui.id().with("picker");
-    let (mut c, mut pending): (Color32, bool) = ui.data_mut(|d| d.get_temp(pid)).unwrap_or((Color32::from_rgb(0x33, 0x66, 0xCC), false));
-    ui.spacing_mut().slider_width = 200.0;
-    if egui::widgets::color_picker::color_picker_color32(ui, &mut c, egui::widgets::color_picker::Alpha::Opaque) {
-        pending = true;
-    }
-    if pending && !ui.input(|i| i.pointer.any_down()) {
-        pending = false;
-        out = Some(Some(ColorRef::rgb(Rgba::rgb(c.r(), c.g(), c.b()))));
-    }
-    ui.data_mut(|d| d.insert_temp(pid, (c, pending)));
-    // "More Colors…": a hex field.
-    let id = ui.id().with("hex");
-    let mut hex: String = ui.data_mut(|d| d.get_temp::<String>(id).unwrap_or_default());
-    ui.horizontal(|ui| {
-        ui.label("More Colors… #");
-        let r = ui.add(egui::TextEdit::singleline(&mut hex).desired_width(70.0).hint_text("RRGGBB"));
-        if r.lost_focus()
-            && ui.input(|i| i.key_pressed(egui::Key::Enter))
-            && let Some(c) = Rgba::from_hex(&hex)
-        {
-            out = Some(Some(ColorRef::rgb(c)));
+    let last: Rgba = ui.data(|d| d.get_temp(pid.with("last"))).unwrap_or(Rgba::rgb(0x33, 0x66, 0xCC));
+    if let Some(p) = crate::colorpick::picker(ui, pid, last, false) {
+        ui.data_mut(|d| d.insert_temp(pid.with("last"), p.color));
+        if p.done {
+            out = Some(Some(ColorRef::rgb(Rgba { a: 255, ..p.color })));
         }
-    });
-    ui.data_mut(|d| d.insert_temp(id, hex));
+    }
     if ui.button("Eyedropper").on_hover_text("Click the slide to take the colour under the pointer").clicked() {
         crate::eyedropper::request(ui.ctx());
         ui.close();
@@ -487,9 +470,42 @@ pub fn arrow_step(ui: &Ui, field: egui::Id, step: f64) -> Option<f64> {
 }
 
 /// The number in a field's text ("120 px", "45%", "-3"), if there is one.
+/// The number typed into a field: a number with or without its unit, or arithmetic
+/// (`100/3`, `2*(4+1)`), see [`crate::field_math`].
 pub fn parse_num(text: &str) -> Option<f64> {
-    let num: String = text.chars().filter(|c| c.is_ascii_digit() || *c == '.' || *c == '-').collect();
-    num.parse::<f64>().ok()
+    crate::field_math::eval(text, None)
+}
+
+/// What typed text makes of a field's value `cur`: a number, arithmetic, or an edit relative to
+/// it (`+10`, `*2`, `/4`, and `50%` in a field that isn't a percentage).
+pub fn typed_value(text: &str, cur: Option<f64>, percent_field: bool) -> Option<f64> {
+    match crate::field_math::parse(text, percent_field)? {
+        crate::field_math::Typed::Value(v) => Some(v),
+        crate::field_math::Typed::Rel(r) => match cur {
+            Some(c) => r.apply(c),
+            None => match r {
+                crate::field_math::Rel::Add(v) => Some(v),
+                _ => None,
+            },
+        },
+    }
+}
+
+/// How far a scrub `dx` points long moves a value whose step is `step`: ten times as far with
+/// Shift, a tenth with Alt (from FigCraft).
+pub fn scrub_amount(dx: f64, step: f64, shift: bool, alt: bool) -> f64 {
+    dx * step
+        * match (shift, alt) {
+            (true, false) => 10.0,
+            (false, true) => 0.1,
+            _ => 1.0,
+        }
+}
+
+/// The value a scrub that began at `from` and has moved `amount` shows: whole steps of `quantum`
+/// away from where it began.
+pub fn scrubbed(from: f64, amount: f64, quantum: f64) -> f64 {
+    if quantum > 0.0 && quantum.is_finite() { crate::field_math::stepped(from, (amount / quantum).round(), quantum) } else { from }
 }
 
 pub fn fmt_num(v: f64, suffix: &str) -> String {
@@ -532,6 +548,35 @@ pub fn drop_button(ui: &mut Ui, label: &str, size: egui::Vec2, enabled: bool) ->
     r
 }
 
+/// A light checkerboard of `cell`-point squares in `rect`: what shows through transparency
+/// (from FigCraft).
+pub fn checker(painter: &egui::Painter, rect: Rect, cell: f32) {
+    painter.rect_filled(rect, CornerRadius::ZERO, Color32::WHITE);
+    if cell <= 0.5 {
+        return;
+    }
+    let nx = (rect.width() / cell).ceil() as i32;
+    let ny = (rect.height() / cell).ceil() as i32;
+    for y in 0..ny.min(400) {
+        for x in 0..nx.min(400) {
+            if (x + y) % 2 == 0 {
+                continue;
+            }
+            let r = Rect::from_min_size(pos2(rect.min.x + x as f32 * cell, rect.min.y + y as f32 * cell), vec2(cell, cell)).intersect(rect);
+            painter.rect_filled(r, CornerRadius::ZERO, Color32::from_gray(0xE6));
+        }
+    }
+}
+
+/// Where a dragged row or item would land: an accent line from `x0` to `x1` at `y`, with end
+/// ticks (from FigCraft).
+pub fn insertion_line(painter: &egui::Painter, x0: f32, x1: f32, y: f32, color: Color32) {
+    let s = Stroke::new(2.0, color);
+    painter.line_segment([pos2(x0, y), pos2(x1, y)], s);
+    painter.line_segment([pos2(x0, y - 4.0), pos2(x0, y + 4.0)], s);
+    painter.line_segment([pos2(x1, y - 4.0), pos2(x1, y + 4.0)], s);
+}
+
 #[cfg(test)]
 mod tests {
     #![allow(clippy::unwrap_used, clippy::expect_used)]
@@ -559,10 +604,13 @@ mod tests {
         });
         harness.get_by_label("Pick").click();
         harness.run();
-        harness.get_by_role(Role::TextInput).click();
+        // The picker's Hex field.
+        harness.query_all_by_role(Role::TextInput).next().expect("a hex field").click();
         harness.run();
         assert!(harness.query_by_role(Role::TextInput).is_some(), "the menu is still open after clicking the hex field");
-        harness.get_by_role(Role::TextInput).type_text("00FF00");
+        let cmd = egui::Modifiers { command: true, mac_cmd: true, ..Default::default() };
+        harness.key_press_modifiers(cmd, egui::Key::A);
+        harness.query_all_by_role(Role::TextInput).next().expect("a hex field").type_text("00FF00");
         harness.run();
         harness.key_press(egui::Key::Enter);
         harness.run();

@@ -28,7 +28,7 @@ fn harness() -> Harness<'static, SlideApp> {
 #[test]
 fn nothing_selected_shows_the_slide_layout_and_background() {
     let h = harness();
-    assert!(h.query_by_label("Slide").is_some());
+    assert!(h.query_all_by_label("Slide").count() >= 2, "the Slide section (and the Slide menu)");
     assert!(h.query_by_label("Background").is_some());
     assert!(h.query_by_label("Text").is_none());
 }
@@ -151,4 +151,28 @@ fn the_slide_section_resets_the_slide() {
     h.run_steps(3);
     let st = h.state().session.active().unwrap();
     assert!(st.current_slide().unwrap().shapes.iter().find(|s| s.id.0 == title).is_none_or(|s| s.xfrm.is_none()), "the title follows its layout");
+}
+
+#[test]
+fn a_theme_colour_is_picked_from_the_colour_square() {
+    let mut app = SlideApp::new(Session::with_new(), Services::default());
+    app.run("view.shell", json!({"shell": "canvas"})).unwrap();
+    app.run("view.slideMaster", json!({"master": 0, "layout": null})).unwrap();
+    let mut h = Harness::builder().with_size(egui::vec2(1400.0, 1600.0)).build_ui_state(
+        |ui, app: &mut SlideApp| {
+            app.logic(ui.ctx());
+            app.ui(ui);
+        },
+        app,
+    );
+    h.run_steps(3);
+    let accent =
+        |h: &Harness<'static, SlideApp>| h.state().session.active().unwrap().doc.masters[0].theme.colors.get(deckcraft_color::SchemeSlot::Accent1);
+    let before = accent(&h);
+    h.get_by_label("Theme color accent1").click();
+    h.run_steps(3);
+    assert!(h.query_by_label("Hue").is_some(), "the picker has a hue bar");
+    h.get_by_label("Saturation and brightness").click();
+    h.run_steps(3);
+    assert_ne!(accent(&h), before, "a click in the square picks a colour");
 }

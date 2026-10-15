@@ -20,6 +20,8 @@ mod display;
 #[cfg(any(target_os = "windows", test))]
 mod graphics;
 mod logging;
+#[cfg(target_os = "macos")]
+mod mac_menu;
 #[cfg(not(target_arch = "wasm32"))]
 mod pasteboard;
 
@@ -262,6 +264,12 @@ fn main() -> eframe::Result {
                 }
             }
             app.integrated_titlebar = cfg!(target_os = "macos");
+            // The menus in the macOS menu bar (else they're drawn in the window).
+            #[cfg(target_os = "macos")]
+            {
+                let clipboard: deckcraft_ui_egui::native_menu::ClipboardText = Box::new(|| arboard::Clipboard::new().ok()?.get_text().ok());
+                app.native_menu = mac_menu::install(&cc.egui_ctx, &app, clipboard);
+            }
             if let Some(port) = control_port {
                 let rx = control_server::start(port, cc.egui_ctx.clone());
                 app = app.with_control(rx);

@@ -539,16 +539,11 @@ fn slot_color(ui: &mut Ui, id: &str, c: deckcraft_color::Rgba, width: f32) -> Op
     sresp.widget_info(|| egui::WidgetInfo::labeled(egui::WidgetType::Button, true, format!("Theme color {id}")));
     let mut out = None;
     widgets::color_popup(&sresp).show(|ui| {
-        let pid = ui.id().with(("theme-slot-pick", id));
-        let (mut col, mut pending): (Color32, bool) = ui.data_mut(|d| d.get_temp(pid)).unwrap_or((theme::to_color32(c), false));
-        if egui::widgets::color_picker::color_picker_color32(ui, &mut col, egui::widgets::color_picker::Alpha::Opaque) {
-            pending = true;
+        if let Some(p) = crate::colorpick::picker(ui, ui.id().with(("theme-slot-pick", id)), c, false)
+            && p.done
+        {
+            out = Some(format!("#{:02X}{:02X}{:02X}", p.color.r, p.color.g, p.color.b));
         }
-        if pending && !ui.input(|i| i.pointer.any_down()) {
-            pending = false;
-            out = Some(format!("#{:02X}{:02X}{:02X}", col.r(), col.g(), col.b()));
-        }
-        ui.data_mut(|d| d.insert_temp(pid, (col, pending)));
     });
     let hex_rect = Rect::from_min_max(pos2(sw.max.x + 8.0, r.min.y), r.max).shrink2(vec2(0.0, 6.0));
     let tkey = ui.id().with(("theme-slot-hex", id));

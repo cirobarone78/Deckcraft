@@ -130,6 +130,16 @@ pub(crate) fn caption(ui: &mut Ui, text: &str) {
     ui.label(egui::RichText::new(text).font(theme::font(11.0)).color(t.caption));
 }
 
+/// A field's hover outline and focus ring (from FigCraft): drawn over field `r` after its contents.
+pub(crate) fn field_frame(ui: &Ui, r: Rect, focused: bool) {
+    let t = Tokens::get(ui.ctx());
+    if focused {
+        ui.painter().rect_stroke(r, CornerRadius::same(6), Stroke::new(1.5, t.focus), egui::StrokeKind::Inside);
+    } else if ui.rect_contains_pointer(r) {
+        ui.painter().rect_stroke(r, CornerRadius::same(6), Stroke::new(1.0, t.field_hover_border), egui::StrokeKind::Inside);
+    }
+}
+
 pub(crate) fn icon_button(ui: &mut Ui, icon: Icon, tip: &str, en: bool) -> egui::Response {
     let t = Tokens::get(ui.ctx());
     let (r, resp) = ui.allocate_exact_size(vec2(26.0, 26.0), if en { Sense::click() } else { Sense::hover() });
@@ -204,6 +214,23 @@ fn two(v: f64) -> f64 {
     (v * 100.0).round() / 100.0
 }
 
+/// A relative edit (`+10`, `*2`) typed into a Mixed field, for each layer's own value, with
+/// the field's range.
+#[derive(Clone, Copy)]
+struct MixedEdit(crate::field_math::Rel, f64, f64);
+
+fn mixed_edit_id(id: &str) -> egui::Id {
+    egui::Id::new(("props-mixed-edit", id.to_string()))
+}
+
+/// The relative edit typed into Mixed field `id` this frame, as a function of each layer's value.
+fn take_mixed_edit(ui: &Ui, id: &str) -> Option<impl Fn(f64) -> Option<f64>> {
+    let key = mixed_edit_id(id);
+    let MixedEdit(rel, lo, hi) = ui.data(|d| d.get_temp::<MixedEdit>(key))?;
+    ui.data_mut(|d| d.remove::<MixedEdit>(key));
+    Some(move |v: f64| rel.apply(v).map(|n| n.clamp(lo, hi.max(lo))))
+}
+
 /// `number` for a value the selected layers may not share (`None`: shown as Mixed, and typing a
 /// number sets it for all of them; scrubbing needs a value to start from).
 #[allow(clippy::too_many_arguments)]
@@ -233,14 +260,19 @@ fn number_or_mixed(
     let skey = ui.id().with((id, "scrubbing"));
     let mut out = None;
     let mut shown = value;
+    // Scrubbing: a step per point dragged, ten with ⇧, a tenth with ⌥ (landing on tenths then,
+    // whole steps otherwise), applied as one change when the drag ends.
+    let (shift, alt) = ui.input(|i| (i.modifiers.shift, i.modifiers.alt));
     if scrub.dragged() {
-        let acc = ui.data_mut(|d| d.get_temp::<f64>(skey)).unwrap_or(value) + scrub.drag_delta().x as f64 * step;
-        ui.data_mut(|d| d.insert_temp(skey, acc));
-        // Scrubbing lands on whole numbers; a typed value may have decimals.
-        shown = clamp(acc.round());
+        let (from, moved) = ui.data_mut(|d| d.get_temp::<(f64, f64)>(skey)).unwrap_or((value, 0.0));
+        let moved = moved + widgets::scrub_amount(scrub.drag_delta().x as f64, step, shift, alt);
+        ui.data_mut(|d| d.insert_temp(skey, (from, moved)));
+        shown = clamp(widgets::scrubbed(from, moved, if alt { step * 0.1 } else { step }));
     }
     if scrub.drag_stopped() {
-        out = ui.data_mut(|d| d.remove_temp::<f64>(skey)).map(|v| clamp(v.round()));
+        out = ui
+            .data_mut(|d| d.remove_temp::<(f64, f64)>(skey))
+            .map(|(from, moved)| clamp(widgets::scrubbed(from, moved, if alt { step * 0.1 } else { step })));
         if let Some(v) = out {
             shown = v;
         }
@@ -280,17 +312,25 @@ fn number_or_mixed(
             .interactive(en)
             .id(edit_id),
     );
+    field_frame(ui, r, te.has_focus());
     if te.has_focus() {
         ui.data_mut(|d| d.insert_temp(tkey, text.clone()));
     } else {
         ui.data_mut(|d| d.remove::<String>(tkey));
     }
-    if te.lost_focus()
-        && out.is_none()
-        && let Some(v) = widgets::parse_num(&text).map(clamp)
-        && (mixed || (v - value).abs() > 1e-9)
-    {
-        out = Some(v);
+    // Typed: a number, arithmetic (`100/3`), or an edit of the value there (`+10`, `*2`, `50%`);
+    // Escape puts the value back.
+    let escaped = ui.input(|i| i.key_pressed(egui::Key::Escape));
+    if te.lost_focus() && out.is_none() && !escaped {
+        let percent = suffix.trim() == "%";
+        if mixed && let Some(crate::field_math::Typed::Rel(rel)) = crate::field_math::parse(&text, percent) {
+            // On Mixed, a relative edit goes to each layer's own value (see `take_mixed_edit`).
+            ui.data_mut(|d| d.insert_temp(mixed_edit_id(id), MixedEdit(rel, lo, hi)));
+        } else if let Some(v) = widgets::typed_value(&text, (!mixed).then_some(value), percent).map(clamp)
+            && (mixed || (v - value).abs() > 1e-9)
+        {
+            out = Some(v);
+        }
     }
     out
 }
@@ -304,7 +344,10 @@ pub(crate) fn pick(ui: &mut Ui, id: &str, label: &str, width: f32, en: bool, add
 pub(crate) fn pick_wide(ui: &mut Ui, id: &str, label: &str, width: f32, menu_w: f32, en: bool, add: impl FnOnce(&mut Ui)) -> egui::Response {
     let t = Tokens::get(ui.ctx());
     let (r, resp) = ui.allocate_exact_size(vec2(width, ROW_H), if en { Sense::click() } else { Sense::hover() });
-    ui.painter().rect_filled(r, CornerRadius::same(6), if en && resp.hovered() { t.hover } else { t.field });
+    ui.painter().rect_filled(r, CornerRadius::same(6), t.field);
+    if en {
+        field_frame(ui, r, false);
+    }
     let text_r = Rect::from_min_max(pos2(r.min.x + 8.0, r.min.y), pos2(r.max.x - 22.0, r.max.y));
     ui.painter().with_clip_rect(text_r).text(
         pos2(text_r.min.x, r.center().y),
@@ -573,6 +616,19 @@ fn position(app: &mut SlideApp, ui: &mut Ui, x: &Xfrm, boxes: &[(ShapeId, Xfrm)]
             run(app, "shape.move", json!({"y": u.to_pt(v)}));
         }
     });
+    // `+10` or `*2` typed while the layers differ: each layer's own value changes.
+    for (id, key) in [("x", "x"), ("y", "y")] {
+        if let Some(f) = take_mixed_edit(ui, id) {
+            let cmds: Vec<(&str, Value)> = boxes
+                .iter()
+                .filter_map(|(sid, b)| {
+                    let cur = u.show(if key == "x" { b.x } else { b.y });
+                    f(cur).map(|v| ("shape.move", json!({"ids": [sid], key: u.to_pt(v)})))
+                })
+                .collect();
+            app.run_as_one("Move", cmds);
+        }
+    }
     caption(ui, "Rotation");
     ui.horizontal(|ui| {
         ui.spacing_mut().item_spacing.x = GAP;
@@ -768,6 +824,18 @@ fn layout(app: &mut SlideApp, ui: &mut Ui, sh: &Shape, x: &Xfrm, boxes: &[(Shape
         let h = if boxes.len() > 1 { common(boxes.iter().map(|b| two(u.show(b.1.h)))) } else { Some(two(u.show(x.h))) };
         if let Some(v) = number_or_mixed(ui, "h", Prefix::Text("H"), h, "", c, 1.0, SIZE, en) {
             run(app, "shape.resize", json!({"h": u.to_pt(v).max(1.0), "lockAspect": lock}));
+        }
+        for key in ["w", "h"] {
+            if let Some(f) = take_mixed_edit(ui, key) {
+                let cmds: Vec<(&str, Value)> = boxes
+                    .iter()
+                    .filter_map(|(sid, b)| {
+                        let cur = u.show(if key == "w" { b.w } else { b.h });
+                        f(cur).map(|v| ("shape.resize", json!({"ids": [sid], key: u.to_pt(v).max(1.0), "lockAspect": lock})))
+                    })
+                    .collect();
+                app.run_as_one("Size", cmds);
+            }
         }
         let t = Tokens::get(ui.ctx());
         let r = icon_button(ui, if lock { Icon::Lock } else { Icon::Unlock }, "Constrain proportions", en);
@@ -1233,6 +1301,7 @@ pub(crate) fn color_row(
                 .text_color(t.text)
                 .id(ui.id().with((id, "hexedit"))),
         );
+        field_frame(ui, r, te.has_focus());
         if te.has_focus() {
             ui.data_mut(|d| d.insert_temp(tkey, text.clone()));
         } else {

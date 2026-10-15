@@ -1201,6 +1201,10 @@ fn state(s: &mut Session, _p: &Value) -> Result<Value> {
         "numbering": matches!(pp.bullet, Some(Bullet::AutoNum { .. })),
         "lang": r.lang,
         "lineSpacing": serde_json::to_value(pp.line_spacing).unwrap_or_default(),
+        "indentLeft": pp.margin_left.unwrap_or(0.0),
+        "indentFirst": pp.indent.unwrap_or(0.0),
+        "spaceBefore": match pp.space_before { Some(Spacing::Pts(v)) => json!(v), _ => json!(0.0) },
+        "spaceAfter": match pp.space_after { Some(Spacing::Pts(v)) => json!(v), _ => json!(0.0) },
         "painter": s.painter.is_some(),
     }))
 }
