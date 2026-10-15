@@ -131,6 +131,7 @@ app's JSON control channel (`deckcraft --control PORT`).
 
 | Date | What landed |
 |---|---|
+| 2026-10-15 | Korean editing (#101): clicking or running a command while a syllable is composing no longer doubles it (안녕 + click + 나 was 안녕녕나); fonts named in Korean (맑은 고딕, 나눔고딕) are found; picking a Korean font sets the East Asian font; Ctrl+arrow, Ctrl+Backspace and double-click work on Korean words, not syllables; Korean words aren't flagged by English spelling; Hangul shapes with Korean forms |
 | 2026-10-15 | PDF export and rendering: `anchorCtr` centres the drawn text block — right-aligned text no longer ran past the box edge (#736) |
 | 2026-10-14 | connected MCP rejects unrelated, malformed, incomplete and oversized replies without replay; buffered unsolicited bytes force a fresh connection before sending (#718) |
 | 2026-10-14 | Empty bulleted and numbered paragraphs show gray markers while editing, including on first click and after Enter. Markers use the list style and stay out of slide shows and exports. |
