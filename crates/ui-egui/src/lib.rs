@@ -572,6 +572,10 @@ pub struct SlideApp {
     pub ui_fonts: uifonts::UiFonts,
     /// Thumbnail pane drag (slide index, current drop index).
     pub(crate) thumb_drag: Option<(usize, usize)>,
+    /// The drag in `thumb_drag` started in the sorter's grid (else in the slide list). Only the
+    /// view it started in places it: in the canvas layout's grid the slide list is on screen too,
+    /// and it used to move the slide to where the pointer's height fell in the list.
+    pub(crate) thumb_drag_in_grid: bool,
     /// Selection pane: folded groups, renaming, drag and drop.
     pub selpane: selpane::State,
     /// View › New Window: a second window on one presentation. `None` when it is closed.
@@ -658,6 +662,7 @@ impl SlideApp {
             notes_buf: (0, usize::MAX, notes::Draft::default()),
             ui_fonts: uifonts::UiFonts::default(),
             thumb_drag: None,
+            thumb_drag_in_grid: false,
             selpane: selpane::State::default(),
             doc_window: None,
             sorter: sorter::State::default(),

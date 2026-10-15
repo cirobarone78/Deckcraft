@@ -206,14 +206,17 @@ pub(crate) fn list(app: &mut SlideApp, ui: &mut Ui) {
         }
         if resp.drag_started() {
             app.thumb_drag = Some((i, i));
+            app.thumb_drag_in_grid = false;
         }
         resp.context_menu(|ui| slide_menu(app, ui, i));
     }
     if need_more {
         ui.ctx().request_repaint();
     }
-    // Drag reorder: insertion line.
-    if let Some((from, _)) = app.thumb_drag {
+    // Drag reorder: insertion line (for a drag started here, not in the grid).
+    if !app.thumb_drag_in_grid
+        && let Some((from, _)) = app.thumb_drag
+    {
         if let Some(pp) = ui.input(|i| i.pointer.interact_pos()) {
             let mut to = doc.slides.len();
             for (i, r) in &rects {
