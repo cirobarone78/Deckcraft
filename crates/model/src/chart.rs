@@ -396,6 +396,42 @@ pub struct Chart {
     /// The writer clears this before comparing modelled state. A native save does not store the bytes.
     #[serde(skip)]
     pub kept: ChartKept,
+    /// Where the data sits in the chart's workbook, and the data as read from there. Unlike
+    /// `raw`, edits keep it: an export compares the chart data with it to keep the workbook, or to
+    /// update only the cells that changed.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub source: Option<ChartSource>,
+}
+
+/// The data of an imported chart as its chart part cached it, with the workbook formulas each
+/// series reads it from.
+#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default, rename_all = "camelCase")]
+pub struct ChartSource {
+    /// The series read X values (scatter and bubble charts) rather than categories.
+    pub xy: bool,
+    pub categories: Vec<String>,
+    pub series: Vec<SeriesSource>,
+}
+
+/// One series of a [`ChartSource`]: its data as read, and its formulas (`Sheet1!$B$2:$B$5`).
+/// A formula is `None` when the chart part held the data as a literal, or had none.
+#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default, rename_all = "camelCase")]
+pub struct SeriesSource {
+    pub name: String,
+    pub values: Vec<Option<f64>>,
+    pub x_values: Vec<Option<f64>>,
+    pub sizes: Vec<Option<f64>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub name_ref: Option<String>,
+    /// Categories, or X values.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub categories_ref: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub values_ref: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub sizes_ref: Option<String>,
 }
 
 /// One relationship of a chart part, with the target string as it was written.
@@ -483,6 +519,7 @@ impl Default for Chart {
             bin_size: None,
             raw: None,
             kept: ChartKept::default(),
+            source: None,
         }
     }
 }

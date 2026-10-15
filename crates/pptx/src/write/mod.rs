@@ -5,6 +5,7 @@ pub(crate) mod dml;
 mod shapes;
 mod theme;
 mod timing;
+mod xlsx;
 
 use std::collections::HashMap;
 use std::sync::Arc;
@@ -212,9 +213,10 @@ impl Exp<'_> {
     }
 
     /// A chart part: the original one with its kept parts when the chart is unchanged, else one
-    /// written from the model with a workbook generated from the chart data (what PowerPoint's
-    /// Edit Data opens) when `workbook` is set. The plain-chart fallback of an Office 2016 chart
-    /// has none: the workbook belongs to the `chartEx` part.
+    /// written from the model with the workbook PowerPoint's Edit Data opens when `workbook` is
+    /// set: the chart's own, updated in place, while its data still fits where the workbook holds
+    /// it, else one generated from the chart data. The plain-chart fallback of an Office 2016
+    /// chart has none: the workbook belongs to the `chartEx` part.
     pub fn chart_rel(&mut self, o: &mut Out, c: &deckcraft_model::Chart, workbook: bool) -> String {
         self.n_chart += 1;
         let name = format!("ppt/charts/chart{}.xml", self.n_chart);
@@ -222,12 +224,20 @@ impl Exp<'_> {
             self.pkg.xml_part(&name, CT_CHART, xml);
             chart::write_kept(&mut self.pkg, &name, c, &mut self.n_kept);
         } else {
-            if !c.kept.parts.is_empty() {
-                log::warn!("pptx: chart changed; its workbook is written from the chart data");
-            }
             let mut co = Out::new(&name);
-            let workbook = if workbook { self.new_workbook(&mut co, c) } else { None };
-            self.pkg.xml_part(&name, CT_CHART, chart::build_chart_xml(c, workbook.as_deref()));
+            let xml = if workbook
+                && let Some(source) = chart::source(c)
+                && let Some(book) = self.original_workbook(&mut co, c, &source.edits)
+            {
+                chart::build_chart_xml(c, Some(&book), Some(&source.refs))
+            } else {
+                if workbook && (c.kept.workbook().is_some() || c.source.is_some()) {
+                    log::warn!("pptx: chart data no longer fits its workbook; writing a new workbook");
+                }
+                let book = if workbook { self.new_workbook(&mut co, c) } else { None };
+                chart::build_chart_xml(c, book.as_deref(), None)
+            };
+            self.pkg.xml_part(&name, CT_CHART, xml);
             self.pkg.rels(&name, &co.rels);
         }
         o.rels.add_new("chart", &opc::relative(&o.name, &name), false)
@@ -238,6 +248,32 @@ impl Exp<'_> {
         let data = chart::workbook_xlsx(c)?;
         let part = self.embedding("xlsx", chart::CT_XLSX, data);
         Some(co.rels.add("package", &opc::relative(&co.name, &part), false))
+    }
+    /// The relationship from chart part `co` to the chart's own workbook, with `edits` applied to
+    /// its cells. With no edits the workbook is written as it was read; a linked one stays a link.
+    /// `None` when there is none, or when the edits can't be applied in place.
+    fn original_workbook(&mut self, co: &mut Out, c: &deckcraft_model::Chart, edits: &[xlsx::Edit]) -> Option<String> {
+        let Some(part) = c.kept.workbook() else {
+            let link = c
+                .kept
+                .rels
+                .iter()
+                .find(|r| r.external && (r.rel_type.ends_with("/package") || r.rel_type.ends_with("/oleObject")))
+                .filter(|_| edits.is_empty())?;
+            return Some(co.rels.add("oleObject", &link.target, true));
+        };
+        let is_xlsx = part.content_type == chart::CT_XLSX || part.name.to_ascii_lowercase().ends_with(".xlsx");
+        let data = if edits.is_empty() {
+            part.bytes.clone()
+        } else if is_xlsx {
+            xlsx::patch(&part.bytes, edits)?
+        } else {
+            return None;
+        };
+        let (kind, ext, ct) = if is_xlsx { ("package", "xlsx", chart::CT_XLSX) } else { ("oleObject", "bin", part.content_type.as_str()) };
+        let ct = ct.to_string();
+        let name = self.embedding(ext, &ct, data);
+        Some(co.rels.add(kind, &opc::relative(&co.name, &name), false))
     }
     /// A new part under `ppt/embeddings/`.
     fn embedding(&mut self, ext: &str, content_type: &str, data: Vec<u8>) -> String {
