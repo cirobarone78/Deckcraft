@@ -144,6 +144,7 @@ fn contextual(app: &SlideApp) -> Vec<&'static str> {
     }
     if shapes.iter().any(|s| matches!(s.kind, ShapeKind::Chart(_))) {
         v.push("Chart Design");
+        v.push("Chart Format");
     }
     if shapes.iter().any(|s| matches!(s.kind, ShapeKind::Media(_))) {
         v.push("Playback");
@@ -241,6 +242,7 @@ pub fn show(app: &mut SlideApp, ui: &mut Ui) {
             "Layout" => table_layout(app, ui),
             "Chart Design" => chart_design(app, ui),
             "SmartArt Design" => smartart_design(app, ui),
+            "Chart Format" => crate::chart_pane::format_tab(app, ui),
             "Playback" => playback(app, ui),
             "Slide Master" => slide_master(app, ui),
             "Handout Master" => handout_master(app, ui),
@@ -3062,6 +3064,7 @@ fn chart_design(app: &mut SlideApp, ui: &mut Ui) {
         });
         big(app, ui, Icon::EditData, "Edit\nData", "app.dialog", json!({"id": "chartData"}));
     });
+    crate::chart_pane::design_groups(app, ui);
     arrange_group(app, ui);
 }
 

@@ -262,7 +262,7 @@ fn fixed(toks: &[Tok], first: usize, last: usize, v: f64, sep: char, dec: char) 
     if !x.is_finite() {
         x = 0.0;
     }
-    let s = format!("{x:.max_frac$}");
+    let s = format!("{:.max_frac$}", round_half_away(x, max_frac));
     let (ip, fp) = s.split_once('.').unwrap_or((s.as_str(), ""));
     let mut fp = fp.to_string();
     while fp.len() > min_frac && fp.ends_with('0') {
@@ -278,6 +278,14 @@ fn fixed(toks: &[Tok], first: usize, last: usize, v: f64, sep: char, dec: char) 
     let before = lits(toks.get(..first).unwrap_or(&[]));
     let after = lits(toks.get(last + 1..).unwrap_or(&[]));
     format!("{before}{num}{after}")
+}
+
+/// `x` rounded to `digits` decimals, halves away from zero as spreadsheets do (`format!` rounds
+/// them to even).
+fn round_half_away(x: f64, digits: usize) -> f64 {
+    let scale = 10f64.powi(digits.min(15) as i32);
+    let r = (x * scale).round() / scale;
+    if r.is_finite() { r } else { x }
 }
 
 #[cfg(test)]
@@ -312,6 +320,20 @@ mod tests {
         assert_eq!(format("0;0", -3.0, None), "3");
         assert_eq!(format("0", -3.0, None), "-3");
         assert_eq!(format("\"x\"0", 5.0, None), "x5");
+    }
+
+    #[test]
+    fn spreadsheet_rounding_and_sections() {
+        assert_eq!(format("0.00E+00", 1500.0, None), "1.50E+03");
+        assert_eq!(format("0.0E+00", 0.00042, Some("de-DE")), "4,2E-04");
+        assert_eq!(format("0E+0", -2.0e7, None), "-2E+7");
+        assert_eq!(format("#,##0", 1234.5, None), "1,235");
+        assert_eq!(format("0", 2.5, None), "3");
+        assert_eq!(format("$#,##0", -12.0, None), "-$12");
+        assert_eq!(format("0;(0)", -12.0, None), "(12)");
+        assert_eq!(format("0.0 \"pts\"", 3.5, None), "3.5 pts");
+        assert_eq!(format("#,##0,,\"M\"", 2_600_000.0, None), "3M");
+        assert_eq!(format("General", 1.0 / 3.0, None), "0.3333333333");
     }
 
     #[test]

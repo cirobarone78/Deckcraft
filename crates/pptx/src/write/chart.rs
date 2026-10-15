@@ -508,11 +508,12 @@ fn series(w: &mut W, c: &Chart, s: &Series, i: usize, r: &Refs, kind: ChartType,
             None => marker(w, "none", None),
         },
         Group::Line | Group::Scatter | Group::Radar => {
-            // The series' own symbol, the type's default, or none for the types without markers.
+            // The type says whether markers show, the series which symbol (the type's default
+            // when it picks none).
             let sym = match s.marker.as_deref() {
+                _ if !kind.markers() => Some("none"),
                 Some(m) if !m.is_empty() && m != "auto" => Some(m),
-                _ if kind.markers() => None,
-                _ => Some("none"),
+                _ => None,
             };
             // Markers without a line: their colour is spelled out, as applications that take a
             // marker's colour from the series line would draw them all alike.
@@ -525,7 +526,7 @@ fn series(w: &mut W, c: &Chart, s: &Series, i: usize, r: &Refs, kind: ChartType,
     let vary = move |k: usize| Fill::solid(deckcraft_model::chart_format::palette_color(&c.palette, k, points));
     format::points(w, s, g, (palette && vary_points).then_some(&vary as &dyn Fn(usize) -> Fill));
     if let Some(d) = s.data_labels {
-        format::dlbls(w, &c.format.labels, d, g, kind.stacked());
+        format::dlbls(w, &c.format.labels, s.number_format.as_deref(), d, g, kind.stacked());
     }
     // After labels, before the category and value caches (ECMA-376 series content order).
     if matches!(g, Group::Bar | Group::Line | Group::Area | Group::Scatter) {
@@ -636,7 +637,8 @@ const AX_VAL2: u32 = 50_004;
 const AX_SER: u32 = 50_005;
 
 /// The axes of plot groups of kind `g` using `ids`, with the chart's axis formatting;
-/// `secondary` ones sit on the right, their category axis hidden, unformatted.
+/// `secondary` ones sit on the right, their category axis hidden, the value axis with the
+/// secondary axis' bounds, unit, number format and deletion.
 fn axes(w: &mut W, c: &Chart, g: Group, ids: AxIds, secondary: bool) {
     let horizontal = c.kind.horizontal() && g == Group::Bar;
     let (cat_pos, val_pos) = match (horizontal, secondary) {
@@ -647,16 +649,21 @@ fn axes(w: &mut W, c: &Chart, g: Group, ids: AxIds, secondary: bool) {
     };
     let xy = g == Group::Scatter || g == Group::Bubble;
     let hidden = AxisFormat { hidden: true, ..Default::default() };
-    // Main's own fields for what both hold: reversed categories, the value axis' log base,
-    // minor gridlines and number format.
-    let cat_fmt = AxisFormat { reverse: c.format.cat_axis.reverse || (c.cat_reversed && !xy), ..c.format.cat_axis.clone() };
-    let val_fmt = AxisFormat {
-        log_base: c.y_log_base.or(c.format.val_axis.log_base),
-        minor_gridlines: c.minor_gridlines || c.format.val_axis.minor_gridlines,
-        num_fmt: c.y_format.clone().filter(|f| !f.is_empty()).or_else(|| c.format.val_axis.num_fmt.clone()),
-        ..c.format.val_axis.clone()
+    // Main's own fields where it has them: reversed categories, and the value axes' bounds, units,
+    // log base, minor gridlines, number format and visibility.
+    let cat_fmt = AxisFormat { reverse: if xy { c.format.cat_axis.reverse } else { c.cat_reversed }, ..c.format.cat_axis.clone() };
+    let val = if secondary {
+        AxisFormat { crosses: Some(Crosses::Max), hidden: c.y2_hidden, major_unit: c.y2_major, num_fmt: c.y2_format.clone(), ..Default::default() }
+    } else {
+        AxisFormat {
+            hidden: c.y_hidden,
+            major_unit: c.y_major,
+            num_fmt: c.y_format.clone(),
+            log_base: c.y_log_base,
+            minor_gridlines: c.minor_gridlines,
+            ..c.format.val_axis.clone()
+        }
     };
-    let at_max = AxisFormat { crosses: Some(Crosses::Max), ..Default::default() };
     format::axis(
         w,
         &format::AxisSpec {
@@ -667,10 +674,11 @@ fn axes(w: &mut W, c: &Chart, g: Group, ids: AxIds, secondary: bool) {
             fmt: if secondary { &hidden } else { &cat_fmt },
             major_gridlines: !secondary && c.format.cat_axis.major_gridlines,
             title: c.axis_titles.0.as_deref().filter(|_| !secondary),
-            min: None,
-            max: None,
+            min: if xy { c.format.cat_axis.min } else { None },
+            max: if xy { c.format.cat_axis.max } else { None },
             num_fmt: "General",
-            major_tick: if xy { "out" } else { "none" },
+            // No tick marks unless the axis sets them, as it reads back.
+            major_tick: "none",
             cross_between: xy.then_some("midCat"),
         },
     );
@@ -681,11 +689,11 @@ fn axes(w: &mut W, c: &Chart, g: Group, ids: AxIds, secondary: bool) {
             id: ids.val,
             cross: ids.cat,
             pos: val_pos,
-            fmt: if secondary { &at_max } else { &val_fmt },
+            fmt: &val,
             major_gridlines: c.gridlines && !secondary,
             title: c.axis_titles.1.as_deref().filter(|_| !secondary),
-            min: if secondary { None } else { c.y_min },
-            max: if secondary { None } else { c.y_max },
+            min: if secondary { c.y2_min } else { c.y_min },
+            max: if secondary { c.y2_max } else { c.y_max },
             num_fmt: if c.kind.percent() { "0%" } else { "General" },
             major_tick: "none",
             cross_between: Some(if g == Group::Area || g == Group::Scatter { "midCat" } else { "between" }),
@@ -747,7 +755,10 @@ fn plot_group(w: &mut W, c: &Chart, kind: ChartType, list: &[(usize, &Series)], 
         series(w, c, s, *i, refs.get(*i).unwrap_or(&Refs::default()), kind, g, k == last);
     }
     if c.data_labels {
-        format::dlbls(w, &c.format.labels, true, g, kind.stacked());
+        // The labels' number format when the group's series share one.
+        let first = list.first().and_then(|(_, s)| s.number_format.as_deref());
+        let shared = first.filter(|f| list.iter().all(|(_, s)| s.number_format.as_deref() == Some(*f)));
+        format::dlbls(w, &c.format.labels, shared, true, g, kind.stacked());
     }
     match g {
         Group::Bar => {
@@ -998,13 +1009,17 @@ pub fn build_chart_xml(c: &Chart, workbook: Option<&str>, refs: Option<&[Refs]>)
     let mut w = W::new();
     w.open("c:chartSpace", A::new().a("xmlns:c", NS_C).a("xmlns:a", NS_A).a("xmlns:r", NS_R));
     w.val("c:date1904", 0);
+    if let Some(l) = c.lang.as_deref().filter(|l| !l.trim().is_empty()) {
+        w.val("c:lang", l);
+    }
     w.val("c:roundedCorners", if c.format.rounded_corners { 1 } else { 0 });
     w.val("c:style", c.style.clamp(1, 48));
     w.open0("c:chart");
     match &c.title {
         Some(t) => {
             let f = &c.format;
-            format::title(&mut w, t, &f.title_text, f.title_overlay, f.title_fill.as_ref(), f.title_line.as_ref());
+            let tt = deckcraft_model::chart_format::ChartText { size: c.title_size, ..f.title_text.clone() };
+            format::title(&mut w, t, &tt, f.title_overlay, f.title_fill.as_ref(), f.title_line.as_ref());
             w.val("c:autoTitleDeleted", 0);
         }
         None => w.val("c:autoTitleDeleted", 1),
@@ -1025,7 +1040,8 @@ pub fn build_chart_xml(c: &Chart, workbook: Option<&str>, refs: Option<&[Refs]>)
     w.val("c:dispBlanksAs", "gap");
     w.close("c:chart");
     sp_pr(&mut w, c.chart_fill.as_ref(), c.format.chart_line.as_ref());
-    let text = c.format.text.over(&deckcraft_model::chart_format::ChartText { color: c.text_color.clone(), ..Default::default() });
+    let text = deckcraft_model::chart_format::ChartText { size: c.text_size, ..c.format.text.clone() }
+        .over(&deckcraft_model::chart_format::ChartText { color: c.text_color.clone(), ..Default::default() });
     format::tx_pr(&mut w, &text, None);
     if let Some(rid) = workbook {
         w.open("c:externalData", A::new().a("r:id", rid));
