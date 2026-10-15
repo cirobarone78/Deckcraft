@@ -2,6 +2,7 @@
 
 use serde::{Deserialize, Serialize};
 
+pub use crate::chart_format::{ChartFormat, SeriesFormat};
 use crate::style::{ColorRef, Fill, Line};
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
@@ -705,6 +706,9 @@ pub struct Series {
     /// `c:errBars` on the values (y bars; a bar chart's run along its value axis).
     #[serde(skip_serializing_if = "Option::is_none")]
     pub error_bars: Option<ErrorBars>,
+    /// Marker size and colours, invert if negative, pie explosion.
+    #[serde(skip_serializing_if = "SeriesFormat::is_default")]
+    pub format: SeriesFormat,
 }
 
 /// Error bars (`c:errBars`): how far each point's bar reaches below and above it.
@@ -849,6 +853,9 @@ pub struct Chart {
     /// A histogram's bin width (`cx:binSize`).
     #[serde(skip_serializing_if = "Option::is_none")]
     pub bin_size: Option<f64>,
+    /// Fonts, element boxes, axes, gridlines and data label options.
+    #[serde(skip_serializing_if = "ChartFormat::is_default")]
+    pub format: ChartFormat,
     /// Original chart XML part kept for round-trip of unmodelled options.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub raw: Option<String>,
@@ -990,6 +997,7 @@ impl Default for Chart {
             up_down_bars: false,
             bin_count: None,
             bin_size: None,
+            format: ChartFormat::default(),
             raw: None,
             kept: ChartKept::default(),
             source: None,

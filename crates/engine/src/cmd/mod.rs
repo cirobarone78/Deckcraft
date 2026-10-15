@@ -4,6 +4,7 @@ pub mod animation;
 pub mod arrange;
 pub mod artistic;
 pub mod background;
+pub mod chart_format;
 pub mod chartdata;
 pub mod compress;
 pub mod design;
@@ -170,6 +171,7 @@ pub fn command_specs() -> &'static [CommandSpec] {
         v.extend(insert::specs());
         v.extend(smartart::specs());
         v.extend(chartdata::specs());
+        v.extend(chart_format::specs());
         v.extend(shape::specs());
         v.extend(background::specs());
         v.extend(picture_style::specs());
