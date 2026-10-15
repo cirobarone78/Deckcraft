@@ -414,6 +414,12 @@ pub(crate) fn insert_text(s: &mut Session, text: &str, props: Option<RunProps>) 
         let (a, b) = t.ordered();
         let at = ed::delete(body, a, b);
         let props = props.clone().or_else(|| if a != b { Some(ed::props_at(body, at)) } else { unlinked_at_link_end(body, at) });
+        // Typed Hebrew or Arabic carries its language (see `typed_lang`).
+        let base = props.clone().unwrap_or_else(|| ed::props_at(body, at));
+        let props = match typed_lang(&text, &base) {
+            Some(lang) => Some(RunProps { lang, ..base }),
+            None => props,
+        };
         let c = ed::insert(body, at, &text, props);
         t.anchor = c;
         t.caret = c;
@@ -428,39 +434,60 @@ pub(crate) fn insert_text(s: &mut Session, text: &str, props: Option<RunProps>) 
     Ok(json!({"caret": [pos.0, pos.1]}))
 }
 
-/// Per outline level (0..=8), whether shape `id` on the current slide already resolves an
-/// alignment for its paragraphs (its own list style, the layout's or the master's). All `false`
-/// when the shape can't be resolved (notes, a shape that is gone).
-fn inherited_aligns(s: &Session, id: ShapeId) -> [bool; 9] {
-    let mut out = [false; 9];
+/// Per outline level (0..=8), the alignment shape `id` on the current slide already resolves for
+/// its paragraphs (its own list style, the layout's or the master's), if any. All `None` when the
+/// shape can't be resolved (notes, a shape that is gone).
+fn inherited_aligns(s: &Session, id: ShapeId) -> [Option<Align>; 9] {
+    let mut out = [None; 9];
     let Ok(st) = s.doc() else { return out };
     let Some(sh) = st.shape(id) else { return out };
     let Some(ctx) = ctx_for(&st.doc, &st.selection) else { return out };
     for (lvl, set) in out.iter_mut().enumerate() {
         let para = deckcraft_model::text::Paragraph { level: lvl as u8, ..Default::default() };
-        *set = resolve::para(&ctx, sh, &para).align.is_some();
+        *set = resolve::para(&ctx, sh, &para).align;
     }
     out
 }
 
 /// The aligns [`inherited_aligns`] gives for the text being edited (none for notes).
-fn inherited_aligns_for_edit(s: &Session) -> [bool; 9] {
+fn inherited_aligns_for_edit(s: &Session) -> [Option<Align>; 9] {
     match s.doc().ok().and_then(|st| st.selection.text.clone()) {
         Some(t) if !t.notes => inherited_aligns(s, t.shape),
-        _ => [false; 9],
+        _ => [None; 9],
     }
 }
 
 /// A paragraph with no direction of its own whose first strong character is right-to-left
-/// (Arabic, Hebrew, Kurdish…) becomes right-to-left, and right-aligned when nothing (the
-/// paragraph or what it inherits, `inherited`) sets its alignment.
-fn promote_rtl_if_needed(para: &mut deckcraft_model::text::Paragraph, inherited: &[bool; 9]) {
+/// (Arabic, Hebrew, Kurdish…) becomes right-to-left, and right-aligned when its alignment is the
+/// start edge: none of its own and none or left inherited (`inherited`, as a text box takes from
+/// the master), mirrored as Right-to-Left Text Direction does. A centred or justified alignment it
+/// inherits (a title) stays.
+fn promote_rtl_if_needed(para: &mut deckcraft_model::text::Paragraph, inherited: &[Option<Align>; 9]) {
     if para.props.rtl.is_none() && deckcraft_model::bidi::first_strong_is_rtl(&para.text()) {
         para.props.rtl = Some(true);
-        let inherits_align = inherited.get(usize::from(para.level)).copied().unwrap_or(false);
-        if para.props.align.is_none() && !inherits_align {
+        let inherited = inherited.get(usize::from(para.level)).copied().flatten();
+        if para.props.align.is_none() && matches!(inherited, None | Some(Align::Left)) {
             para.props.align = Some(Align::Right);
         }
+    }
+}
+
+/// The language typed text carries: Hebrew or Arabic when its first strong character is, as
+/// PowerPoint tags text typed with a right-to-left keyboard. Neutral characters and digits next
+/// to it then resolve right to left (`deckcraft-text`'s language-aware levels): without the tag
+/// "לקוחות חדשים: 340" showed its colon and number on the wrong sides. Latin text typed into a
+/// right-to-left run drops that run's language (`Some(None)`); `None` leaves `props` as they are.
+fn typed_lang(text: &str, props: &RunProps) -> Option<Option<String>> {
+    let rtl_lang =
+        |lang: &str| matches!(lang.split(['-', '_']).next().unwrap_or("").to_ascii_lowercase().as_str(), "he" | "iw" | "ar" | "fa" | "ur" | "yi");
+    let current_rtl = props.lang.as_deref().is_some_and(rtl_lang);
+    let first = text.chars().find(|c| c.is_alphabetic())?;
+    match u32::from(first) {
+        0x0590..=0x05FF | 0xFB1D..=0xFB4F if !current_rtl => Some(Some("he-IL".into())),
+        0x0600..=0x06FF | 0x0750..=0x077F | 0x08A0..=0x08FF | 0xFB50..=0xFDFF | 0xFE70..=0xFEFF if !current_rtl => Some(Some("ar-SA".into())),
+        0x0590..=0x08FF | 0xFB1D..=0xFEFF => None,
+        _ if current_rtl => Some(None),
+        _ => None,
     }
 }
 
@@ -1421,14 +1448,87 @@ mod rtl_promote_tests {
     #[test]
     fn right_aligns_only_when_no_alignment_is_set_or_inherited() {
         let mut p = para("مرحبا");
-        promote_rtl_if_needed(&mut p, &[false; 9]);
+        promote_rtl_if_needed(&mut p, &[None; 9]);
         assert_eq!((p.props.rtl, p.props.align), (Some(true), Some(Align::Right)));
+        // A centred title keeps its centre.
         let mut p = para("مرحبا");
-        promote_rtl_if_needed(&mut p, &[true; 9]);
+        promote_rtl_if_needed(&mut p, &[Some(Align::Center); 9]);
         assert_eq!((p.props.rtl, p.props.align), (Some(true), None));
+        // The start edge a text box inherits from the master is mirrored to the right.
+        let mut p = para("שלום");
+        promote_rtl_if_needed(&mut p, &[Some(Align::Left); 9]);
+        assert_eq!((p.props.rtl, p.props.align), (Some(true), Some(Align::Right)));
         let mut p = para("Hello مرحبا");
-        promote_rtl_if_needed(&mut p, &[false; 9]);
+        promote_rtl_if_needed(&mut p, &[None; 9]);
         assert_eq!((p.props.rtl, p.props.align), (None, None));
+    }
+}
+
+#[cfg(test)]
+mod typed_rtl_tests {
+    #![allow(clippy::unwrap_used)]
+
+    use deckcraft_model::text::Align;
+    use serde_json::json;
+
+    use crate::Session;
+
+    /// The first text box's paragraphs: (text, direction, alignment, first run's language).
+    fn paragraphs(s: &Session) -> Vec<(String, Option<bool>, Option<Align>, Option<String>)> {
+        let st = s.doc().unwrap();
+        let sh = st.current_slide().unwrap().shapes.iter().find(|sh| sh.text.is_some()).unwrap();
+        sh.text
+            .as_ref()
+            .unwrap()
+            .paragraphs
+            .iter()
+            .map(|p| (p.text(), p.props.rtl, p.props.align, p.runs.first().and_then(|r| r.props.lang.clone())))
+            .collect()
+    }
+
+    #[test]
+    fn typing_hebrew_in_a_text_box_reads_right_to_left_from_the_right() {
+        let mut s = Session::with_new();
+        s.execute("slide.new", &json!({"layout": "blank"})).unwrap();
+        s.execute("insert.textBox", &json!({"rect": [80, 80, 600, 80]})).unwrap();
+        s.execute("text.edit", &json!({})).unwrap();
+        for c in "לקוחות חדשים: 340".chars() {
+            s.execute("text.insert", &json!({"text": c.to_string()})).unwrap();
+        }
+        let p = paragraphs(&s);
+        let (text, rtl, align, lang) = p.first().unwrap();
+        assert_eq!(text, "לקוחות חדשים: 340");
+        assert_eq!((*rtl, *align), (Some(true), Some(Align::Right)), "right to left, at the right edge");
+        assert_eq!(lang.as_deref(), Some("he-IL"), "typed Hebrew is tagged Hebrew, as PowerPoint tags it");
+        // Every run, digits and colon included, carries the language, so they read right to left.
+        let st = s.doc().unwrap();
+        let sh = st.current_slide().unwrap().shapes.iter().find(|sh| sh.text.is_some()).unwrap();
+        let runs = &sh.text.as_ref().unwrap().paragraphs[0].runs;
+        assert!(runs.iter().all(|r| r.props.lang.as_deref() == Some("he-IL")), "{runs:?}");
+    }
+
+    #[test]
+    fn latin_typed_into_hebrew_drops_the_hebrew_tag_and_latin_text_is_untouched() {
+        let mut s = Session::with_new();
+        s.execute("slide.new", &json!({"layout": "blank"})).unwrap();
+        s.execute("insert.textBox", &json!({"rect": [80, 80, 600, 80]})).unwrap();
+        s.execute("text.edit", &json!({})).unwrap();
+        s.execute("text.insert", &json!({"text": "שלום "})).unwrap();
+        s.execute("text.insert", &json!({"text": "PDF"})).unwrap();
+        let st = s.doc().unwrap();
+        let sh = st.current_slide().unwrap().shapes.iter().find(|sh| sh.text.is_some()).unwrap();
+        let runs = &sh.text.as_ref().unwrap().paragraphs[0].runs;
+        let lang_of = |t: &str| runs.iter().find(|r| r.content().contains(t)).and_then(|r| r.props.lang.clone());
+        assert_eq!(lang_of("שלום").as_deref(), Some("he-IL"));
+        assert_eq!(lang_of("PDF"), None, "Latin typed after it is not tagged Hebrew");
+        // A box typed in English keeps no language and its left alignment.
+        let mut s = Session::with_new();
+        s.execute("slide.new", &json!({"layout": "blank"})).unwrap();
+        s.execute("insert.textBox", &json!({"rect": [80, 80, 600, 80]})).unwrap();
+        s.execute("text.edit", &json!({})).unwrap();
+        s.execute("text.insert", &json!({"text": "Hello 2026"})).unwrap();
+        let p = paragraphs(&s);
+        assert_eq!((p[0].1, p[0].2, p[0].3.clone()), (None, None, None));
     }
 }
 

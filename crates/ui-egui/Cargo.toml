@@ -19,6 +19,9 @@ deckcraft-anim = { workspace = true }
 deckcraft-engine = { workspace = true }
 deckcraft-media = { workspace = true }
 egui = { workspace = true }
+# Right-to-left text in the interface's text fields (`bidi.rs`).
+skrifa = { workspace = true }
+unicode-bidi = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
 log = { workspace = true }

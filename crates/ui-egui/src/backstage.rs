@@ -606,8 +606,16 @@ fn recent_list(app: &mut SlideApp, ui: &mut Ui, query: &str, limit: usize) {
         {
             let p = ui.painter();
             icons::paint(p, Rect::from_center_size(pos2(rect.left() + 20.0, rect.center().y), vec2(22.0, 22.0)), Icon::Slide, ink, false);
-            p.text(pos2(rect.left() + 44.0, rect.center().y - 8.0), Align2::LEFT_CENTER, &name, theme::font(13.0), ink);
-            p.text(pos2(rect.left() + 44.0, rect.center().y + 9.0), Align2::LEFT_CENTER, &folder, theme::font(11.0), t.text_dim);
+            // As a file manager shows them: a Hebrew name reads from the right, its extension at the end.
+            crate::bidi::paint_file_name(p, pos2(rect.left() + 44.0, rect.center().y - 8.0), Align2::LEFT_CENTER, &name, theme::font(13.0), ink);
+            crate::bidi::paint_file_name(
+                p,
+                pos2(rect.left() + 44.0, rect.center().y + 9.0),
+                Align2::LEFT_CENTER,
+                &folder,
+                theme::font(11.0),
+                t.text_dim,
+            );
             // A missing file says so before it is clicked (#172).
             if missing {
                 p.text(pos2(visible_right - 82.0, rect.center().y), Align2::RIGHT_CENTER, "(missing)", theme::font(11.0), t.text_dim);
@@ -875,7 +883,8 @@ fn info(app: &mut SlideApp, ui: &mut Ui, bs: &mut Backstage) {
                     let Some(draft) = bs.props.get_mut(i) else { continue };
                     let l = ui.label(RichText::new(*label).color(t.text_dim));
                     let id = ui.make_persistent_id(("backstage_prop", *key));
-                    let resp = ui.add(egui::TextEdit::singleline(draft).id(id).hint_text(*hint).desired_width(300.0)).labelled_by(l.id);
+                    crate::bidi::rtl_arrows(ui, Some(id), draft);
+                    let resp = ui.add(crate::bidi::singleline(draft).id(id).hint_text(*hint).desired_width(300.0)).labelled_by(l.id);
                     if resp.lost_focus() && *draft != saved {
                         // Commit first: a click on another field takes the focus before this one is drawn.
                         let mut p = serde_json::Map::new();

@@ -1,6 +1,6 @@
 # Localization parity with PowerPoint
 
-> **Last reviewed:** 2026-10-14 · **Last updated:** 2026-10-14 · **Change:** minor (IME composition underlined in table cells; previous: minor, IME composition and CJK interface text, #101; previous: major, created) · **Target:** Microsoft PowerPoint for Mac 16.113 (Microsoft 365)
+> **Last reviewed:** 2026-10-14 · **Last updated:** 2026-10-15 · **Change:** minor (right-to-left text in the interface's text fields and metafile pictures; previous: IME composition underlined in table cells; previous: minor, IME composition and CJK interface text, #101; previous: major, created) · **Target:** Microsoft PowerPoint for Mac 16.113 (Microsoft 365)
 
 DeckCraft's interface is English only today: strings are literals in the UI and engine code, with
 no catalog and no language switch. Requests: #15 (follow the system language), #30 and PR #34
@@ -14,7 +14,19 @@ support partly there), **55–90 h** to parity plus native-speaker review.
   including the 226 command labels). A catalog will refine the count; until then percentages are
   against this figure.
 - **Script support** is about slide text (what users type and import), separately from the UI:
-  bidi and shaping live in `crates/text` (UAX #9, HarfRust, UAX #14 line breaking).
+  bidi and shaping live in `crates/text` (UAX #9, HarfRust, UAX #14 line breaking). The
+  interface's own text fields (speaker notes, the outline, comments, names, alt text, document
+  properties) lay Hebrew and Arabic out in display order through `crates/ui-egui/src/bidi.rs`:
+  words, numbers and Latin in their places, a right-to-left notes paragraph against the right
+  edge with its bullet there, lines wrapped between words in reading order, and the caret,
+  clicks and Backspace following the text (a vendored epaint with two patches); the Left and
+  Right arrows move the way they point. EMF/WMF pictures decode Hebrew (charset 177) and Arabic
+  (178) text and draw right-to-left strings in display order. Home › Paragraph has Office's
+  Right-to-Left and Left-to-Right buttons (`format.rtl`), pressed as the paragraph reads. Typed
+  Hebrew and Arabic are tagged `he-IL` / `ar-SA` as PowerPoint tags text typed with those
+  keyboards, so digits and punctuation next to them resolve right to left, and a paragraph
+  started in them mirrors an inherited left alignment to the right (a centred title stays). Search
+  fields and the command palette still use plain fields.
 - **PowerPoint's languages:** `Contents/Resources/*.lproj` in PowerPoint 16.113.4: ar, cs, da, de,
   el, en, en_GB, es, es_MX, fi, fr, fr_CA, he, hu, id, it, ja, ko, nl, no, pl, pt (Brazil), pt_PT,
   ru, sk, sv, th, tr, zh_CN, zh_TW (26 languages). PowerPoint for **Mac** has no Hindi or Vietnamese
@@ -58,6 +70,8 @@ common misspellings (`crates/engine/src/cmd/review.rs`); see [gaps.md](gaps.md#p
 
 | Date | Change | Summary |
 |---|---|---|
+| 2026-10-15 | minor | Recent presentations and the title bar show Hebrew and Arabic file names as a file manager does: the words read from the right, the extension at the end |
+| 2026-10-15 | minor | Right-to-left text in the interface's text fields (notes, outline, comments, names, alt text, properties) and in EMF/WMF pictures (Windows-1255 and -1256 text, display order) |
 | 2026-10-14 | minor | IME composition in a table cell is underlined in place; the candidate window sits on that cell's caret |
 | 2026-10-12 | minor | IME composition for Chinese, Japanese and Korean, and interface text in any installed script (#101) |
 | 2026-10-10 | major | Created: twelve-language table, ~1,050 UI strings measured, PowerPoint for Mac's 26 languages from its bundle |

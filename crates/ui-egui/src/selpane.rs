@@ -189,7 +189,10 @@ pub fn show(app: &mut SlideApp, ui: &mut Ui) {
         let renaming = app.selpane.renaming.as_ref().filter(|(id, _)| *id == row.id).map(|(_, s)| s.clone());
         if let Some(mut buf) = renaming {
             let edit_id = ui.id().with(("rename", row.id));
-            let out = ui.put(name_rect, egui::TextEdit::singleline(&mut buf).id(edit_id).font(theme::font(12.5)).margin(vec2(2.0, 1.0)));
+            crate::bidi::rtl_arrows(ui, Some(edit_id), &buf);
+            let out = crate::bidi::with_font(ui, theme::font(12.5), |ui| {
+                ui.put(name_rect, crate::bidi::singleline(&mut buf).id(edit_id).margin(vec2(2.0, 1.0)))
+            });
             if !app.selpane.rename_started {
                 out.request_focus();
                 if let Some(mut s) = egui::TextEdit::load_state(ui.ctx(), edit_id) {

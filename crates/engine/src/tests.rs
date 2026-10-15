@@ -953,7 +953,8 @@ fn typing_kurdish_or_arabic_auto_detects_rtl_and_advances_caret_smoothly() {
     assert_eq!(para.rtl, Some(true), "auto-detected as RTL");
     assert_eq!(para.align, None, "the title keeps the alignment it inherits");
 
-    // A text box inherits the deck's default (left) alignment, which it keeps too.
+    // A text box inherits the deck's default (left) alignment: its start edge, which a
+    // right-to-left paragraph mirrors to the right, as Right-to-Left Text Direction does.
     s.execute("text.exit", &json!({})).ok();
     let id = s.execute("insert.textBox", &json!({"rect": [10, 10, 300, 100], "text": ""})).unwrap()["id"].as_u64().unwrap();
     s.execute("text.edit", &json!({"id": id})).unwrap();
@@ -962,7 +963,7 @@ fn typing_kurdish_or_arabic_auto_detects_rtl_and_advances_caret_smoothly() {
     let sh = st.shape(deckcraft_model::ShapeId(id as u32)).unwrap();
     let para = sh.text.as_ref().unwrap().paragraphs[0].props.clone();
     assert_eq!(para.rtl, Some(true));
-    assert_eq!(para.align, None, "the text box keeps the alignment it inherits");
+    assert_eq!(para.align, Some(deckcraft_model::text::Align::Right), "the text box's inherited start edge mirrors to the right");
 }
 
 #[test]

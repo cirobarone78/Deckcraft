@@ -75,9 +75,9 @@ pub fn title_bar(app: &mut SlideApp, ui: &mut Ui) {
         let has_doc = app.session.active().is_some();
         let dirty = app.session.active().is_some_and(|d| d.is_dirty());
         crate::qat::show(app, &mut child);
-        let title =
-            app.session.active().map(|d| format!("{}{}", d.title(), if dirty { " — Edited" } else { "" })).unwrap_or_else(|| "DeckCraft".into());
-        ui.painter().text(rect.center(), Align2::CENTER_CENTER, title, theme::font(13.0), t.text);
+        let title = app.session.active().map(|d| d.title()).unwrap_or_else(|| "DeckCraft".into());
+        // The file name as a file manager shows it (see `bidi::file_name`).
+        crate::bidi::paint_title(ui.painter(), rect.center(), &title, if dirty { " — Edited" } else { "" }, theme::font(13.0), t.text);
         // Right side.
         let mut right = ui.new_child(
             egui::UiBuilder::new()
@@ -768,6 +768,16 @@ fn paragraph_group(app: &mut SlideApp, ui: &mut Ui, st: &Value) {
                         }
                     }
                 });
+                // Paragraph direction, as Office shows it when a right-to-left language is on (in
+                // the top row, which has room: the ribbon has no overflow).
+                let rtl = st.get("rtl").and_then(Value::as_bool).unwrap_or(false);
+                let en_dir = enabled(app, "format.rtl");
+                if icon_toggle(ui, Icon::RightToLeft, &tip("format.rtl", "Right-to-Left Text Direction"), en_dir, en_dir && rtl).clicked() {
+                    run(app, "format.rtl", json!({"on": true}));
+                }
+                if icon_toggle(ui, Icon::LeftToRight, "Left-to-Right Text Direction", en_dir, en_dir && !rtl).clicked() {
+                    run(app, "format.rtl", json!({"on": false}));
+                }
             });
             ui.add_space(3.0);
             ui.horizontal(|ui| {
@@ -3617,3 +3627,7 @@ fn compress_menu(app: &mut SlideApp, ui: &mut Ui) {
         ui.close();
     }
 }
+
+#[cfg(test)]
+#[path = "text_direction_tests.rs"]
+mod text_direction_tests;

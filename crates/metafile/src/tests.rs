@@ -1175,6 +1175,11 @@ fn character_sets_decode_bytes() {
     assert_eq!(one(0, &[b'A', 0x80, 0x93, 0x94, 0xE9]), "A€“”é");
     assert_eq!(one(238, &[0xB9, 0xE8, 0x9E, 0xA3]), "ąčžŁ");
     assert_eq!(one(204, &[0xC0, 0xFF, 0xA8]), "АяЁ");
+    // Hebrew (177): letters, a point, the sheqel sign; an undefined byte.
+    assert_eq!(one(177, &[0xF9, 0xEC, 0xE5, 0xED, b' ', 0xC8, 0xA4]), "שלום \u{05B8}₪");
+    assert_eq!(one(177, &[0xFA, 0xE0, 0xFB]), "תא\u{FFFD}");
+    // Arabic (178): "سلام", an Arabic comma and question mark.
+    assert_eq!(one(178, &[0xD3, 0xE1, 0xC7, 0xE3, 0xA1, 0xBF]), "سلام،؟");
     assert_eq!(one(2, b"n\xA7"), "\u{F06E}\u{F0A7}", "symbol fonts keep their codes in the private-use area");
     assert_eq!(one(0, &[0x81]), "\u{FFFD}", "an undefined byte");
     // A double-byte character set: a lead and trail byte become one blank with both advances.

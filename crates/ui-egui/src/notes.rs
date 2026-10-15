@@ -157,6 +157,33 @@ fn job(body: &TextBody, size: f32, color: Color32, wrap: f32) -> LayoutJob {
     job
 }
 
+/// A paragraph reading right to left (Hebrew, Arabic; or set right to left in the file) laid out
+/// in reading order from the right edge: wrapped between words in reading order, the caret
+/// following the text (see `bidi`), the indents measured from the right as PowerPoint does. `None`
+/// for a left-to-right paragraph.
+fn rtl_paragraph(ctx: &egui::Context, p: &Paragraph, pl: &ParaLayout) -> Option<Arc<Galley>> {
+    if !is_rtl(p) {
+        return None;
+    }
+    let sections: Vec<(&str, TextFormat)> =
+        pl.job.sections.iter().filter_map(|s| pl.job.text.get(s.byte_range.start.0..s.byte_range.end.0).map(|t| (t, s.format.clone()))).collect();
+    let width = pl.job.wrap.max_width;
+    let mut g = (*crate::bidi::paragraph(ctx, &sections, width, Some(true))?).clone();
+    // Rows end at the margin; the first line's text further in, clear of the bullet.
+    let first = (pl.text - pl.margin).max(0.0);
+    for (i, row) in g.rows.iter_mut().enumerate() {
+        if i == 0 {
+            row.pos.x -= first;
+        }
+    }
+    Some(Arc::new(g))
+}
+
+/// Whether a paragraph reads right to left: set so in the file (`a:pPr/@rtl`), else by its letters.
+fn is_rtl(p: &Paragraph) -> bool {
+    p.props.rtl.unwrap_or_else(|| crate::bidi::reads_rtl(p.runs.iter().flat_map(|r| r.content().chars())))
+}
+
 /// Lay the notes out paragraph by paragraph, each moved to its indent, so wrapped lines line up
 /// under the text and not under the bullet.
 fn galley(ui: &Ui, body: &TextBody, size: f32, color: Color32, wrap: f32) -> Arc<Galley> {
@@ -164,22 +191,26 @@ fn galley(ui: &Ui, body: &TextBody, size: f32, color: Color32, wrap: f32) -> Arc
     if body.paragraphs.is_empty() {
         return ui.fonts_mut(|f| f.layout_job(whole));
     }
-    let parts: Vec<Arc<Galley>> = ui.fonts_mut(|f| {
-        body.paragraphs
-            .iter()
-            .zip(bullets(body))
-            .map(|(p, bullet)| {
-                let pl = para_layout(p, bullet.as_deref(), size, color, wrap);
-                let mut g = (*f.layout_job(pl.job)).clone();
-                for (i, row) in g.rows.iter_mut().enumerate() {
-                    // The first line already holds the gap after a bullet; a first line hanging
-                    // left of the margin without one starts there.
-                    row.pos.x += if i == 0 { pl.margin.min(pl.text) } else { pl.margin };
-                }
-                Arc::new(g)
-            })
-            .collect()
-    });
+    // Each paragraph takes the fonts lock on its own: a right-to-left one lays out several jobs
+    // (see `rtl_paragraph`), which must not happen inside another fonts call (a deadlock).
+    let parts: Vec<Arc<Galley>> = body
+        .paragraphs
+        .iter()
+        .zip(bullets(body))
+        .map(|(p, bullet)| {
+            let pl = para_layout(p, bullet.as_deref(), size, color, wrap);
+            if let Some(g) = rtl_paragraph(ui.ctx(), p, &pl) {
+                return g;
+            }
+            let mut g = (*ui.fonts_mut(|f| f.layout_job(pl.job))).clone();
+            for (i, row) in g.rows.iter_mut().enumerate() {
+                // The first line already holds the gap after a bullet; a first line hanging
+                // left of the margin without one starts there.
+                row.pos.x += if i == 0 { pl.margin.min(pl.text) } else { pl.margin };
+            }
+            Arc::new(g)
+        })
+        .collect();
     Arc::new(Galley::concat(Arc::new(whole), &parts, ui.ctx().pixels_per_point()))
 }
 
@@ -199,7 +230,14 @@ pub fn editor(
         Some(b) => galley(ui, &b, size, color, wrap),
         None => ui.fonts_mut(|f| f.layout_job(LayoutJob::simple(text.as_str().to_string(), theme::font(size), color, wrap))),
     };
+    // In notes reading right to left, Left and Right move the caret the way they point. The
+    // field's id (set by `configure`) is remembered from the last frame.
+    let id_key = ui.id().with("notes-editor-field");
+    if let Some(id) = ui.data(|d| d.get_temp::<egui::Id>(id_key)) {
+        crate::bidi::rtl_arrows(ui, Some(id), &draft.text);
+    }
     let out = configure(egui::TextEdit::multiline(&mut draft.text)).layouter(&mut layouter).show(ui);
+    ui.data_mut(|d| d.insert_temp(id_key, out.response.id));
     if draft.body.text() != draft.text {
         edit::replace_text(&mut draft.body, &draft.text);
         draft.edited = true;
@@ -212,9 +250,17 @@ pub fn editor(
         for (p, bullet) in draft.body.paragraphs.iter().zip(bullets(&draft.body)) {
             if let Some(b) = bullet {
                 let row = out.galley.pos_from_cursor(CCursor::new(at));
-                let pos = out.galley_pos + vec2(px(indents(p).0, k), row.center().y);
                 let font = theme::font(row.height().clamp(size * 0.75, size * 2.0) * 0.8);
-                painter.text(pos, Align2::LEFT_CENTER, b, font, color);
+                if is_rtl(p) {
+                    // A right-to-left paragraph's bullet sits at its right, the indent from the right.
+                    let wrap = out.galley.job.wrap.max_width;
+                    let right = if wrap.is_finite() { out.galley_pos.x + wrap } else { out.text_clip_rect.right() };
+                    let pos = egui::pos2(right - px(indents(p).0, k), out.galley_pos.y + row.center().y);
+                    crate::bidi::paint_text(&painter, pos, Align2::RIGHT_CENTER, &b, font, color);
+                } else {
+                    let pos = out.galley_pos + vec2(px(indents(p).0, k), row.center().y);
+                    painter.text(pos, Align2::LEFT_CENTER, b, font, color);
+                }
             }
             at += p.char_len() + 1;
         }
@@ -301,6 +347,42 @@ mod tests {
             g.rows.iter().filter(|r| r.pos.y > first_row.min.y + 1.0 && r.pos.y < g.pos_from_cursor(CCursor::new(long + 80)).max.y).collect();
         assert!(!wrapped.is_empty(), "the long point wraps");
         assert!(wrapped.iter().all(|r| (r.pos.x - 22.5).abs() < 1.0), "wrapped lines align with the text");
+    }
+
+    #[test]
+    fn hebrew_notes_read_from_the_right_and_wrap_in_reading_order() {
+        let long = "שלום לכולם, זו הערה ארוכה מאוד שצריכה לעבור לשורה הבאה בתוך החלונית של ההערות 2026";
+        let point = Paragraph {
+            level: 1,
+            props: ParaProps {
+                margin_left: Some(22.5), indent: Some(-22.5), bullet: Some(Bullet::Char { char: "•".into() }), ..Default::default()
+            },
+            runs: vec![Run::new(long)],
+            ..Default::default()
+        };
+        let body = TextBody { paragraphs: vec![Paragraph::new("כותרת"), point, Paragraph::new("English line")], ..Default::default() };
+        let ctx = egui::Context::default();
+        theme::install_fonts(&ctx);
+        let mut laid = None;
+        let mut out = ctx.run_ui(Default::default(), |ui| laid = Some(galley(ui, &body, 12.0, Color32::BLACK, 300.0)));
+        out.textures_delta.clear();
+        let g = laid.unwrap();
+        // One glyph per character, in reading order, so the caret indices fit the text.
+        assert_eq!(g.rows.iter().map(|r| r.char_count_including_newline().0).sum::<usize>(), body.text().chars().count());
+        let glyphs: String = g.rows.iter().flat_map(|r| r.row.glyphs.iter().map(|gl| gl.chr).chain(r.ends_with_newline.then_some('\n'))).collect();
+        assert_eq!(glyphs, body.text());
+        let at = |s: &str| body.text().find(s).map(|b| body.text()[..b].chars().count()).unwrap();
+        let caret = |i: usize| g.pos_from_cursor(CCursor::new(i));
+        // The heading ends at the right edge; the caret before its first letter is there.
+        assert!((caret(0).min.x - 300.0).abs() < 1.5, "heading starts at the right: {}", caret(0).min.x);
+        // The point: its first words on its first row, at the right less the margin; it wraps.
+        let first = caret(at("שלום"));
+        assert!(first.min.x > 200.0 && first.min.x <= 300.0 - 22.0, "the point starts right, inside its margin: {}", first.min.x);
+        let rows: Vec<_> = g.rows.iter().filter(|r| r.pos.y >= first.min.y - 1.0 && r.pos.y < caret(at("English")).min.y - 1.0).collect();
+        assert!(rows.len() >= 2, "the long point wraps");
+        assert!(rows.iter().skip(1).all(|r| (r.pos.x + r.row.size.x - (300.0 - 22.5)).abs() < 1.5), "wrapped rows end at the margin");
+        // The English line still starts at the left.
+        assert!(caret(at("English")).min.x < 1.0);
     }
 
     #[test]

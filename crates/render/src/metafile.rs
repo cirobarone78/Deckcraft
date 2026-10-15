@@ -153,6 +153,44 @@ struct Glyph {
     y: f64,
 }
 
+/// The characters of a string holding right-to-left script in display order, left to right
+/// (UAX #9 with a left-to-right base, as GDI draws a string without ETO_RTLREADING); `None` when
+/// the string has no right-to-left script and logical order is the display order.
+fn visual_chars(chars: &[char]) -> Option<Vec<usize>> {
+    use unicode_bidi::{BidiClass, BidiInfo, Level, bidi_class};
+    if !chars.iter().any(|c| matches!(bidi_class(*c), BidiClass::R | BidiClass::AL)) {
+        return None;
+    }
+    let text: String = chars.iter().collect();
+    // The character index of each byte that starts one.
+    let mut at_byte = vec![usize::MAX; text.len()];
+    for (i, (b, _)) in text.char_indices().enumerate() {
+        if let Some(slot) = at_byte.get_mut(b) {
+            *slot = i;
+        }
+    }
+    let info = BidiInfo::new(&text, Some(Level::ltr()));
+    let mut order = Vec::with_capacity(chars.len());
+    for para in &info.paragraphs {
+        // unicode-bidi indexes the first level of a line, so an empty one would panic.
+        if para.range.is_empty() {
+            continue;
+        }
+        let (levels, runs) = info.visual_runs(para, para.range.clone());
+        for run in runs {
+            let rtl = levels.get(run.start).is_some_and(|l| l.is_rtl());
+            let mut idx: Vec<usize> =
+                text.get(run.clone()).unwrap_or_default().char_indices().filter_map(|(b, _)| at_byte.get(run.start + b).copied()).collect();
+            if rtl {
+                idx.reverse();
+            }
+            order.extend(idx);
+        }
+    }
+    // Every character exactly once, or logical order stays.
+    (order.len() == chars.len()).then_some(order)
+}
+
 /// Draws a text item; `m` maps its text space to the output.
 fn draw_text(ctx: &mut RenderContext, t: &Text, m: Affine) {
     let db = FontDb::global();
@@ -229,7 +267,28 @@ fn draw_text(ctx: &mut RenderContext, t: &Text, m: Affine) {
     let use_dx = !t.dx.is_empty() && t.dx.len() == chars.len();
     let mut width = pen;
     let mut x_scale = 1.0;
-    if use_dx {
+    if let Some(order) = visual_chars(&chars) {
+        // Right-to-left text (Hebrew, Arabic): GDI draws the string in Unicode bidirectional
+        // display order, each character with its own advance (the file's dx are in logical order).
+        // Laid out in logical order it read backwards, with its letters reversed.
+        let advance = |ci: usize| match use_dx {
+            true => t.dx.get(ci).map_or(0.0, |d| f64::from(*d)),
+            false => char_pen.get(ci + 1).copied().unwrap_or(0.0) - char_pen.get(ci).copied().unwrap_or(0.0),
+        };
+        let mut starts = vec![0.0; chars.len()];
+        let mut x = 0.0;
+        for ci in order {
+            if let Some(s) = starts.get_mut(ci) {
+                *s = x;
+            }
+            x += advance(ci);
+        }
+        width = x;
+        for (g, ci) in &mut shaped {
+            let (start, pen_start) = (starts.get(*ci).copied().unwrap_or(0.0), char_pen.get(*ci).copied().unwrap_or(0.0));
+            g.x = start + (g.x - pen_start);
+        }
+    } else if use_dx {
         let mut starts = Vec::with_capacity(chars.len() + 1);
         let mut x = 0.0;
         for d in &t.dx {
@@ -368,4 +427,28 @@ fn premul(w: u32, h: u32, px: &[u8]) -> Option<Arc<Pixmap>> {
         })
         .collect();
     Some(Arc::new(Pixmap::from_parts(data, w as u16, h as u16)))
+}
+
+#[cfg(test)]
+mod tests {
+    #![allow(clippy::unwrap_used)]
+
+    use super::visual_chars;
+
+    #[test]
+    fn metafile_strings_with_hebrew_draw_in_display_order() {
+        let chars: Vec<char> = "abc שלום 12".chars().collect();
+        // "abc " stays first; then, read from the right, the word and the number after it: the
+        // number keeps its digits left to right.
+        assert_eq!(visual_chars(&chars).unwrap(), [0, 1, 2, 3, 9, 10, 8, 7, 6, 5, 4]);
+        // A string without right-to-left script keeps logical order.
+        assert_eq!(visual_chars(&"abc 12".chars().collect::<Vec<_>>()), None);
+        // Odd input never loses a character or panics.
+        for s in ["\u{05D0}", "\u{202E}\u{05D0}1", "\u{05D0}\n\u{05D1}", "\u{05D0}\u{2029}"] {
+            let chars: Vec<char> = s.chars().collect();
+            let mut order = visual_chars(&chars).unwrap_or_else(|| (0..chars.len()).collect());
+            order.sort_unstable();
+            assert_eq!(order, (0..chars.len()).collect::<Vec<_>>(), "{s:?}");
+        }
+    }
 }

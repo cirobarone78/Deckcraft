@@ -98,6 +98,8 @@ icons! {
     AlignRight => "align-right",
     Justify => "justify",
     TextDirection => "text-direction",
+    RightToLeft => "right-to-left",
+    LeftToRight => "left-to-right",
     AlignText => "align-text",
     ConvertSmartArt => "convert-smart-art",
     // Drawing
@@ -1296,6 +1298,22 @@ fn draw(p: &Pen<'_>, icon: Icon) {
             p.line_w(&[(17.0, 5.5), (3.0, 12.0), (17.0, 18.5)], K, 1.1);
             p.seg_w((11.7, 8.3), (11.7, 15.7), K, 1.1);
             p.arrow((21.0, 3.5), (21.0, 20.5), B);
+        }
+        I::RightToLeft => {
+            // A pilcrow, and an arrow pointing left: the paragraph runs from the right.
+            p.circle((14.0, 6.5), 3.0, K, N);
+            p.seg((14.0, 3.5), (20.0, 3.5), K);
+            p.seg_w((17.0, 3.5), (17.0, 15.5), K, 1.1);
+            p.seg_w((20.0, 3.5), (20.0, 15.5), K, 1.1);
+            p.arrow((12.0, 19.5), (2.5, 19.5), B);
+        }
+        I::LeftToRight => {
+            // A pilcrow, and an arrow pointing right: the paragraph runs from the left.
+            p.circle((7.0, 6.5), 3.0, K, N);
+            p.seg((7.0, 3.5), (13.0, 3.5), K);
+            p.seg_w((10.0, 3.5), (10.0, 15.5), K, 1.1);
+            p.seg_w((13.0, 3.5), (13.0, 15.5), K, 1.1);
+            p.arrow((12.0, 19.5), (21.5, 19.5), B);
         }
         I::AlignText => {
             p.rect(2.5, 3.0, 15.0, 21.0, 1.2, N, K);

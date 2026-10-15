@@ -8,6 +8,7 @@
 
 pub mod animtimeline;
 pub mod backstage;
+pub mod bidi;
 pub mod canvas;
 pub mod control;
 pub mod credits;

@@ -86,7 +86,8 @@ fn smartart(app: &mut SlideApp, ui: &mut Ui) {
         ui.horizontal(|ui| {
             ui.add_space(16.0 * node.level as f32);
             ui.label("•");
-            let te = egui::TextEdit::singleline(draft).id(id).desired_width(f32::INFINITY);
+            crate::bidi::rtl_arrows(ui, Some(id), draft);
+            let te = crate::bidi::singleline(draft).id(id).desired_width(f32::INFINITY);
             let r = ui.add(te);
             if app.ui.smartart_focus == Some(i) {
                 r.request_focus();
@@ -358,7 +359,8 @@ fn format_shape(app: &mut SlideApp, ui: &mut Ui) {
             let id = ui.id().with(("alt", uid, sh.id.0));
             let stored: Option<(String, String)> = ui.data_mut(|d| d.get_temp(id));
             let mut alt = widgets::text_draft(stored, &sh.descr);
-            let r = ui.add(egui::TextEdit::multiline(&mut alt).desired_rows(3).desired_width(f32::INFINITY));
+            crate::bidi::rtl_arrows(ui, None, &alt);
+            let r = ui.add(crate::bidi::multiline(&mut alt).desired_rows(3).desired_width(f32::INFINITY));
             if r.lost_focus() && alt != sh.descr {
                 run(app, "shape.altText", json!({"text": alt}));
             }
@@ -1287,7 +1289,8 @@ fn comment_card(app: &mut SlideApp, ui: &mut Ui, slide: usize, index: usize, c: 
             ui.horizontal(|ui| {
                 let id = ui.id().with(("reply", slide, index));
                 let mut txt: String = ui.data_mut(|d| d.get_temp(id).unwrap_or_default());
-                let r = ui.add(egui::TextEdit::singleline(&mut txt).hint_text("Reply…").desired_width(ui.available_width() - 70.0));
+                crate::bidi::rtl_arrows(ui, None, &txt);
+                let r = ui.add(crate::bidi::singleline(&mut txt).hint_text("Reply…").desired_width(ui.available_width() - 70.0));
                 if r.lost_focus() && ui.input(|i| i.key_pressed(egui::Key::Enter)) && !txt.trim().is_empty() {
                     focus_comment(app, slide, index);
                     run(app, "comment.reply", json!({"index": index, "text": txt}));
