@@ -17,7 +17,7 @@ use skrifa::MetadataProvider;
 use skrifa::instance::Size;
 
 /// Preferred equation family when supplied by craft-fonts; otherwise Ubuntu is used with
-/// synthetic math styles. The host never loads system fonts for equation layout.
+/// synthetic math styles. The host may supply explicitly selected installed or user fonts.
 pub const DEFAULT_FAMILY: &str = "STIX Two Math";
 
 /// One shaped glyph, in font units.

@@ -78,6 +78,42 @@ fn button_types_immediately_with_command_conversion_and_native_structures() {
     }
 }
 #[test]
+fn home_font_picker_changes_the_active_equation_and_its_layout() {
+    if !deckcraft_fonts::FontDb::global().has_family("Latin Modern Math") {
+        return; // Optional craft-fonts input; CI prepares this family.
+    }
+    let mut h = harness(true);
+    h.get_by_label("Equation").click();
+    h.run_steps(3);
+    h.event(egui::Event::Text("x^2+\\alpha+a/b".into()));
+    h.run_steps(3);
+    let width = |h: &Harness<'_, SlideApp>| {
+        let st = h.state().session.active().unwrap();
+        deckcraft_engine::cmd::text::layout_for(st, st.selection.text.as_ref().unwrap()).unwrap().equations[0].rect.width()
+    };
+    let before = width(&h);
+    let content = linear(&mut h);
+    h.get_by_label("Home tab").click();
+    h.run_steps(3);
+    h.get_by_label("Font").click();
+    h.run_steps(3);
+    h.get_by_label("Latin Modern Math").scroll_to_me();
+    h.run_steps(3);
+    h.get_by_label("Latin Modern Math").click();
+    h.run_steps(3);
+    assert_eq!(h.state_mut().session.execute("format.state", &json!({})).unwrap()["font"], "Latin Modern Math");
+    assert_eq!(linear(&mut h), content);
+    assert!((width(&h) - before).abs() > 0.1);
+    preview(&mut h, "latin-modern-math.png");
+    let p = math_point(&h);
+    click(&mut h, p);
+    h.event(egui::Event::Text("z".into()));
+    h.run_steps(3);
+    assert!(linear(&mut h).contains('z'));
+    preview(&mut h, "latin-modern-math-edit.png");
+}
+
+#[test]
 fn arrow_exit_restores_tab_and_plain_text_and_click_reenters() {
     let mut h = harness(true);
     h.get_by_label("Equation").click();

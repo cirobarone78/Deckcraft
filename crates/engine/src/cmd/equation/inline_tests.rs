@@ -170,11 +170,42 @@ fn pointer_uses_fraction_geometry_in_rotated_and_rtl_text() {
 }
 
 #[test]
+fn font_changes_target_the_active_equation_and_preserve_caret_and_history() {
+    for input in ["", "a/b"] {
+        let mut s = fresh();
+        let id = s.execute("insert.textBox", &json!({"text":"Before after", "rect":[80,100,600,80]})).unwrap()["id"].clone();
+        s.execute("format.font", &json!({"family":"Inter"})).unwrap();
+        s.execute("text.edit", &json!({"id":id,"at":[0,7]})).unwrap();
+        let id = begin(&mut s);
+        s.type_text(input).unwrap();
+        let before = body(&s, id);
+        let tree = math(&s);
+        let selection = s.doc().unwrap().selection.text.clone();
+        s.execute("format.font", &json!({"family":"Latin Modern Math"})).unwrap();
+        let after = body(&s, id);
+        for r in &after.paragraphs[0].runs {
+            let expected = if matches!(r.kind, RunKind::Math { .. }) { "Latin Modern Math" } else { "Inter" };
+            assert_eq!(r.props.font.as_deref(), Some(expected));
+        }
+        assert_eq!(math(&s), tree);
+        assert_eq!(s.doc().unwrap().selection.text, selection);
+        assert_eq!(s.execute("format.state", &json!({})).unwrap()["font"], "Latin Modern Math");
+        s.execute("edit.undo", &json!({})).unwrap();
+        assert_eq!(body(&s, id), before);
+        s.execute("edit.redo", &json!({})).unwrap();
+        assert_eq!(body(&s, id), after);
+        s.type_text("x").unwrap();
+        assert!(equashion_math::to_linear(&math(&s)).contains('x'));
+    }
+}
+
+#[test]
 fn native_and_pptx_save_keep_structured_math_and_empty_fields() {
     for input in ["", "a/b", "x^2"] {
         let mut s = fresh();
         let id = begin(&mut s);
         s.type_text(input).unwrap();
+        s.execute("format.font", &json!({"family":"Latin Modern Math"})).unwrap();
         let doc = &s.doc().unwrap().doc;
         let native = deckcraft_format::save(doc).unwrap();
         let restored = deckcraft_format::load(&native).unwrap();
@@ -201,6 +232,7 @@ fn native_and_pptx_save_keep_structured_math_and_empty_fields() {
                 .paragraphs[0]
                 .runs[0];
             let RunKind::Math { omml } = &run.kind else { panic!("lost native math") };
+            assert_eq!(run.props.font.as_deref(), Some("Latin Modern Math"), "{input:?}: {omml}");
             let m = equashion_math::from_omml(omml);
             assert_eq!(m.is_empty(), input.is_empty());
             assert!(!omml.contains("Type equation here"));

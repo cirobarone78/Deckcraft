@@ -1993,4 +1993,25 @@ fn engine_equation_round_trips_with_props_and_linear_text() {
     let c = &find(&q2).text.expect("text").paragraphs[0].runs[0].clone();
     assert_eq!(c.text, b.text);
     assert_eq!(c.props, b.props);
+    // Changing a saved equation's font must replace the old typeface inside its imported OMML.
+    let mut changed = q2;
+    let mut count = 0;
+    for slide in &mut changed.slides {
+        for shape in &mut std::sync::Arc::make_mut(slide).shapes {
+            if let Some(text) = shape.text.as_mut() {
+                for run in text.paragraphs.iter_mut().flat_map(|p| &mut p.runs) {
+                    if matches!(run.kind, RunKind::Math { .. }) {
+                        run.props.font = Some("Latin Modern Math".into());
+                        count += 1;
+                    }
+                }
+            }
+        }
+    }
+    assert_eq!(count, 1);
+    let after = find(&round(&changed));
+    let r = &after.text.as_ref().unwrap().paragraphs[0].runs[0];
+    assert_eq!(r.props.font.as_deref(), Some("Latin Modern Math"));
+    let RunKind::Math { omml } = &r.kind else { panic!("lost math") };
+    assert!(omml.contains("Latin Modern Math") && !omml.contains("STIX Two Math"));
 }

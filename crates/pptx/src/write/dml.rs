@@ -798,7 +798,7 @@ fn paragraph_mode(w: &mut W, x: &mut Exp, o: &mut Out, p: &Paragraph, math: Math
                     } else {
                         let mut f = W::frag();
                         rpr(&mut f, x, o, "a:rPr", &r.props);
-                        w.raw(&with_run_props(omml, &f.s));
+                        w.raw(&with_math_font(with_run_props(omml, &f.s), r.props.font.as_deref(), &f.s));
                     }
                     w.close("a14:m");
                     if alt {
@@ -863,6 +863,59 @@ fn with_run_props(omml: &str, rpr_xml: &str) -> String {
     }
     out.push_str(rest);
     out
+}
+
+/// An equation's selected family overrides imported DrawingML font names. Keep every other
+/// property and unknown math extension; return the original XML when no replacement is needed.
+fn with_math_font(omml: String, family: Option<&str>, rpr_xml: &str) -> String {
+    let Some(family) = family else { return omml };
+    let Ok(mut doc) = crate::xml::parse(omml.as_bytes()) else { return omml };
+    let Ok(props) = crate::xml::parse(rpr_xml.as_bytes()) else { return omml };
+    fn apply(el: &mut crate::xml::El, family: &str, props: &crate::xml::El, depth: usize) -> bool {
+        if depth > crate::xml::MAX_DEPTH {
+            return false;
+        }
+        // A blank equation needs an empty math run to carry its font through a PPTX save.
+        if el.name == "m:oMath" && el.children.iter().all(|n| matches!(n, crate::xml::Node::Text(t) if t.trim().is_empty())) {
+            el.children.push(crate::xml::Node::El(crate::xml::El {
+                name: "m:r".into(),
+                attrs: vec![],
+                children: vec![
+                    crate::xml::Node::El(props.clone()),
+                    crate::xml::Node::El(crate::xml::El { name: "m:t".into(), ..Default::default() }),
+                ],
+            }));
+            return true;
+        }
+        if el.name == "a:rPr" {
+            if let Some(font) = el.elements_mut().find(|e| e.name == "a:latin") {
+                if font.attr("typeface") == Some(family) {
+                    return false;
+                }
+                font.set_attr("typeface", family);
+                return true;
+            }
+            let at = el
+                .children
+                .iter()
+                .position(|n| {
+                    matches!(n, crate::xml::Node::El(e)
+                if matches!(e.local(), "ea" | "cs" | "sym" | "hlinkClick" | "hlinkMouseOver" | "rtl" | "extLst"))
+                })
+                .unwrap_or(el.children.len());
+            el.children.insert(
+                at,
+                crate::xml::Node::El(crate::xml::El { name: "a:latin".into(), attrs: vec![("typeface".into(), family.into())], children: vec![] }),
+            );
+            return true;
+        }
+        let mut changed = false;
+        for child in el.elements_mut() {
+            changed |= apply(child, family, props, depth + 1);
+        }
+        changed
+    }
+    if apply(&mut doc.root, family, &props.root, 0) { doc.root.to_xml() } else { omml }
 }
 
 pub fn has_math(tb: &TextBody) -> bool {

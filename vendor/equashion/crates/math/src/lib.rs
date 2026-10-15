@@ -60,7 +60,7 @@ impl Math {
         Math { body, para: false, jc: None, attrs: String::new() }
     }
     pub fn is_empty(&self) -> bool {
-        self.body.iter().all(|n| matches!(n, Node::Text(t) if t.is_empty()))
+        self.body.iter().all(|n| matches!(n.bare(), Node::Text(t) | Node::Styled { text: t, .. } if t.is_empty()))
     }
 }
 

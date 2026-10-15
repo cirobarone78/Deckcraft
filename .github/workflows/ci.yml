@@ -36,7 +36,7 @@ jobs:
           repository: storytold/craft-fonts
           ref: ${{ env.CRAFT_FONTS_REF }}
           path: craft-fonts
-      - name: Prepare the approved equation font
+      - name: Prepare the equation fonts
         run: python3 scripts/equation-fonts.py craft-fonts
       - name: Linux build dependencies
         if: runner.os == 'Linux'

@@ -1,6 +1,14 @@
 use super::*;
 use crate::Extra;
 
+#[test]
+fn empty_math_runs_keep_font_properties_without_becoming_content() {
+    let xml = r#"<m:oMath xmlns:m="http://schemas.openxmlformats.org/officeDocument/2006/math" xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main"><m:r><m:rPr><m:sty m:val="p"/></m:rPr><a:rPr><a:latin typeface="Latin Modern Math"/></a:rPr><m:t/></m:r></m:oMath>"#;
+    let math = from_omml(xml);
+    assert!(math.is_empty());
+    assert!(to_linear(&math).is_empty());
+    assert!(to_omml(&math).contains("Latin Modern Math"));
+}
 fn txt(s: &str) -> Seq {
     vec![Node::Text(s.to_string())]
 }

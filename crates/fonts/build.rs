@@ -58,7 +58,10 @@ fn manifest(dir: &std::path::Path, manifest: &std::path::Path) -> Result<String,
             continue;
         }
         if wasm
-            && !matches!((*family, *style), ("BIZ UDPGothic", "Regular") | ("STIX Two Math", "Regular") | ("Inter", "Regular" | "Bold" | "Variable"))
+            && !matches!(
+                (*family, *style),
+                ("BIZ UDPGothic" | "STIX Two Math" | "Latin Modern Math", "Regular") | ("Inter", "Regular" | "Bold" | "Variable")
+            )
         {
             continue;
         }

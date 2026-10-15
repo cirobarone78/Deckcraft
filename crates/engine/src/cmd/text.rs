@@ -1260,6 +1260,15 @@ fn get(s: &mut Session, p: &Value) -> Result<Value> {
 /// or sets the formatting for what is typed next at a word boundary.
 pub(crate) fn format_run(s: &mut Session, f: &(dyn Fn(&mut RunProps) + Send + Sync)) -> Result<Value> {
     let st = s.doc()?;
+    if let Some(e) = super::equation::active(st) {
+        let run = e.run;
+        edit_text(s, |body, t| {
+            if let Some(r) = body.paragraphs.get_mut(t.caret.0).and_then(|p| p.runs.get_mut(run)) {
+                f(&mut r.props);
+            }
+        })?;
+        return ok();
+    }
     if let Some(t) = st.selection.text.clone() {
         let (a, b) = format_range(st, &t);
         let collapsed = a == b;

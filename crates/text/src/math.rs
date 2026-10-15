@@ -1,20 +1,20 @@
 //! Equations (`equashion_math::Math`) laid out into positioned shapes and rules.
 //!
 //! The layout is equaSHion's ([`equashion_layout`]), the same engine the equation editor draws
-//! with, so what is typed in place is what the slide shows. It runs in equaSHion's bundled
-//! equation fonts, not the slide's text face: an equation's math faces and the editor's are one.
+//! with, so what is typed in place is what the slide shows. Equations use the run's selected
+//! family, with the bundled math family supplying missing glyphs.
 //!
 //! The result is a [`MathBox`]: a width, an ascent and a descent around a baseline, plus rules
 //! and filled shapes in box-local coordinates (x right, y down, baseline at y = 0). The paragraph
 //! shaper treats the box as one inline atom; [`emit`] turns it into `Deco`s. Glyphs are filled
-//! outlines (the faces are not the deck's): they draw, export and animate like any shape.
+//! outlines: they draw, export and animate like any shape.
 
 use std::collections::HashMap;
 use std::sync::{Arc, LazyLock, Mutex};
 
 use deckcraft_color::Rgba;
 use deckcraft_geom::Rect;
-use equashion_layout::{DEFAULT_FAMILY, FontDb, MathFonts, Prim, Rgb};
+use equashion_layout::{FontDb, MathFonts, Prim, Rgb};
 use equashion_math::{Math, from_omml};
 use kurbo::{Affine, BezPath, Shape as _};
 
@@ -108,10 +108,30 @@ impl MathBox {
     }
 }
 
-/// equaSHion's bundled fonts: no system fonts, so an equation lays out the same everywhere.
+/// Bundled math fallbacks, plus explicitly selected faces from the host's font database.
 fn fonts() -> &'static FontDb {
     static DB: LazyLock<FontDb> = LazyLock::new(FontDb::bundled_only);
     &DB
+}
+
+const STYLES: [&str; 4] = ["Regular", "Italic", "Bold", "Bold Italic"];
+
+/// Bring a selected installed or session-added family into the equation font database.
+/// The resolved face IDs also distinguish a newly available family from its cached fallback.
+fn font_ids(family: &str) -> [u32; 4] {
+    let db = fonts();
+    let host = deckcraft_fonts::FontDb::global();
+    if !db.has_family(family) && host.has_family(family) {
+        let mut copied = Vec::new();
+        for style in STYLES {
+            let face = host.face(family, style);
+            if !copied.contains(&face.id()) {
+                db.add_font(face.data().to_vec());
+                copied.push(face.id());
+            }
+        }
+    }
+    STYLES.map(|style| db.face(family, style).id())
 }
 
 /// The scene primitives of an equation as shapes.
@@ -148,27 +168,27 @@ fn items_of(prims: Vec<Prim>, fonts: &dyn MathFonts) -> Vec<Item> {
 }
 
 /// Lay out an equation at `size` points (bold when `bold`; `display` for a displayed formula).
-pub(crate) fn layout_math(m: &Math, size: f64, bold: bool, display: bool) -> MathBox {
+pub(crate) fn layout_math(m: &Math, family: &str, size: f64, bold: bool, display: bool) -> MathBox {
     let f = fonts();
-    let b = equashion_layout::layout_math(f, m, DEFAULT_FAMILY, size, bold, display);
+    let b = equashion_layout::layout_math(f, m, family, size, bold, display);
     let mut prims = Vec::new();
     equashion_layout::emit(&b, 0.0, 0.0, Rgb::BLACK, &mut prims);
     MathBox { w: b.width(), asc: b.ascent(), desc: b.descent(), display, items: items_of(prims, f), geo: b.geo.clone() }
 }
 
-type Key = (String, u64, bool, bool);
+type Key = (String, [u32; 4], u64, bool, bool);
 static CACHE: Mutex<Option<HashMap<Key, Arc<MathBox>>>> = Mutex::new(None);
 
-/// The laid-out box for an OMML equation, cached by (source, size, weight).
-pub(crate) fn layout_math_cached(omml: &str, size: f64, bold: bool, solo: bool) -> Arc<MathBox> {
-    let key: Key = (omml.to_string(), size.to_bits(), bold, solo);
+/// The laid-out box for an OMML equation, cached by source, resolved fonts, size and style.
+pub(crate) fn layout_math_cached(omml: &str, family: &str, size: f64, bold: bool, solo: bool) -> Arc<MathBox> {
+    let key: Key = (omml.to_string(), font_ids(family), size.to_bits(), bold, solo);
     if let Ok(g) = CACHE.lock()
         && let Some(hit) = g.as_ref().and_then(|c| c.get(&key))
     {
         return hit.clone();
     }
     let m = from_omml(omml);
-    let mut b = layout_math(&m, size, bold, m.para || solo);
+    let mut b = layout_math(&m, family, size, bold, m.para || solo);
     if m.is_empty() {
         b.w = size * 9.0;
         b.asc = b.asc.max(size * 0.8);
@@ -235,12 +255,13 @@ pub(crate) fn emit(
 
 #[cfg(test)]
 mod tests {
+    use equashion_layout::DEFAULT_FAMILY;
     use equashion_math::from_linear;
 
     use super::*;
 
     fn lay(lin: &str, display: bool) -> MathBox {
-        layout_math(&from_linear(lin), 20.0, false, display)
+        layout_math(&from_linear(lin), DEFAULT_FAMILY, 20.0, false, display)
     }
 
     #[test]
@@ -278,8 +299,8 @@ mod tests {
     #[test]
     fn display_sum_puts_limits_above_and_below() {
         let m = from_linear("sum_(i=1)^n i");
-        let disp = layout_math(&m, 20.0, false, true);
-        let text = layout_math(&m, 20.0, false, false);
+        let disp = layout_math(&m, DEFAULT_FAMILY, 20.0, false, true);
+        let text = layout_math(&m, DEFAULT_FAMILY, 20.0, false, false);
         assert!(disp.asc + disp.desc > text.asc + text.desc, "display limits stack");
     }
 
@@ -302,12 +323,12 @@ mod tests {
     #[test]
     fn all_extents_are_finite_for_every_template() {
         for t in equashion_math::templates() {
-            let b = layout_math(&t.math, 18.0, false, true);
+            let b = layout_math(&t.math, DEFAULT_FAMILY, 18.0, false, true);
             assert!(b.w.is_finite() && b.asc.is_finite() && b.desc.is_finite(), "{}", t.id);
             assert!(b.w >= 0.0 && b.asc >= 0.0 && b.desc >= 0.0, "{}", t.id);
         }
         for t in equashion_math::galleries().templates() {
-            let b = layout_math(&t.math, 18.0, false, true);
+            let b = layout_math(&t.math, DEFAULT_FAMILY, 18.0, false, true);
             assert!(b.w.is_finite() && b.asc.is_finite() && b.desc.is_finite(), "{}", t.id);
         }
     }
@@ -315,10 +336,26 @@ mod tests {
     #[test]
     fn layout_cache_returns_the_same_box() {
         let o = equashion_math::to_omml(&from_linear("a^2+b^2"));
-        let a = layout_math_cached(&o, 24.0, false, false);
-        let b = layout_math_cached(&o, 24.0, false, false);
+        let a = layout_math_cached(&o, DEFAULT_FAMILY, 24.0, false, false);
+        let b = layout_math_cached(&o, DEFAULT_FAMILY, 24.0, false, false);
         assert!(Arc::ptr_eq(&a, &b));
         assert!(cache_len() >= 1);
+    }
+
+    #[test]
+    fn selected_families_have_distinct_geometry_and_missing_fonts_fall_back() {
+        let o = equashion_math::to_omml(&from_linear("x^2+alpha/2"));
+        let default = layout_math_cached(&o, DEFAULT_FAMILY, 24.0, false, false);
+        let missing = layout_math_cached(&o, "Missing Equation Test Family", 24.0, false, false);
+        assert!(Arc::ptr_eq(&default, &missing));
+        if !fonts().has_family("Latin Modern Math") {
+            return; // Builds without the optional craft-fonts input still work.
+        }
+        let lm = layout_math_cached(&o, "Latin Modern Math", 24.0, false, false);
+        assert!(!Arc::ptr_eq(&default, &lm));
+        assert!((lm.w - default.w).abs() > 0.1);
+        assert!(lm.paths() >= 4 && lm.geo.len() >= 3);
+        assert!(Arc::ptr_eq(&lm, &layout_math_cached(&o, "Latin Modern Math", 24.0, false, false)));
     }
 
     #[test]

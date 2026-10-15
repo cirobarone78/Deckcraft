@@ -22,11 +22,17 @@ port (`761790de627651a61d9747e62f919fcbe918fbe4`) as the interaction reference. 
   re-enters it. Normal text retains the surrounding prose's formatting.
 - Undo/Redo, selection, copy/cut, native saves and PPTX saves use the session's document model.
   Clearing an existing equation updates the document immediately.
+- To change an equation's typeface, click into it, open Home, and choose a family in Font.
+  Latin Modern Math provides the traditional LaTeX appearance. The choice applies to the
+  entire equation, including an empty field, and survives undo/redo and native/PPTX saves.
+  Inline equations inherit the surrounding font initially; separate equation boxes start
+  in STIX Two Math. Unavailable families and missing symbols fall back to the bundled math
+  fonts. Installed and session-added families can also be selected on desktop.
 
 ## Build
 
 Use DeckCraft's pinned craft-fonts checkout (`43913056ce82a3fdad0ef69f6b88d1dc922a8104`) and,
-before building, add the approved math face:
+before building, prepare the math fonts:
 
 ```sh
 python3 scripts/equation-fonts.py ../craft-fonts
@@ -34,13 +40,14 @@ cargo run -p deckcraft -- --sample
 ```
 
 A different font directory can be passed to the script and supplied as `CRAFT_FONTS_DIR`.
-The script downloads only STIX Two Math v2.13b171 and its OFL licence, verifies SHA-256 hashes,
-and adds its entry to the external font manifest. It preserves unrelated entries. Cargo
-itself never downloads fonts. Both native and web builds embed this math font. Without it,
-the editor remains usable through Ubuntu, but uncommon symbols may be missing.
+The script prepares STIX Two Math v2.13b171 (OFL-1.1) and Latin Modern Math v1.959
+(GUST Font License), retaining their licences and Latin Modern's source README and manifest.
+It verifies each file's SHA-256 hash and adds both entries to the external font manifest,
+preserving unrelated entries. Cargo itself never downloads fonts. Native and web builds
+embed both math fonts. Without them, Ubuntu remains usable but some symbols may be missing.
 
-CI prepares STIX explicitly. Release packaging through the shared Craft workflow must also
-prepare this font, or adopt a craft-fonts revision containing it, before publishing this
+CI prepares both fonts explicitly. Release packaging through the shared Craft workflow must
+also prepare them, or adopt a craft-fonts revision containing them, before publishing this
 feature. No release workflow or external font-repository contribution is published here.
 
 ## Implementation and scope
@@ -72,17 +79,18 @@ Checked on macOS with Rust 1.95.0 and the font setup above:
 
 | Check | Result |
 |---|---|
-| `cargo test --workspace --locked -- --test-threads=1` | 1,744 passed; 6 ignored; no failures |
-| `cargo test --manifest-path vendor/equashion/Cargo.toml --workspace` | 257 passed; 1 ignored; no failures |
+| `cargo test --workspace --locked -- --test-threads=1` | 1,747 passed; 6 ignored; no failures |
+| `cargo test --manifest-path vendor/equashion/Cargo.toml --workspace` | 258 passed; 1 ignored; no failures |
 | `cargo build -p deckcraft --locked` | Desktop executable builds |
 | `cargo xtask wasm` | All 23 checked crates pass |
 | `cargo xtask pdf-deps`, `cargo xtask assets`, `cargo xtask layers` | Pass |
 | Formatting, staged diff whitespace, vendored library strict Clippy | Pass |
 
 The UI tests exercise actual Equation ribbon clicks, typing, fraction slots, arrow exit,
-prose formatting and click-to-reenter. Their rendered placeholder, fraction and exit previews
-were inspected. Engine tests also cover native/PPTX saves, history, clipboard operations,
-selected-prose replacement, adjacent equations and table/rotated/RTL hit testing.
+prose formatting, Home font selection and click-to-reenter. Their rendered placeholder,
+fraction, exit and Latin Modern Math previews were inspected. Engine tests also cover
+native/PPTX saves, font changes, history, clipboard operations, selected-prose replacement,
+adjacent equations and table/rotated/RTL hit testing.
 
 The parallel workspace run had one unrelated notes-spelling UI test failure; that test passed
 in isolation and the full workspace passed with serial test execution.
