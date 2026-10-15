@@ -310,3 +310,35 @@ fn collapse_layers_folds_every_group_and_then_hides() {
     h.run_steps(3);
     assert!(h.state().selpane.collapsed.contains(&outer), "⌥L collapses");
 }
+
+#[test]
+fn group_and_ungroup_shortcuts_work_after_clicking_layers() {
+    let (mut h, _) = harness();
+    // A click on the group's row (which gives the list the keyboard), then ⇧⌘G.
+    h.get_by_label("G").click();
+    h.run_steps(2);
+    assert_eq!(selected(&h), ["G"]);
+    assert!(h.ctx.memory(|m| m.focused().is_some()), "the row has the keyboard");
+    h.key_press_modifiers(Modifiers::COMMAND | Modifiers::SHIFT, egui::Key::G);
+    h.run_steps(2);
+    assert_eq!(names(&h), "A B C D E", "⇧⌘G ungrouped it");
+    // ⌘-click two rows, then ⌘G.
+    h.get_by_label("A").click();
+    h.run_steps(2);
+    h.get_by_label("B").click_modifiers(Modifiers::COMMAND);
+    h.run_steps(2);
+    assert_eq!(selected(&h).len(), 2);
+    h.key_press_modifiers(Modifiers::COMMAND, egui::Key::G);
+    h.run_steps(2);
+    let top = h.state().session.active().unwrap().shapes().len();
+    assert_eq!(top, 4, "⌘G grouped A and B: {}", names(&h));
+    // The list keeps its own keys: ↓ walks the rows instead of nudging the layer.
+    let x = |h: &Harness<'_, SlideApp>, n: &str| shape(h, n).xfrm.map(|x| x.x);
+    let before = x(&h, "C");
+    h.get_by_label("C").click();
+    h.run_steps(2);
+    h.key_press(egui::Key::ArrowDown);
+    h.run_steps(2);
+    assert_eq!(x(&h, "C"), before, "the layer didn't move");
+    assert_ne!(selected(&h), ["C"], "↓ went to the next row");
+}

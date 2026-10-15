@@ -1833,7 +1833,11 @@ impl SlideApp {
         if self.show.is_some() {
             return;
         }
-        if ctx.memory(|m| m.focused().is_some()) || self.dialog.as_ref().is_some_and(|d| d.modal()) || self.palette.is_some() {
+        // A Layers row with the keyboard keeps its own keys (↑ / ↓, Home / End, F2, Esc) and takes
+        // no typing, but shortcuts (⌘G, ⇧⌘G, ⌘C, Delete…) act on the layers selected there.
+        let focused = ctx.memory(|m| m.focused());
+        let layer_row = focused.is_some_and(|f| selpane::is_row(self, f));
+        if (focused.is_some() && !layer_row) || self.dialog.as_ref().is_some_and(|d| d.modal()) || self.palette.is_some() {
             return;
         }
         let slides_keys = self.slides_focus || self.ui.view == ViewMode::Sorter;
@@ -1868,6 +1872,7 @@ impl SlideApp {
         }
         for e in events {
             match e {
+                egui::Event::Text(_) if layer_row => {}
                 egui::Event::Text(t) => {
                     // In the canvas shell letters pick tools unless text is being edited (Enter
                     // edits a selected shape's text); the ribbon types over a selected shape.
@@ -1878,7 +1883,7 @@ impl SlideApp {
                         self.set_status(e.to_string());
                     }
                 }
-                egui::Event::Ime(ime) => self.ime_event(&ime),
+                egui::Event::Ime(ime) if !layer_row => self.ime_event(&ime),
                 // The slide list copies and cuts whole slides, a slide with its states.
                 egui::Event::Copy => {
                     if slides_keys {
@@ -1905,6 +1910,10 @@ impl SlideApp {
                     }
                 }
                 egui::Event::Key { key, pressed: true, modifiers, .. } => {
+                    use egui::Key::{ArrowDown, ArrowUp, End, Escape, F2, Home, Tab};
+                    if layer_row && !modifiers.command && !modifiers.ctrl && matches!(key, ArrowUp | ArrowDown | Home | End | F2 | Escape | Tab) {
+                        continue;
+                    }
                     if key == egui::Key::Tab {
                         // The slide has the keyboard, so Tab is ours (indent, tab character, next
                         // shape). Left to egui it would also focus the first ribbon widget, and

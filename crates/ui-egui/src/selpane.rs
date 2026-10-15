@@ -129,6 +129,14 @@ fn row_id(id: u32) -> Id {
     Id::new(("selection_pane_row", id))
 }
 
+/// Is `focused` one of the Layers list's rows (for a layer on the current slide)?
+pub fn is_row(app: &SlideApp, focused: Id) -> bool {
+    let Some(st) = app.session.active() else { return false };
+    let mut hit = false;
+    deckcraft_model::walk(st.shapes(), &mut |sh, _| hit |= row_id(sh.id.0) == focused);
+    hit
+}
+
 fn small_icon_button(ui: &mut Ui, icon: Icon, label: &str, enabled: bool) -> egui::Response {
     let t = Tokens::get(ui.ctx());
     let (rect, resp) = ui.allocate_exact_size(vec2(24.0, 22.0), if enabled { Sense::click() } else { Sense::hover() });
