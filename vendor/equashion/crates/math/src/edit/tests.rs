@@ -690,17 +690,17 @@ fn operators_leave_a_filled_exponent_or_subscript() {
 
 #[test]
 fn typed_latex_commands_become_symbols_and_structures() {
-    assert_eq!(ty("\\alpha "), "α");
-    assert_eq!(ty("\\alpha\\beta "), "αβ");
+    assert_eq!(ty("\\alpha"), "α");
+    assert_eq!(ty("\\alpha\\beta"), "αβ");
     assert_eq!(ty("2\\pi r"), "2πr");
     assert_eq!(ty("a\\leq b"), "a≤b");
     assert_eq!(ty("a\\in b"), "a∈b");
     assert_eq!(ty("\\int_0^1"), ty("int_0^1"));
-    assert!(matches!(typed("\\int ").math().body.first(), Some(Node::Nary { op: '\u{222B}', .. })), "int is not eaten by in");
-    assert!(matches!(typed("\\sqrt ").math().body.first(), Some(Node::Rad { .. })));
+    assert!(matches!(typed("\\int").math().body.first(), Some(Node::Nary { op: '\u{222B}', .. })), "int is not eaten by in");
+    assert!(matches!(typed("\\sqrt").math().body.first(), Some(Node::Rad { .. })));
     assert!(matches!(typed("\\sin").math().body.first(), Some(Node::Func { name, .. }) if name == "sin") || typed("\\sin ").math().body.len() == 1);
     assert!(matches!(typed("\\sin ").math().body.first(), Some(Node::Func { name, .. }) if name == "sin"));
-    assert!(matches!(typed("\\sinh ").math().body.first(), Some(Node::Func { name, .. }) if name == "sinh"));
+    assert!(matches!(typed("\\sinh").math().body.first(), Some(Node::Func { name, .. }) if name == "sinh"));
     // An unknown command stays as typed.
     assert!(matches!(typed("\\foo").math().body.first(), Some(Node::Text(t)) if t == "\\foo"));
     assert_eq!(ty("\\left(x\\right)"), "(x)");
@@ -818,7 +818,7 @@ fn a_space_ends_an_upper_limit_and_inf_becomes_infinity() {
     e.flush();
     assert_eq!(lin(&e).chars().last(), Some('\u{221E}'));
     assert_eq!(lin(&typed("inf+1")), "\u{221E}+1");
-    assert_eq!(lin(&typed("\\infty ")), "\u{221E}");
+    assert_eq!(lin(&typed("\\infty")), "\u{221E}");
     assert_eq!(lin(&typed("infty")), "\u{221E}");
     assert_eq!(lin(&typed("info")), "info");
     let mut e = typed("inf");
@@ -876,7 +876,7 @@ fn a_parenthesised_exponent_is_the_group_itself() {
 #[test]
 fn typed_angle_floor_and_ceiling_commands_become_brackets() {
     let mut e = Editor::new(Math::default());
-    e.type_str(r"\langle u,v\rangle+\lfloor x\rfloor+\lceil y\rceil ");
+    e.type_str(r"\langle u,v\rangle+\lfloor x\rfloor+\lceil y\rceil");
     assert_eq!(crate::to_linear(e.math()).replace(' ', ""), "⟨u,v⟩+⌊x⌋+⌈y⌉");
 }
 

@@ -15,8 +15,6 @@ DeckCraft-specific changes:
 - The math caret and transient brace-input state can be saved with DeckCraft's selection and
   undo snapshots. The session owns edits and history; the egui widget is used for gallery
   previews only.
-- Explicit backslash commands complete on a delimiter, as in the inline interaction work.
-  Updated tests distinguish a pending command from a completed command.
 - Layout exposes immutable sequence geometry so slide carets, selection and hit testing use
   the same fractions, scripts and matrices as the renderer.
 - Compiled-in gallery data and the last-resort font have non-panicking fallback paths.

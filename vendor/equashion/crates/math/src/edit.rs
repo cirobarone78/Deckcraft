@@ -491,6 +491,12 @@ fn latex_cmd(name: &str) -> Option<Cmd> {
     })
 }
 
+/// True when some longer command name starts with `name` (`in` is also the start of `int`).
+fn has_longer_cmd(name: &str) -> bool {
+    const EXTRA: [&str; 7] = ["frac", "dfrac", "tfrac", "cfrac", "sqrt", "left", "right"];
+    crate::linear::command_names().chain(EXTRA).any(|n| n.len() > name.len() && n.starts_with(name))
+}
+
 /// A math tree being edited with a caret and an optional selection.
 #[derive(Debug, Clone)]
 pub struct Editor {
@@ -881,9 +887,14 @@ impl Editor {
         Some((s - 1, name))
     }
 
-    /// Explicit commands stay visible until a delimiter completes them.
+    /// After a letter of a `\name`: make it right away when nothing longer could be meant
+    /// (`\alpha`, `\frac`), else wait for the next character. True while a command is pending.
     fn latex_step(&mut self) -> bool {
-        self.pending_cmd().is_some()
+        let Some((bs, name)) = self.pending_cmd() else { return false };
+        if latex_cmd(&name).is_some() && !has_longer_cmd(&name) {
+            self.commit_cmd(bs, &name);
+        }
+        true
     }
 
     /// A character that cannot continue a command name ends a pending one (`\in` then a space).

@@ -178,6 +178,18 @@ pub(crate) fn is_bare_func(name: &str) -> bool {
     BARE.contains(&name)
 }
 
+/// Every command name the typed-LaTeX table knows, for prefix checks.
+pub(crate) fn command_names() -> impl Iterator<Item = &'static str> {
+    GREEK
+        .iter()
+        .map(|(n, _)| *n)
+        .chain(SYMS.iter().map(|(n, _)| *n))
+        .chain(NARY.iter().map(|(n, _)| *n))
+        .chain(ACCENTS.iter().map(|(n, _)| *n))
+        .chain(LATEX.iter().copied())
+        .chain(PASS.iter().copied())
+}
+
 const NARY_CHARS: &[char] = &['∑', '∏', '∫', '∬', '∭', '∮', '⋃', '⋂'];
 
 // ---- parsing ------------------------------------------------------------------------------

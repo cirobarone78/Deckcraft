@@ -54,7 +54,7 @@ fn math_point(h: &Harness<'_, SlideApp>) -> egui::Pos2 {
     app.slide_rect.unwrap().min + egui::vec2(p.x as f32, p.y as f32) * app.canvas_scale
 }
 #[test]
-fn button_types_immediately_with_space_conversion_and_native_structures() {
+fn button_types_immediately_with_command_conversion_and_native_structures() {
     for inline in [false, true] {
         let mut h = harness(inline);
         let before = h.state().session.active().unwrap().shapes().len();
@@ -69,9 +69,6 @@ fn button_types_immediately_with_space_conversion_and_native_structures() {
             h.event(egui::Event::Text(c.to_string()));
             h.run_steps(1);
         }
-        assert_eq!(linear(&mut h), "\\\\alpha");
-        h.event(egui::Event::Text(" ".into()));
-        h.run_steps(2);
         assert_eq!(linear(&mut h), "α");
         h.event(egui::Event::Text("+a/b".into()));
         h.run_steps(3);

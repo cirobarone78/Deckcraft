@@ -22,7 +22,7 @@ fn key(s: &mut Session, key: &str) {
 }
 
 #[test]
-fn empty_field_is_omml_and_space_commits_an_explicit_command() {
+fn empty_field_is_omml_and_commands_convert_with_typing_and_history() {
     let mut s = fresh();
     let id = begin(&mut s);
     assert!(math(&s).is_empty());
@@ -30,15 +30,35 @@ fn empty_field_is_omml_and_space_commits_an_explicit_command() {
     for c in "\\alpha".chars() {
         s.type_text(&c.to_string()).unwrap();
     }
-    assert_eq!(math(&s).body, vec![equashion_math::Node::Text("\\alpha".into())]);
-    s.type_text(" ").unwrap();
     assert_eq!(equashion_math::to_linear(&math(&s)), "α");
     s.execute("edit.undo", &json!({})).unwrap();
-    assert_eq!(math(&s).body, vec![equashion_math::Node::Text("\\alpha".into())]);
+    assert_eq!(math(&s).body, vec![equashion_math::Node::Text("\\alph".into())]);
     s.execute("edit.redo", &json!({})).unwrap();
     assert_eq!(equashion_math::to_linear(&math(&s)), "α");
     s.type_text("+\\unknown ").unwrap();
     assert!(equashion_math::to_linear(&math(&s)).contains("\\unknown"));
+}
+
+#[test]
+fn command_prefixes_allow_longer_names_and_delimiters() {
+    for (suffix, expected) in [(" ", "∈"), ("+", "∈+"), ("fty", "∞")] {
+        let mut s = fresh();
+        begin(&mut s);
+        for c in "\\in".chars() {
+            s.type_text(&c.to_string()).unwrap();
+        }
+        assert_eq!(math(&s).body, vec![equashion_math::Node::Text("\\in".into())]);
+        for c in suffix.chars() {
+            s.type_text(&c.to_string()).unwrap();
+        }
+        assert_eq!(equashion_math::to_linear(&math(&s)), expected);
+    }
+    let mut s = fresh();
+    begin(&mut s);
+    for c in "\\int".chars() {
+        s.type_text(&c.to_string()).unwrap();
+    }
+    assert!(matches!(math(&s).body.first(), Some(equashion_math::Node::Nary { op: '∫', .. })));
 }
 
 #[test]

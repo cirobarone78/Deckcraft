@@ -462,7 +462,7 @@ fn hostile_input_does_not_panic() {
 #[test]
 fn typed_latex_works_in_the_canvas() {
     let mut h = opened();
-    typ(&mut h, "\\alpha ");
+    typ(&mut h, "\\alpha");
     assert_eq!(lin(&h), "\u{3b1}");
     typ(&mut h, "+\\frac{1}{2}");
     assert_eq!(lin(&h), "\u{3b1}+1/2");

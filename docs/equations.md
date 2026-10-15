@@ -13,8 +13,8 @@ port (`761790de627651a61d9747e62f919fcbe918fbe4`) as the interaction reference. 
   The equation is inserted there; selected prose is replaced. With no text caret, a new
   equation box is created.
 - Type in the shaded field. `a/b` makes a fraction, `x^2` makes a superscript, and `\alpha`
-  followed by Space becomes α. Unknown commands remain literal. The placeholder is an editor
-  hint, never saved as equation content.
+  becomes α. Unknown commands remain literal. The placeholder is an editor hint, never saved
+  as equation content.
 - The Equation tab contains structures, symbols and built-in equations. Tab moves through
   slots. Click a numerator, denominator or script to place its caret.
 - Right Arrow at the root equation's end returns to normal text without inserting a space.
@@ -72,7 +72,7 @@ Checked on macOS with Rust 1.95.0 and the font setup above:
 
 | Check | Result |
 |---|---|
-| `cargo test --workspace --locked` | 1,743 passed; 6 ignored; no failures |
+| `cargo test --workspace --locked -- --test-threads=1` | 1,744 passed; 6 ignored; no failures |
 | `cargo test --manifest-path vendor/equashion/Cargo.toml --workspace` | 257 passed; 1 ignored; no failures |
 | `cargo build -p deckcraft --locked` | Desktop executable builds |
 | `cargo xtask wasm` | All 23 checked crates pass |
@@ -83,6 +83,9 @@ The UI tests exercise actual Equation ribbon clicks, typing, fraction slots, arr
 prose formatting and click-to-reenter. Their rendered placeholder, fraction and exit previews
 were inspected. Engine tests also cover native/PPTX saves, history, clipboard operations,
 selected-prose replacement, adjacent equations and table/rotated/RTL hit testing.
+
+The parallel workspace run had one unrelated notes-spelling UI test failure; that test passed
+in isolation and the full workspace passed with serial test execution.
 
 `cargo xtask ci` still stops at existing Rust 1.95 Clippy warnings on main. The warnings are
 `collapsible_match`, `nonminimal_bool` and `manual_range_contains` in the media, model,
