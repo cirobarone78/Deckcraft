@@ -407,6 +407,7 @@ fn definition() -> Vec<(&'static str, MenuRole, Vec<Row>)> {
                 Sep,
                 Cmd("view.panels", "Show/Hide Side Panels"),
                 Cmd("view.leftPanel", "Show/Hide Left Panel"),
+                Cmd("view.collapseLayers", "Collapse Layers"),
                 Sep,
                 Cmd("view.zoomIn", "Zoom In"),
                 Cmd("view.zoomOut", "Zoom Out"),

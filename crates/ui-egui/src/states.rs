@@ -188,8 +188,14 @@ pub fn animate(app: &mut SlideApp, ui: &mut Ui) {
         {
             add_state(app);
         }
-        if run.len() > 1 && ui.add(egui::Button::new("▶ Play").stroke(Stroke::new(1.0, t.border))).on_hover_text("Present the states").clicked() {
-            app.start_show(run.start, false);
+        let tip = if run.len() > 1 {
+            "Play from the selected state to the last, here in the canvas"
+        } else {
+            "Play this slide's animations here, in the canvas"
+        };
+        if ui.add(egui::Button::new("▶ Preview").stroke(Stroke::new(1.0, t.border))).on_hover_text(tip).clicked() {
+            let (from, to) = preview_range(&doc, cur);
+            app.preview_inline(from, to);
         }
     });
     if is_state_step(&doc, cur) {
@@ -219,6 +225,14 @@ fn section(ui: &mut Ui, title: &str) {
 }
 
 /// Duplicate the current slide as the next state: the copy enters with Morph.
+/// The slides Preview plays from slide `cur`: from the state being edited (not its run's first)
+/// to the run's last.
+pub fn preview_range(doc: &Presentation, cur: usize) -> (usize, usize) {
+    let run = run_of(doc, cur);
+    let last = run.end.saturating_sub(1).max(run.start);
+    (cur.clamp(run.start, last), last)
+}
+
 pub fn add_state(app: &mut SlideApp) {
     let duration =
         app.session.active().and_then(|d| d.current_slide().and_then(|s| s.transition.clone())).filter(|t| t.kind == "morph").map(|t| t.duration_ms);
@@ -266,23 +280,51 @@ pub fn delete_state(app: &mut SlideApp, i: usize) {
 /// Swap state `i` with the one before it (or after it, `forth`). The run keeps its first slide's
 /// transition at its start and Morph after it.
 pub fn move_state(app: &mut SlideApp, i: usize, forth: bool) {
+    let to = if forth { i + 1 } else { i.saturating_sub(1) };
+    if to != i {
+        move_state_to(app, i, to);
+    }
+}
+
+/// Move state `i` to position `to` of its run (counted after taking it out, as `slide.move`
+/// does). Whichever state ends up first takes the run's own transition, and the one that was
+/// first is reached with Morph, so the run doesn't join the slide before it. One undo step.
+pub fn move_state_to(app: &mut SlideApp, i: usize, to: usize) {
     let Some(doc) = app.session.active().map(|d| d.doc.clone()) else { return };
     let run = run_of(&doc, i);
-    let j = if forth { i + 1 } else { i.wrapping_sub(1) };
-    if !run.contains(&i) || !run.contains(&j) {
+    let s = run.start;
+    let to = to.clamp(s, run.end.saturating_sub(1));
+    if !run.contains(&i) || to == i {
         return;
     }
-    let mut cmds = vec![("slide.move", json!({"from": i, "to": j}))];
-    let s = run.start;
-    if i == s || j == s {
-        // The state that becomes first takes the run's transition; the old first one is reached
-        // with the Morph that state had.
+    let mut cmds = vec![("slide.move", json!({"from": i, "to": to}))];
+    // Where the old first state lands, when the first place changes hands.
+    let old_head_at = if i == s {
+        Some(to)
+    } else if to == s {
+        Some(s + 1)
+    } else {
+        None
+    };
+    if let Some(at) = old_head_at {
         let head = doc.slides.get(s).and_then(|x| x.transition.as_ref());
         cmds.push(("transition.set", head_transition(head, s)));
-        cmds.push(("transition.set", json!({"kind": "morph", "duration": morph_ms(&doc, s + 1), "index": s + 1})));
+        cmds.push(("transition.set", json!({"kind": "morph", "duration": morph_ms(&doc, s + 1), "index": at})));
     }
     app.run_as_one("Move State", cmds);
-    let _ = app.run("slide.go", json!({"index": j}));
+    let _ = app.run("slide.go", json!({"index": to}));
+}
+
+/// Where a state dragged from `from` drops among thumbnails `rects` (left to right, the run's
+/// order) for pointer x `x`: the gap nearest it, as `(the move's target, the gap's x)`.
+pub fn drop_at(rects: &[Rect], from: usize, x: f32) -> Option<(usize, f32)> {
+    let first = rects.first()?;
+    let mut gaps: Vec<f32> = vec![first.min.x - 3.0];
+    gaps.extend(rects.iter().map(|r| r.max.x + 3.0));
+    let (g, gx) = gaps.iter().copied().enumerate().min_by(|a, b| (a.1 - x).abs().total_cmp(&(b.1 - x).abs()))?;
+    // Gap g is before thumbnail g; past the dragged one, everything shifts left by one.
+    let to = if g > from { g - 1 } else { g };
+    Some((to, gx))
 }
 
 // ----- The strip under the slide -------------------------------------------------------------
@@ -290,12 +332,10 @@ pub fn move_state(app: &mut SlideApp, i: usize, forth: bool) {
 /// Height of the strip's thumbnails.
 pub const STRIP_THUMB_H: f32 = 54.0;
 
-/// Should the strip show: the slide has states, or the Animate panel is open (or it was turned on).
+/// Should the strip show: only while the Animate panel is open (states are animation).
 pub fn strip_shown(app: &SlideApp) -> bool {
     let Some(st) = app.session.active() else { return false };
-    st.selection.target == deckcraft_engine::Target::Slides
-        && !st.doc.slides.is_empty()
-        && (app.ui.states_strip || app.ui.inspector_tab == "animate" || run_of(&st.doc, st.selection.slide).len() > 1)
+    st.selection.target == deckcraft_engine::Target::Slides && !st.doc.slides.is_empty() && app.ui.inspector_tab == "animate"
 }
 
 /// The current slide's states in a row under the slide (canvas shell): click one to edit it, + after
@@ -311,16 +351,24 @@ pub fn strip_bar(app: &mut SlideApp, ui: &mut Ui) {
     let tw = th * (doc.slide_size.width / doc.slide_size.height.max(1.0)) as f32;
     let ppp = ui.ctx().pixels_per_point();
     let mut budget = 3u32;
+    app.strip_rect = Some(ui.max_rect());
+    let focused = app.states_focus;
     egui::ScrollArea::horizontal().id_salt("canvas_states_strip").auto_shrink([false, true]).show(ui, |ui| {
         ui.horizontal(|ui| {
             ui.spacing_mut().item_spacing.x = 6.0;
             let (lr, _) = ui.allocate_exact_size(vec2(44.0, th), Sense::hover());
             ui.painter().text(pos2(lr.min.x, lr.center().y), Align2::LEFT_CENTER, "States", theme::bold(12.0), t.text_dim);
+            let drag_id = egui::Id::new("states-strip-drag");
+            let mut thumbs: Vec<Rect> = vec![];
             for (k, i) in run.clone().enumerate() {
                 if k > 0 {
                     timing_chip(app, ui, &doc, i, k);
                 }
-                let (r, resp) = ui.allocate_exact_size(vec2(tw, th), Sense::click());
+                let (r, resp) = ui.allocate_exact_size(vec2(tw, th), Sense::click_and_drag());
+                thumbs.push(r);
+                if resp.drag_started() {
+                    ui.ctx().data_mut(|d| d.insert_temp(drag_id, k));
+                }
                 match app.textures.thumb(ui.ctx(), &doc, i, (tw * ppp).round() as u32, &mut budget) {
                     Some(tex) => {
                         ui.painter().image(tex.id(), r, Rect::from_min_max(pos2(0.0, 0.0), pos2(1.0, 1.0)), Color32::WHITE);
@@ -331,7 +379,12 @@ pub fn strip_bar(app: &mut SlideApp, ui: &mut Ui) {
                     }
                 }
                 let on = i == cur;
-                let stroke = if on { Stroke::new(2.0, t.accent) } else { Stroke::new(1.0, if resp.hovered() { t.text_faint } else { t.border }) };
+                // Accent while the strip has the keyboard, grey when it doesn't (as the slide list).
+                let stroke = if on {
+                    Stroke::new(2.0, if focused { t.accent } else { t.text_faint })
+                } else {
+                    Stroke::new(1.0, if resp.hovered() { t.text_faint } else { t.border })
+                };
                 ui.painter().rect_stroke(r, CornerRadius::same(3), stroke, egui::StrokeKind::Outside);
                 // The state's number in a corner badge.
                 let badge = Rect::from_min_size(r.min + vec2(3.0, 3.0), vec2(16.0, 14.0));
@@ -346,6 +399,10 @@ pub fn strip_bar(app: &mut SlideApp, ui: &mut Ui) {
                 builds_ticks(ui, &doc, i, r, &t);
                 let label = format!("State {}", k + 1);
                 resp.widget_info(|| egui::WidgetInfo::selected(egui::WidgetType::Button, true, on, &label));
+                if resp.clicked() || resp.drag_started() {
+                    app.states_focus = true;
+                    app.slides_focus = false;
+                }
                 if resp.clicked() && !on {
                     let _ = app.run("slide.go", json!({"index": i}));
                 }
@@ -381,8 +438,60 @@ pub fn strip_bar(app: &mut SlideApp, ui: &mut Ui) {
                     add_state_after(app, i);
                 }
             }
+            // Dragging a state: a line where it would go; letting go moves it there.
+            if let Some(from) = ui.ctx().data(|d| d.get_temp::<usize>(drag_id)) {
+                let (pointer, released) = ui.input(|i| (i.pointer.interact_pos(), i.pointer.any_released() || !i.pointer.any_down()));
+                let target = pointer.and_then(|p| drop_at(&thumbs, from, p.x));
+                if let (Some((to, x)), Some(r)) = (target, thumbs.first()) {
+                    if to != from {
+                        ui.painter().vline(x, r.y_range().expand(4.0), Stroke::new(2.0, t.accent));
+                    }
+                    ui.ctx().set_cursor_icon(egui::CursorIcon::Grabbing);
+                }
+                if released {
+                    ui.ctx().data_mut(|d| d.remove::<usize>(drag_id));
+                    if let Some((to, _)) = target
+                        && to != from
+                    {
+                        move_state_to(app, run.start + from, run.start + to);
+                    }
+                }
+            }
         });
     });
+}
+
+/// Keys for the states strip while it has the keyboard (`SlideApp::states_focus`): ← / → (or
+/// ↑ / ↓) go to the previous or next state, Home / End to the first or last, ⌘← / ⌘→ move the state
+/// one place, ⌘D adds a state after it, Delete removes it, Esc gives the keyboard back. True when
+/// consumed.
+pub fn strip_key(app: &mut SlideApp, key: egui::Key, m: deckcraft_engine::Mods) -> bool {
+    use egui::Key::*;
+    let Some(st) = app.session.active() else { return false };
+    let cur = st.selection.slide;
+    let run = run_of(&st.doc, cur);
+    let last = run.end.saturating_sub(1).max(run.start);
+    let back = matches!(key, ArrowLeft | ArrowUp);
+    let forth = matches!(key, ArrowRight | ArrowDown);
+    match (key, m.cmd, m.shift, m.alt) {
+        (Escape, false, false, false) => app.states_focus = false,
+        (_, false, false, false) if back || forth || matches!(key, Home | End) => {
+            let to = match key {
+                Home => run.start,
+                End => last,
+                _ if back => cur.saturating_sub(1).max(run.start),
+                _ => (cur + 1).min(last),
+            };
+            if to != cur {
+                let _ = app.run("slide.go", json!({"index": to}));
+            }
+        }
+        (_, true, false, false) if back || forth => move_state(app, cur, forth),
+        (D, true, false, false) => add_state(app),
+        (Delete | Backspace, false, false, false) => delete_state(app, cur),
+        _ => return false,
+    }
+    true
 }
 
 /// Between two states: how long Morph takes to the later one; click for its options.

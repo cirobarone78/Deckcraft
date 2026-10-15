@@ -270,3 +270,43 @@ fn option_clicking_a_chevron_folds_the_groups_inside_too() {
     h.run_steps(3);
     assert!(h.state().selpane.collapsed.is_empty(), "⌥ opens them all again");
 }
+
+#[test]
+fn collapse_layers_folds_every_group_and_then_hides() {
+    let mut s = Session::with_new();
+    s.execute("slide.new", &json!({"layout": "blank"})).unwrap();
+    let mut ids = vec![];
+    for i in 0..4 {
+        let r = s.execute("shape.insert", &json!({"preset": "rect", "rect": [20.0 + 110.0 * i as f64, 50, 100, 80]})).unwrap();
+        ids.push(r["id"].as_u64().unwrap() as u32);
+    }
+    // G holds an inner group H.
+    let inner = s.execute("arrange.group", &json!({"ids": [ids[0], ids[1]]})).unwrap()["id"].as_u64().unwrap() as u32;
+    s.execute("shape.rename", &json!({"id": inner, "name": "H"})).unwrap();
+    let outer = s.execute("arrange.group", &json!({"ids": [inner, ids[2]]})).unwrap()["id"].as_u64().unwrap() as u32;
+    s.execute("shape.rename", &json!({"id": outer, "name": "G"})).unwrap();
+    s.execute("edit.select", &json!({"ids": []})).unwrap();
+    let mut app = SlideApp::new(s, Services::default());
+    app.run("view.shell", json!({"shell": "canvas"})).unwrap();
+    let mut h = Harness::builder().with_size(egui::vec2(1400.0, 900.0)).build_ui_state(
+        |ui, app: &mut SlideApp| {
+            app.logic(ui.ctx());
+            app.ui(ui);
+        },
+        app,
+    );
+    h.run_steps(3);
+    assert!(h.query_by_label("Collapse H").is_some(), "groups start open");
+    h.get_by_label("Collapse layers (⌥L)").click();
+    h.run_steps(3);
+    assert!(h.state().selpane.collapsed.contains(&outer) && h.state().selpane.collapsed.contains(&inner), "nested groups fold too");
+    assert!(h.query_by_label("Expand G").is_some() && h.query_by_label("Collapse H").is_none());
+    assert!(h.query_by_label("Collapse layers (⌥L)").is_none(), "nothing left to collapse: the button hides");
+    // Opening a group brings it back; ⌥L folds again.
+    h.get_by_label("Expand G").click();
+    h.run_steps(3);
+    assert!(h.query_by_label("Collapse layers (⌥L)").is_some());
+    h.key_press_modifiers(Modifiers::ALT, egui::Key::L);
+    h.run_steps(3);
+    assert!(h.state().selpane.collapsed.contains(&outer), "⌥L collapses");
+}

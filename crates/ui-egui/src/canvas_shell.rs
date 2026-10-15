@@ -47,7 +47,11 @@ pub fn show(app: &mut SlideApp, ui: &mut Ui) {
                     notes_card(app, ui);
                 }
                 states_strip(app, ui);
-                crate::canvas::show(app, ui);
+                if app.previewing() {
+                    crate::show::ui(app, ui);
+                } else {
+                    crate::canvas::show(app, ui);
+                }
             }
         }
         hidden_panel_buttons(app, ui);
@@ -254,7 +258,18 @@ fn layers(app: &mut SlideApp, ui: &mut Ui) {
         .show(ui, |ui| {
             let r = ui.max_rect();
             ui.painter().hline(r.x_range().expand(10.0), r.min.y - 10.0, Stroke::new(1.0, t.separator));
-            section_title(ui, "Layers");
+            ui.horizontal(|ui| {
+                ui.set_min_height(26.0);
+                section_title(ui, "Layers");
+                // Hidden once every group is folded, as in Figma.
+                if crate::selpane::any_open(app) {
+                    ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                        if crate::props::icon_button(ui, Icon::CollapseLayers, "Collapse layers (⌥L)", true).clicked() {
+                            let _ = app.run("view.collapseLayers", json!({}));
+                        }
+                    });
+                }
+            });
             ui.add_space(4.0);
             egui::ScrollArea::vertical().id_salt("canvas_layers_list").auto_shrink([false, false]).show(ui, |ui| {
                 if app.session.active().is_some_and(|d| d.shapes().is_empty()) {

@@ -316,9 +316,6 @@ pub struct UiState {
     pub comment_focus: Option<(usize, usize)>,
     /// Quick Access Toolbar buttons, left to right.
     pub qat: Vec<qat::QatItem>,
-    /// Canvas shell: the strip of the current slide's states under the slide, shown even when it
-    /// has none yet (it always shows while it has some).
-    pub states_strip: bool,
     /// Canvas shell: the left panel (slides and layers) and the right panel (design) are hidden.
     pub hide_left: bool,
     pub hide_right: bool,
@@ -352,7 +349,6 @@ impl Default for UiState {
             smartart_row: 0,
             smartart_focus: None,
             smartart_drafts: (0, vec![]),
-            states_strip: false,
             hide_left: false,
             hide_right: false,
             grayscale: false,
@@ -419,6 +415,7 @@ pub const UI_COMMANDS: &[(&str, &str, Option<&str>, &str)] = &[
     ("view.ruler", "Ruler", None, "{on?: bool}"),
     ("view.panels", "Show/Hide Side Panels", Some("Cmd+."), "{on?: bool} (canvas layout: both side panels)"),
     ("view.leftPanel", "Show/Hide Left Panel", Some("Alt+Cmd+."), "{on?: bool} (canvas layout: slides and layers)"),
+    ("view.collapseLayers", "Collapse Layers", Some("Alt+L"), "{} (fold every group in the Layers list)"),
     ("view.gridlines", "Gridlines", Some("Shift+F9"), "{on?: bool}"),
     ("view.guides", "Guides", Some("Alt+F9"), "{on?: bool}"),
     ("view.gridOptions", "Grid Options…", None, "{spacing?: pt, snap?: bool, smartGuides?: bool, gridlines?: bool, guides?: bool}"),
@@ -554,6 +551,12 @@ pub struct SlideApp {
     pub slides_focus: bool,
     /// Where the slide list was drawn last frame, so a click there keeps its focus.
     pub thumbs_rect: Option<egui::Rect>,
+    /// The states strip has the keyboard (a state was clicked last): ← / → walk the states,
+    /// ⌘← / ⌘→ move one, ⌘D adds one after it, Delete removes it (see `states::strip_key`). A click
+    /// anywhere else, or Esc, gives it back.
+    pub states_focus: bool,
+    /// Where the states strip was drawn last frame, so a click there keeps its focus.
+    pub strip_rect: Option<egui::Rect>,
     /// The slide a ⇧-extended range starts from, and the one it reaches.
     pub slide_anchor: Option<usize>,
     pub slide_cursor: Option<usize>,
@@ -643,6 +646,8 @@ impl SlideApp {
             detached: Default::default(),
             slides_focus: false,
             thumbs_rect: None,
+            states_focus: false,
+            strip_rect: None,
             slide_anchor: None,
             slide_cursor: None,
             last_time: 0.0,
@@ -960,6 +965,11 @@ impl SlideApp {
                 self.ui.hide_right = !shown;
             }
             "view.leftPanel" => self.ui.hide_left = !self.flag(p, !self.ui.hide_left),
+            "view.collapseLayers" => {
+                if let Some(d) = self.session.active() {
+                    self.selpane.collapsed.extend(selpane::all_groups(d.shapes()));
+                }
+            }
             "view.gridlines" => self.ui.gridlines = self.flag(p, self.ui.gridlines),
             "view.guides" => {
                 self.ui.guides = self.flag(p, self.ui.guides);
@@ -1196,6 +1206,25 @@ impl SlideApp {
     /// First slide Play from Start should open: the custom show or range, skipping hidden slides.
     pub fn show_start_index(&self) -> usize {
         self.session.active().and_then(|d| deckcraft_anim::show_order(&d.doc).first().copied()).unwrap_or(0)
+    }
+
+    /// Preview slides `from..=to` in the editor's canvas (not full screen): their animations and
+    /// transitions play by themselves, then editing carries on. Esc or a click stops it early.
+    pub fn preview_inline(&mut self, from: usize, to: usize) {
+        self.media.stop_owned(media::Owner::Editor);
+        if let Some(d) = self.session.active() {
+            let mut s = show::Show::new(&d.doc, from, false, false);
+            s.inline = true;
+            s.preview_only = true;
+            s.autoplay = true;
+            s.stop_after = Some(to.max(from));
+            self.show = Some(s);
+        }
+    }
+
+    /// Is a preview playing in the canvas?
+    pub fn previewing(&self) -> bool {
+        self.show.as_ref().is_some_and(|s| s.inline)
     }
 
     pub fn start_show(&mut self, from: usize, reading: bool) {
@@ -1793,6 +1822,10 @@ impl SlideApp {
             }
         }
         self.track_slides_focus(ctx);
+        // The preview playing in the canvas has the keys (→, Esc).
+        if self.show.is_some() {
+            return;
+        }
         if ctx.memory(|m| m.focused().is_some()) || self.dialog.as_ref().is_some_and(|d| d.modal()) || self.palette.is_some() {
             return;
         }
@@ -1876,6 +1909,9 @@ impl SlideApp {
                         continue;
                     }
                     let mods = Mods { shift: modifiers.shift, alt: modifiers.alt, cmd: modifiers.command || modifiers.ctrl };
+                    if self.states_focus && states::strip_key(self, key, mods) {
+                        continue;
+                    }
                     if slides_keys && thumbs::slide_key(self, key, mods) {
                         continue;
                     }
@@ -1911,6 +1947,11 @@ impl SlideApp {
         let editing = self.session.active().is_none_or(|d| !d.selection.shapes.is_empty() || d.selection.text.is_some());
         if elsewhere || editing {
             self.slides_focus = false;
+        }
+        let off_strip =
+            ctx.input(|i| i.pointer.primary_pressed() && i.pointer.interact_pos().is_some_and(|p| !self.strip_rect.is_some_and(|r| r.contains(p))));
+        if off_strip || editing || !states::strip_shown(self) {
+            self.states_focus = false;
         }
     }
 
@@ -2034,6 +2075,9 @@ impl SlideApp {
         self.opening_ui(&ctx);
         if self.show.is_some() {
             self.anim_preview = None;
+        }
+        // A full slide show takes the window; an inline preview plays in the canvas.
+        if self.show.as_ref().is_some_and(|s| !s.inline) {
             show::ui(self, ui);
             doc_window::show(self, &ctx);
             self.perf.frame_ms = now_ms() - t0;
@@ -2041,8 +2085,9 @@ impl SlideApp {
         }
         self.sync_backstage();
         self.keyboard(&ctx);
-        // Drawn again below when the slide list is shown.
+        // Drawn again below when the slide list (or the states strip) is shown.
         self.thumbs_rect = None;
+        self.strip_rect = None;
         self.sync_backstage();
         self.sync_shell_prefs();
         ribbon::title_bar(self, ui);
@@ -2090,7 +2135,11 @@ impl SlideApp {
                         if self.ui.notes {
                             status::notes_pane(self, ui);
                         }
-                        canvas::show(self, ui);
+                        if self.previewing() {
+                            show::ui(self, ui);
+                        } else {
+                            canvas::show(self, ui);
+                        }
                     });
                 }
             }

@@ -345,6 +345,7 @@ icons! {
     List => "list",
     Collapse => "collapse",
     Expand => "expand",
+    CollapseLayers => "collapse-layers",
     Pin => "pin",
     // File tab (Backstage)
     BackCircle => "back-circle",
@@ -2538,6 +2539,14 @@ fn draw(p: &Pen<'_>, icon: Icon) {
             p.line(&[(7.0, 3.0), (12.0, 8.0), (17.0, 3.0)], K);
             p.line(&[(7.0, 21.0), (12.0, 16.0), (17.0, 21.0)], K);
             p.seg_w((5.0, 12.0), (19.0, 12.0), K.a(0.5), 0.8);
+        }
+        I::CollapseLayers => {
+            // Lines with a fold mark: Figma's Collapse layers.
+            for y in [6.0, 12.0, 18.0] {
+                p.seg((3.0, y), (14.0, y), K);
+            }
+            p.line(&[(16.5, 7.5), (19.0, 10.0), (21.5, 7.5)], K);
+            p.line(&[(16.5, 16.5), (19.0, 14.0), (21.5, 16.5)], K);
         }
         I::Expand => {
             p.line(&[(7.0, 8.0), (12.0, 3.0), (17.0, 8.0)], K);

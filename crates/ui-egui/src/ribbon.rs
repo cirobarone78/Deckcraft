@@ -1781,11 +1781,9 @@ fn transitions(app: &mut SlideApp, ui: &mut Ui) {
     let kind = cur.as_ref().map(|t| t.kind.clone()).unwrap_or_else(|| "none".into());
     group(ui, |ui| {
         if big_button(ui, Icon::Preview, "Preview", true).clicked() {
+            // The transition into this slide, in the canvas: from the slide before it.
             let from = app.session.active().map(|d| d.selection.slide).unwrap_or(0);
-            app.start_show(from, true);
-            if let Some(s) = app.show.as_mut() {
-                s.preview_only = true;
-            }
+            app.preview_inline(from.saturating_sub(1), from);
         }
     });
     group(ui, |ui| {

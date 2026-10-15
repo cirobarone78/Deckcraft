@@ -356,6 +356,18 @@ pub fn list_marked(app: &mut SlideApp, ui: &mut Ui, marked: &HashSet<u32>) {
 }
 
 /// The ids of the groups among `shapes`, at every depth.
+/// Every group among `shapes`, at any depth.
+pub fn all_groups(shapes: &[deckcraft_model::Shape]) -> Vec<u32> {
+    let mut out = vec![];
+    nested_groups(shapes, &mut out, 0);
+    out
+}
+
+/// Is any group in the Layers list open? (The Collapse layers button shows only then.)
+pub fn any_open(app: &SlideApp) -> bool {
+    app.session.active().is_some_and(|d| all_groups(d.shapes()).iter().any(|g| !app.selpane.collapsed.contains(g)))
+}
+
 fn nested_groups(shapes: &[deckcraft_model::Shape], out: &mut Vec<u32>, depth: usize) {
     if depth > 64 {
         return;

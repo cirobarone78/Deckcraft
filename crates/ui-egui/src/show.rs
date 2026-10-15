@@ -20,6 +20,10 @@ pub struct Show {
     pub preview_only: bool,
     /// Play every step automatically (animation preview).
     pub autoplay: bool,
+    /// Playing in the editor's canvas (a preview): no full screen, no presenter window.
+    pub inline: bool,
+    /// A preview runs on through the slides up to this one (a slide's states), then ends.
+    pub stop_after: Option<usize>,
     pub rehearse: bool,
     timeline: Option<(usize, Timeline)>,
     step_start: f64,
@@ -176,6 +180,8 @@ impl Show {
             presenter,
             preview_only: false,
             autoplay: false,
+            inline: false,
+            stop_after: None,
             rehearse: false,
             timeline: None,
             step_start: 0.0,
@@ -291,7 +297,7 @@ impl Show {
                 self.step_end = now;
                 self.media_clock = None;
                 self.strokes.clear();
-                if self.preview_only {
+                if self.preview_only && self.stop_after.is_none_or(|last| i > last) {
                     return false;
                 }
                 self.after_enter(doc, now);
@@ -315,7 +321,9 @@ impl Show {
     fn after_enter(&mut self, doc: &Presentation, now: f64) {
         let started = if self.state.playing {
             Some(self.state.step)
-        } else if self.autoplay {
+        } else if self.autoplay && self.state.step < self.timeline(doc).steps() {
+            // (A slide with no steps has nothing to start: `next` would leave it for the next
+            // slide at once, with no transition, and a preview from a state skipped that state.)
             match self.state.next(doc) {
                 ShowAction::PlayStep(k) => Some(k),
                 _ => None,
@@ -526,6 +534,16 @@ pub fn ui(app: &mut SlideApp, ui: &mut Ui) {
     };
     let now = ctx.input(|i| i.time);
     let Some(mut show) = app.show.take() else { return };
+    // The show has the keyboard: a control the editor left focused (a slide or layer row, a
+    // field) would take the arrow keys to move focus, and → wouldn't reach the slides until the
+    // show was clicked.
+    ctx.memory_mut(|m| {
+        if let Some(id) = m.focused() {
+            m.surrender_focus(id);
+        }
+    });
+    // The click or key that started a preview in the canvas is still in this frame's input.
+    let fresh = !show.started;
     if !show.started {
         show.started = true;
         show.slide_start = now;
@@ -533,13 +551,15 @@ pub fn ui(app: &mut SlideApp, ui: &mut Ui) {
         show.show_start = now;
         show.timer = PresenterTimer::start(now);
         show.last_move = now;
-        if !show.reading {
+        if !show.reading && !show.inline {
             ctx.send_viewport_cmd(egui::ViewportCommand::Fullscreen(true));
         }
         show.after_enter(&doc, now);
     }
-    let mut keep = keyboard(&ctx, &mut show, &doc, now);
+    // The click or key that started a preview in the canvas is still in this frame's input.
+    let mut keep = if fresh && show.inline { true } else { keyboard(&ctx, &mut show, &doc, now) };
     let (clicked, secondary, moved) = ctx.input(|i| (i.pointer.primary_clicked(), i.pointer.secondary_clicked(), i.pointer.delta().length() > 0.0));
+    let (clicked, secondary) = if fresh && show.inline { (false, false) } else { (clicked, secondary) };
     if moved {
         show.last_move = now;
     }
@@ -660,7 +680,12 @@ pub fn ui(app: &mut SlideApp, ui: &mut Ui) {
         if !holding && (step_due || (!show.rehearse && show.state.auto_advance_due(&doc, idle) && !show.ended)) {
             actions.push(show.state.next(&doc));
         } else if show.preview_only && cur_step >= n_steps && idle > 0.8 {
-            keep = false;
+            // A preview runs on to the slides it covers (a slide's states), then ends.
+            if show.stop_after.is_some_and(|last| show.state.slide < last) {
+                actions.push(show.state.next(&doc));
+            } else {
+                keep = false;
+            }
         }
     }
     for a in actions {
@@ -835,7 +860,11 @@ pub fn ui(app: &mut SlideApp, ui: &mut Ui) {
             }
         }
         if !drew {
-            show.trans = None;
+            // A preview holds each slide (a state) a moment after its transition has played, not
+            // from when it began: else the last state would end the preview as its Morph lands.
+            if show.trans.take().is_some() && show.preview_only {
+                show.step_end = now;
+            }
             if let Some(tex) = &tex {
                 painter.image(tex.id(), srect, show.zoom_uv(), Color32::WHITE);
             }
@@ -920,7 +949,7 @@ pub fn ui(app: &mut SlideApp, ui: &mut Ui) {
         ctx.set_cursor_icon(egui::CursorIcon::Crosshair);
     } else if pointing {
         ctx.set_cursor_icon(egui::CursorIcon::PointingHand);
-    } else if now - show.last_move > 2.5 && !show.reading {
+    } else if now - show.last_move > 2.5 && !show.reading && !show.inline {
         ctx.set_cursor_icon(egui::CursorIcon::None);
         ctx.request_repaint_after(std::time::Duration::from_millis(500));
     }
@@ -1033,14 +1062,14 @@ pub fn ui(app: &mut SlideApp, ui: &mut Ui) {
         ctx.request_repaint_after(std::time::Duration::from_millis(100));
     }
     // Presenter view in a second window.
-    if keep && show.presenter && !show.reading {
+    if keep && show.presenter && !show.reading && !show.inline {
         presenter_window(&ctx, &mut show, &doc, now, &mut keep);
     }
     if keep {
         app.show = Some(show);
     } else {
         app.media.stop_owned(crate::media::Owner::Show);
-        if !show.reading {
+        if !show.reading && !show.inline {
             ctx.send_viewport_cmd(egui::ViewportCommand::Fullscreen(false));
         }
         if show.rehearse {
@@ -1053,8 +1082,12 @@ pub fn ui(app: &mut SlideApp, ui: &mut Ui) {
             }
             app.set_status("Slide timings recorded.");
         }
-        let last = show.state.slide;
-        let _ = app.run("slide.go", json!({"index": last}));
+        // A full show leaves you on the slide it ended on; a preview in the canvas gives editing
+        // back where it was (the state it started from).
+        if !show.inline {
+            let last = show.state.slide;
+            let _ = app.run("slide.go", json!({"index": last}));
+        }
     }
 }
 
@@ -2245,5 +2278,82 @@ mod tests {
         // 16:9 still takes the column's full width.
         let doc = s.active().unwrap().doc.clone();
         assert_eq!(next_rect(right, &doc).width(), 400.0);
+    }
+
+    fn with_video() -> (crate::SlideApp, ShapeId) {
+        let mut app = crate::SlideApp::new(deckcraft_engine::Session::with_new(), crate::Services::default());
+        let bytes = std::fs::read(concat!(env!("CARGO_MANIFEST_DIR"), "/../media/tests/fixtures/clip-h264.mov")).unwrap();
+        let data = deckcraft_engine::cmd::base64_encode(&bytes);
+        let r = app.run("insert.video", json!({"data": data, "name": "clip.mov"})).unwrap();
+        (app, ShapeId(r["id"].as_u64().unwrap() as u32))
+    }
+
+    fn harness(app: crate::SlideApp) -> egui_kittest::Harness<'static, crate::SlideApp> {
+        let mut h = egui_kittest::Harness::builder().with_size(egui::vec2(1280.0, 800.0)).build_ui_state(
+            |ui, app: &mut crate::SlideApp| {
+                app.logic(ui.ctx());
+                app.ui(ui);
+            },
+            app,
+        );
+        h.run_steps(4);
+        h
+    }
+
+    #[test]
+    fn the_next_click_plays_an_inserted_video_before_moving_on() {
+        let (mut app, id) = with_video();
+        app.run("slide.new", json!({})).unwrap();
+        app.run("slide.go", json!({"index": 0})).unwrap();
+        let a = &app.session.active().unwrap().doc.slides[0].animations;
+        assert!(a.iter().any(|x| x.shape == id && x.class == deckcraft_model::anim::AnimClass::Media), "inserted with a play step: {a:?}");
+        app.start_show(0, false);
+        let mut h = harness(app);
+        assert!(h.state().media.status(id).is_none(), "nothing plays before the click");
+        for pressed in [true, false] {
+            h.event(egui::Event::Key { key: egui::Key::ArrowRight, physical_key: None, pressed, repeat: false, modifiers: Default::default() });
+        }
+        h.run_steps(6);
+        // The test clip is a few frames long: started is what counts.
+        assert!(h.state().media.status(id).is_some(), "→ played the video");
+        assert_eq!(h.state().show.as_ref().map(|s| s.state.slide), Some(0), "and stayed on its slide");
+    }
+
+    #[test]
+    fn arrow_keys_reach_the_show_while_an_editor_control_has_focus() {
+        let mut app = crate::SlideApp::new(deckcraft_engine::Session::with_new(), crate::Services::default());
+        app.run("slide.new", json!({})).unwrap();
+        app.run("slide.go", json!({"index": 0})).unwrap();
+        let mut h = harness(app);
+        // Something in the editor (a slide row, a field) has the keyboard.
+        h.ctx.memory_mut(|m| m.request_focus(egui::Id::new("an editor control")));
+        h.run_steps(2);
+        h.state_mut().start_show(0, false);
+        h.run_steps(4);
+        assert!(h.ctx.memory(|m| m.focused()).is_none(), "the show took the keyboard");
+        for pressed in [true, false] {
+            h.event(egui::Event::Key { key: egui::Key::ArrowRight, physical_key: None, pressed, repeat: false, modifiers: Default::default() });
+        }
+        h.run_steps(4);
+        assert_eq!(h.state().show.as_ref().map(|s| s.state.slide), Some(1), "→ moved on without a click first");
+    }
+
+    #[test]
+    fn start_automatically_is_kept_in_the_file() {
+        let (mut app, id) = with_video();
+        app.run("selection.select", json!({"ids": [id.0]})).unwrap();
+        app.run("media.options", json!({"autoplay": true})).unwrap();
+        let data = app.session.execute("file.saveBytes", &json!({"format": "pptx"})).unwrap()["data"].clone();
+        app.session.execute("file.openBytes", &json!({"name": "v.pptx", "data": data})).unwrap();
+        let doc = app.session.active().unwrap().doc.clone();
+        let a = &doc.slides[0].animations;
+        assert!(
+            a.iter().any(|x| x.class == deckcraft_model::anim::AnimClass::Media && x.start != deckcraft_model::anim::AnimStart::OnClick),
+            "the automatic play step came back: {a:?}"
+        );
+        let vid = doc.slides[0].shapes.iter().find(|s| matches!(s.kind, deckcraft_model::ShapeKind::Media(_))).unwrap().id;
+        app.start_show(0, false);
+        let h = harness(app);
+        assert!(h.state().media.status(vid).is_some(), "it plays as the slide shows");
     }
 }

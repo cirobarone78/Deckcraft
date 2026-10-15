@@ -169,10 +169,12 @@ fn the_strip_adds_states_after_any_state() {
     assert_eq!(run_of(&d, 0), 0..3);
     assert_eq!(h.state().session.active().unwrap().selection.slide, 1, "the new state went in after the first");
     assert!(h.query_by_label("Morph into state 2").is_some(), "timing between states");
-    h.state_mut().ui.states_strip = false;
-    h.state_mut().ui.inspector_tab = "design".into();
+    h.get_by_label("Design").click();
     h.run_steps(2);
-    assert!(h.query_by_label("State 3").is_some(), "the strip stays while there are states");
+    assert!(h.query_by_label("State 3").is_none(), "the strip is Animate's only, even with states");
+    h.get_by_label("Animate").click();
+    h.run_steps(2);
+    assert!(h.query_by_label("State 3").is_some(), "back with Animate");
 }
 
 #[test]
@@ -251,4 +253,152 @@ fn a_text_build_counts_a_click_per_paragraph() {
     h.get_by_label("None").click();
     h.run_steps(3);
     assert_eq!(build_steps(&doc(h.state()).slides[0]), 0);
+}
+
+#[test]
+fn preview_plays_the_states_in_the_canvas_and_ends_by_itself() {
+    let (mut app, _) = app_with_box();
+    add_state(&mut app);
+    app.run("slide.new", json!({})).unwrap();
+    app.run("slide.go", json!({"index": 0})).unwrap();
+    app.ui.inspector_tab = "animate".into();
+    let mut h = canvas(app);
+    h.get_by_label("▶ Preview").click();
+    h.run_steps(3);
+    assert!(h.state().previewing(), "playing in the canvas");
+    assert!(h.query_by_label("Grid").is_some() && h.query_by_label("Layers").is_some(), "the editor stays around it");
+    // It plays on into the second state, then stops before the next slide.
+    let mut seen = vec![];
+    for _ in 0..40 {
+        std::thread::sleep(std::time::Duration::from_millis(100));
+        h.run_steps(1);
+        match h.state().show.as_ref() {
+            Some(s) => seen.push(s.state.slide),
+            None => break,
+        }
+    }
+    assert!(h.state().show.is_none(), "the preview ended by itself");
+    assert!(seen.contains(&1), "it reached the second state: {seen:?}");
+    assert!(!seen.contains(&2), "and stopped before the next slide: {seen:?}");
+}
+
+#[test]
+fn preview_starts_from_the_selected_state() {
+    let (mut app, _) = app_with_box();
+    add_state(&mut app);
+    add_state(&mut app);
+    app.run("slide.new", json!({})).unwrap();
+    let d = doc(&app);
+    assert_eq!(preview_range(&d, 1), (1, 2), "from the second state, the one selected, to the last");
+    assert_eq!(preview_range(&d, 0), (0, 2));
+    assert_eq!(preview_range(&d, 3), (3, 3), "a slide without states plays only itself");
+    // The button plays that range.
+    app.run("slide.go", json!({"index": 1})).unwrap();
+    app.ui.inspector_tab = "animate".into();
+    let mut h = canvas(app);
+    h.get_by_label("▶ Preview").click();
+    h.run_steps(1);
+    assert_eq!(h.state().show.as_ref().and_then(|s| s.stop_after), Some(2));
+}
+
+#[test]
+fn preview_from_a_state_without_effects_shows_it_morphs_on_and_gives_editing_back() {
+    // A state with nothing to click through used to be skipped at once, with no Morph.
+    let (mut app, _) = app_with_box();
+    add_state(&mut app);
+    add_state(&mut app);
+    app.run("slide.new", json!({})).unwrap();
+    app.run("slide.go", json!({"index": 1})).unwrap();
+    app.run("edit.deselect", json!({})).unwrap();
+    app.ui.inspector_tab = "animate".into();
+    let mut h = canvas(app);
+    h.get_by_label("▶ Preview").click();
+    let mut seen = vec![];
+    for _ in 0..80 {
+        h.run_steps(1);
+        match h.state().show.as_ref() {
+            Some(s) => seen.push(s.state.slide),
+            None => break,
+        }
+    }
+    assert!(h.state().show.is_none(), "the preview ended: {seen:?}");
+    let first_last = seen.iter().position(|s| *s == 2).unwrap();
+    assert!(seen[..first_last].len() >= 2 && seen[..first_last].iter().all(|s| *s == 1), "it held the selected state first: {seen:?}");
+    assert!(seen.iter().filter(|s| **s == 2).count() >= 4, "and the last state after its Morph: {seen:?}");
+    assert_eq!(h.state().session.active().unwrap().selection.slide, 1, "editing carries on at the state it started from");
+}
+
+#[test]
+fn a_clicked_state_takes_the_keyboard() {
+    let (mut app, _) = app_with_box();
+    add_state(&mut app);
+    add_state(&mut app);
+    app.run("slide.new", json!({})).unwrap();
+    app.run("slide.go", json!({"index": 0})).unwrap();
+    app.run("edit.deselect", json!({})).unwrap();
+    app.ui.inspector_tab = "animate".into();
+    let mut h = canvas(app);
+    let at = |h: &Harness<'static, SlideApp>| h.state().session.active().unwrap().selection.slide;
+    h.get_by_label("State 2").click();
+    h.run_steps(2);
+    assert!(h.state().states_focus && !h.state().slides_focus);
+    assert_eq!(at(&h), 1);
+    // → / ← walk the states and stop at the run's ends (not on to the next slide).
+    for (key, want) in [(egui::Key::ArrowRight, 2), (egui::Key::ArrowRight, 2), (egui::Key::ArrowLeft, 1), (egui::Key::Home, 0)] {
+        h.key_press(key);
+        h.run_steps(2);
+        assert_eq!(at(&h), want, "{key:?}");
+    }
+    // ⌘→ moves the state; ⌘D adds one after it; Delete removes it.
+    let first = doc(h.state()).slides[0].id;
+    h.key_press_modifiers(egui::Modifiers::COMMAND, egui::Key::ArrowRight);
+    h.run_steps(2);
+    assert_eq!(doc(h.state()).slides[1].id, first, "moved one place right");
+    assert_eq!(run_of(&doc(h.state()), 0), 0..3, "still one run");
+    h.key_press_modifiers(egui::Modifiers::COMMAND, egui::Key::D);
+    h.run_steps(2);
+    assert_eq!(run_of(&doc(h.state()), 0), 0..4, "a state added");
+    h.key_press(egui::Key::Delete);
+    h.run_steps(2);
+    assert_eq!(run_of(&doc(h.state()), 0), 0..3, "and deleted");
+    assert_eq!(doc(h.state()).slides.len(), 4, "the slide after the run is untouched");
+    // Esc, or a click elsewhere, gives the keyboard back.
+    h.key_press(egui::Key::Escape);
+    h.run_steps(2);
+    assert!(!h.state().states_focus);
+    h.get_by_label("State 1").click();
+    h.run_steps(2);
+    assert!(h.state().states_focus);
+    h.get_by_label("Design").click();
+    h.run_steps(2);
+    assert!(!h.state().states_focus, "a click elsewhere (and the strip hiding with Animate)");
+}
+
+#[test]
+fn a_dragged_state_drops_at_the_nearest_gap() {
+    let r = |x: f32| egui::Rect::from_min_size(egui::pos2(x, 0.0), egui::vec2(80.0, 50.0));
+    let rects = [r(0.0), r(100.0), r(200.0), r(300.0)];
+    // Dragging the first to past the third: it goes third (after taking it out).
+    assert_eq!(drop_at(&rects, 0, 290.0).map(|d| d.0), Some(2));
+    // Dragging the last to the front.
+    assert_eq!(drop_at(&rects, 3, -5.0).map(|d| d.0), Some(0));
+    // Back where it was.
+    assert_eq!(drop_at(&rects, 1, 95.0).map(|d| d.0), Some(1));
+}
+
+#[test]
+fn moving_the_first_state_to_the_end_keeps_the_run_together() {
+    let (mut app, _) = app_with_box();
+    app.run("transition.set", json!({"kind": "fade"})).unwrap();
+    add_state(&mut app);
+    add_state(&mut app);
+    let first = doc(&app).slides[0].id;
+    move_state_to(&mut app, 0, 2);
+    let d = doc(&app);
+    assert_eq!(d.slides[2].id, first, "the first state is last now");
+    assert_eq!(d.slides[0].transition.as_ref().unwrap().kind, "fade", "the run starts with its own transition");
+    assert!(is_state_step(&d, 1) && is_state_step(&d, 2), "the rest are reached with Morph");
+    assert_eq!(run_of(&d, 0), 0..3);
+    app.run("edit.undo", json!({})).unwrap();
+    assert_eq!(doc(&app).slides[0].id, first, "one undo step");
 }

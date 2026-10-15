@@ -175,6 +175,7 @@ pub(crate) fn list(app: &mut SlideApp, ui: &mut Ui) {
         }
         if resp.clicked() || resp.drag_started() {
             app.slides_focus = true;
+            app.states_focus = false;
         }
         if resp.clicked() {
             let (shift, cmd) = ui.input(|i| (i.modifiers.shift, i.modifiers.command));
