@@ -13,6 +13,7 @@ pub mod credits;
 pub mod dialogs;
 pub mod fillui;
 pub mod icons;
+pub mod i18n;
 pub mod media;
 pub mod menus;
 pub mod panes;
@@ -60,6 +61,7 @@ pub struct Services {
     pub inbox: Option<Inbox>,
     /// Image on the system clipboard (PNG bytes), when the host can read one.
     pub clipboard_image: Option<Box<dyn FnMut() -> Option<Vec<u8>>>>,
+    pub system_locale: Option<String>,
     /// Audio output for media playback (cpal on desktop); without one media plays silently.
     pub audio_out: Option<Box<dyn deckcraft_media::AudioOut>>,
 }
@@ -102,6 +104,8 @@ pub struct UiState {
     /// Format Shape pane: tab (`fill`, `effects`, `size`, `picture`, `text`).
     pub format_tab: String,
     pub grayscale: bool,
+    #[serde(default)]
+    pub interface_language: i18n::Language,
 }
 
 impl Default for UiState {
@@ -127,6 +131,7 @@ impl Default for UiState {
             ui_scale: 1.0,
             format_tab: "fill".into(),
             grayscale: false,
+            interface_language: i18n::Language::System,
         }
     }
 }
@@ -169,6 +174,7 @@ pub const UI_COMMANDS: &[(&str, &str, Option<&str>, &str)] = &[
     ("app.exportDialog", "Export…", None, "{}"),
     ("app.dialog", "Open Dialog", None, "{id}"),
     ("app.links", "Community Links", None, "{}"),
+    ("app.language", "Interface Language", None, "{language?: pt-br|en|system}"),
 ];
 
 pub struct Perf {
@@ -276,7 +282,8 @@ impl SlideApp {
     }
 
     pub fn set_status(&mut self, msg: impl Into<String>) {
-        self.status = Some((msg.into(), now_ms()));
+        let text = msg.into();
+        self.status = Some((crate::i18n::tr(&text).to_string(), now_ms()));
     }
 
     /// Run a command by id (UI commands here, everything else in the engine). Errors show in the
@@ -347,7 +354,7 @@ impl SlideApp {
 
     /// The file name a save or export suggests: the presentation's title with `ext`.
     fn suggested_name(&self, ext: &str) -> String {
-        let name = self.session.active().map(|d| d.title()).unwrap_or_else(|| "Presentation".into());
+        let name = self.session.active().map(|d| d.title()).unwrap_or_else(|| crate::i18n::tr("Presentation").into());
         format!("{name}.{ext}")
     }
 
@@ -366,7 +373,7 @@ impl SlideApp {
             "outline" | "txt" => ("txt", "outline", false),
             "deckcraft" => ("deckcraft", "deckcraft", false),
             other => {
-                self.set_status(format!("DeckCraft can't export “{other}”"));
+                self.set_status(crate::i18n::format("DeckCraft can't export “{0}”", &[other.to_string()]));
                 return false;
             }
         };
@@ -379,7 +386,7 @@ impl SlideApp {
             }
             return match self.run("file.export", params) {
                 Ok(_) => {
-                    self.set_status(format!("Exported {path}"));
+                    self.set_status(crate::i18n::format("Exported {0}", &[path]));
                     true
                 }
                 Err(_) => false,
@@ -410,7 +417,7 @@ impl SlideApp {
                 false
             }
             (Ok(_), None) => {
-                self.set_status("Saving a copy needs a file picker, which this window doesn't have.");
+                self.set_status(crate::i18n::tr("Saving a copy needs a file picker, which this window doesn't have."));
                 false
             }
         }
@@ -436,7 +443,7 @@ impl SlideApp {
         match self.run("file.export", params) {
             Ok(_) => {
                 self.open_url(&format!("file:///{}", path.replace('\\', "/").trim_start_matches('/')));
-                self.set_status("Opened the presentation as a PDF to print");
+                self.set_status(crate::i18n::tr("Opened the presentation as a PDF to print"));
                 true
             }
             Err(_) => false,
@@ -520,7 +527,7 @@ impl SlideApp {
                     None => backstage::Page::Home,
                 };
                 if page.needs_doc() && self.session.active().is_none() {
-                    return Err(format!("File › {} needs an open presentation", page.label()));
+                    return Err(crate::i18n::format("File › {0} needs an open presentation", &[crate::i18n::tr(page.label()).to_string()]));
                 }
                 self.open_backstage(page);
                 return Ok(json!({"page": page.id()}));
@@ -528,7 +535,7 @@ impl SlideApp {
             "app.closePresentation" => self.close_presentation(),
             "app.print" => {
                 if self.session.active().is_none() {
-                    return Err("nothing to print: no presentation is open".into());
+                    return Err(crate::i18n::tr("nothing to print: no presentation is open").into());
                 }
                 return Ok(json!({"printed": self.print_pdf(p.clone())}));
             }
@@ -548,6 +555,21 @@ impl SlideApp {
             "app.links" => {
                 use deckcraft_engine::links::*;
                 return Ok(json!({"discord": DISCORD, "website": WEBSITE, "apps": APPS, "appPage": APP_PAGE, "github": GITHUB}));
+            }
+            "app.language" => {
+                if let Some(l) = p.get("language").and_then(Value::as_str) {
+                    let lang = match l.to_ascii_lowercase().as_str() {
+                        "pt" | "pt-br" | "pt_br" | "portugues" | "português" => i18n::Language::PtBr,
+                        "en" | "en-us" | "english" => i18n::Language::En,
+                        "system" => i18n::Language::System,
+                        _ => return Err("unknown interface language".into()),
+                    };
+                    self.ui.interface_language = lang;
+                    i18n::set_current(lang.resolve(self.services.system_locale.as_deref()));
+                    return Ok(json!({"language": lang}));
+                } else {
+                    return Ok(json!({"language": self.ui.interface_language}));
+                }
             }
             _ => return Err(format!("unknown UI command `{id}`")),
         }
@@ -600,14 +622,14 @@ impl SlideApp {
     }
 
     pub fn save_as_dialog(&mut self, format: &str) {
-        let name = self.session.active().map(|d| d.title()).unwrap_or_else(|| "Presentation".into());
+        let name = self.session.active().map(|d| d.title()).unwrap_or_else(|| crate::i18n::tr("Presentation").into());
         let ext = if format == "pptx" { "pptx" } else { "deckcraft" };
         let suggested = format!("{name}.{ext}");
         if let Some(pick) = self.services.pick_save.as_mut() {
             if let Some(path) = pick(&suggested) {
                 match self.session.execute("file.saveAs", &json!({"path": path})) {
                     Ok(_) => {
-                        self.set_status(format!("Saved {path}"));
+                        self.set_status(crate::i18n::format("Saved {0}", &[path.clone()]));
                         self.ui.recent.retain(|p| *p != path);
                         self.ui.recent.insert(0, path);
                     }
@@ -705,7 +727,7 @@ impl SlideApp {
         } else if lower.ends_with(".txt") || lower.ends_with(".md") {
             "slide.fromOutline"
         } else {
-            self.set_status(format!("{name}: DeckCraft can't open this kind of file"));
+            self.set_status(crate::i18n::format("{0}: DeckCraft can't open this kind of file", &[name.to_string()]));
             return;
         };
         let p = if cmd == "slide.fromOutline" { json!({"text": String::from_utf8_lossy(bytes)}) } else { json!({"name": name, "data": data}) };
@@ -719,6 +741,7 @@ impl SlideApp {
 
     /// Per-frame logic before layout: styles, control requests, screenshots, shortcuts.
     pub fn logic(&mut self, ctx: &egui::Context) {
+        i18n::set_current(self.ui.interface_language.resolve(self.services.system_locale.as_deref()));
         let scale = self.ui.ui_scale.clamp(0.5, 3.0);
         if (ctx.zoom_factor() - scale).abs() > 1e-3 {
             ctx.set_zoom_factor(scale);
@@ -766,7 +789,7 @@ impl SlideApp {
             if self.session.documents().iter().any(|d| d.is_dirty())
                 && let Err(e) = self.session.execute("file.recovery.save", &json!({}))
             {
-                self.set_status(format!("Couldn't save AutoRecover information: {e}"));
+                self.set_status(crate::i18n::format("Couldn't save AutoRecover information: {0}", &[e.to_string()]));
             }
         }
         // On the web, dropped files can only be read asynchronously: the host reads them and

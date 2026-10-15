@@ -17,15 +17,25 @@ pub struct Toast {
 
 /// The notice for fonts a presentation uses that aren't installed, or `None` when all are.
 pub fn missing_fonts_message(fonts: &[String]) -> Option<String> {
+    let and_word = crate::i18n::tr("and");
     let names = match fonts {
         [] => return None,
         [a] => a.clone(),
-        [a, b] => format!("{a} and {b}"),
-        [a, b, c] => format!("{a}, {b} and {c}"),
-        [a, b, c, rest @ ..] => format!("{a}, {b}, {c} and {} more", rest.len()),
+        [a, b] => format!("{a} {and_word} {b}"),
+        [a, b, c] => format!("{a}, {b} {and_word} {c}"),
+        [a, b, c, rest @ ..] => crate::i18n::format("{0}, {1}, {2} and {3} more", &[a.clone(), b.clone(), c.clone(), rest.len().to_string()]),
     };
-    let (it, them) = if fonts.len() == 1 { ("isn't", "it") } else { ("aren't", "them") };
-    Some(format!("{names} {it} installed on this computer. Text that uses {them} is shown in a similar font."))
+    if fonts.len() == 1 {
+        Some(crate::i18n::format(
+            "{0} isn't installed on this computer. Text that uses it is shown in a similar font.",
+            &[names.clone()],
+        ))
+    } else {
+        Some(crate::i18n::format(
+            "{0} aren't installed on this computer. Text that uses them is shown in a similar font.",
+            &[names.clone()],
+        ))
+    }
 }
 
 /// Toast the active presentation's missing fonts, once per opened document.
@@ -60,12 +70,12 @@ pub fn show(app: &mut SlideApp, ctx: &egui::Context) {
                 ui.horizontal(|ui| {
                     ui.add(egui::Label::new(egui::RichText::new(&text).font(theme::font(13.0)).color(t.text)).wrap());
                     let (r, resp) = ui.allocate_exact_size(vec2(20.0, 20.0), egui::Sense::click());
-                    resp.widget_info(|| egui::WidgetInfo::labeled(egui::WidgetType::Button, true, "Close"));
+                    resp.widget_info(|| egui::WidgetInfo::labeled(egui::WidgetType::Button, true, crate::i18n::tr("Close")));
                     if resp.hovered() {
                         ui.painter().rect_filled(r, CornerRadius::same(4), t.hover);
                     }
                     icons::paint(ui.painter(), r.shrink(3.0), Icon::Close, t.text_dim, false);
-                    if resp.on_hover_text("Close").clicked() {
+                    if resp.on_hover_text(crate::i18n::tr("Close")).clicked() {
                         close = true;
                     }
                 });

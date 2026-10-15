@@ -82,7 +82,7 @@ pub fn palette(app: &mut SlideApp, ctx: &egui::Context) {
         .anchor(egui::Align2::CENTER_TOP, egui::vec2(0.0, 90.0))
         .fixed_size(egui::vec2(520.0, 380.0))
         .show(ctx, |ui| {
-            let r = ui.add(egui::TextEdit::singleline(&mut query).hint_text("Search commands…").desired_width(f32::INFINITY).font(theme::font(15.0)));
+            let r = ui.add(egui::TextEdit::singleline(&mut query).hint_text(crate::i18n::tr("Search commands…")).desired_width(f32::INFINITY).font(theme::font(15.0)));
             r.request_focus();
             let q = query.to_lowercase();
             let mut items: Vec<(String, String, Option<&'static str>)> = app
@@ -90,8 +90,8 @@ pub fn palette(app: &mut SlideApp, ctx: &egui::Context) {
                 .commands()
                 .into_iter()
                 .filter(|c| c.enabled)
-                .map(|c| (c.id.to_string(), c.label.to_string(), c.shortcut))
-                .chain(crate::UI_COMMANDS.iter().map(|c| (c.0.to_string(), c.1.to_string(), c.2)))
+                .map(|c| (c.id.to_string(), crate::i18n::tr(&c.label).to_string(), c.shortcut))
+                .chain(crate::UI_COMMANDS.iter().map(|c| (c.0.to_string(), crate::i18n::tr(c.1).to_string(), c.2)))
                 .filter(|(id, label, _)| q.is_empty() || label.to_lowercase().contains(&q) || id.to_lowercase().contains(&q))
                 .collect();
             items.sort_by_key(|(_, l, _)| !l.to_lowercase().starts_with(&q));

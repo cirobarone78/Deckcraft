@@ -113,17 +113,17 @@ pub fn show(app: &mut SlideApp, ui: &mut Ui) {
     let has_sel = !selected.is_empty();
 
     ui.horizontal(|ui| {
-        if ui.add(egui::Button::new("Show All").stroke(Stroke::new(1.0, t.border))).clicked() {
+        if ui.add(egui::Button::new(crate::i18n::tr("Show All")).stroke(Stroke::new(1.0, t.border))).clicked() {
             run(app, "selection.showAll", json!({}));
         }
-        if ui.add(egui::Button::new("Hide All").stroke(Stroke::new(1.0, t.border))).clicked() {
+        if ui.add(egui::Button::new(crate::i18n::tr("Hide All")).stroke(Stroke::new(1.0, t.border))).clicked() {
             run(app, "selection.hideAll", json!({}));
         }
         ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-            if small_icon_button(ui, Icon::ChevronDown, "Send Backward", has_sel).clicked() {
+            if small_icon_button(ui, Icon::ChevronDown, &crate::i18n::tr("Send Backward"), has_sel).clicked() {
                 run(app, "arrange.sendBackward", json!({}));
             }
-            if small_icon_button(ui, Icon::ChevronUp, "Bring Forward", has_sel).clicked() {
+            if small_icon_button(ui, Icon::ChevronUp, &crate::i18n::tr("Bring Forward"), has_sel).clicked() {
                 run(app, "arrange.bringForward", json!({}));
             }
         });
@@ -362,22 +362,22 @@ fn context_menu(app: &mut SlideApp, resp: &egui::Response, row: &Row) {
             ("Send Backward", "arrange.sendBackward"),
             ("Send to Back", "arrange.sendToBack"),
         ] {
-            if ui.button(label).clicked() {
+            if ui.button(crate::i18n::tr(label)).clicked() {
                 run(app, cmd, json!({"ids": [row.id]}));
                 ui.close();
             }
         }
         ui.separator();
-        if ui.button("Rename").clicked() {
+        if ui.button(crate::i18n::tr("Rename")).clicked() {
             app.selpane.renaming = Some((row.id, row.name.clone()));
             app.selpane.rename_started = false;
             ui.close();
         }
-        if ui.button(if row.hidden { "Show" } else { "Hide" }).clicked() {
+        if ui.button(if row.hidden { crate::i18n::tr("Show") } else { crate::i18n::tr("Hide") }).clicked() {
             run(app, "shape.visible", json!({"id": row.id, "visible": row.hidden}));
             ui.close();
         }
-        if ui.button(if row.locked { "Unlock" } else { "Lock" }).clicked() {
+        if ui.button(if row.locked { crate::i18n::tr("Unlock") } else { crate::i18n::tr("Lock") }).clicked() {
             run(app, "shape.lock", json!({"id": row.id}));
             ui.close();
         }
