@@ -222,6 +222,38 @@ fn set(s: &mut Session, p: &Value) -> Result<Value> {
     })
 }
 
+/// A media shape's play step: on the next click, or (`auto`) as soon as the slide shows.
+pub fn media_play(shape: ShapeId, auto: bool) -> Animation {
+    Animation {
+        shape,
+        class: AnimClass::Media,
+        effect: "play".into(),
+        start: if auto { AnimStart::AfterPrevious } else { AnimStart::OnClick },
+        duration_ms: 1,
+        preset_id: Some(1),
+        ..Default::default()
+    }
+}
+
+/// Make media shape `id`'s play step start on the slide (`auto`) or on the next click: the one it
+/// has (moved to the front when automatic), else a new one.
+pub fn set_media_start(sl: &mut deckcraft_model::Slide, id: ShapeId, auto: bool) {
+    let at = sl.animations.iter().position(|a| a.shape == id && a.class == AnimClass::Media && a.effect == "play");
+    let a = match at {
+        Some(i) => {
+            let mut a = sl.animations.remove(i);
+            a.start = if auto { AnimStart::AfterPrevious } else { AnimStart::OnClick };
+            a
+        }
+        None => media_play(id, auto),
+    };
+    match (auto, at) {
+        (true, _) => sl.animations.insert(0, a),
+        (false, Some(i)) => sl.animations.insert(i.min(sl.animations.len()), a),
+        (false, None) => sl.animations.push(a),
+    }
+}
+
 /// Is `a` a paragraph-by-paragraph entrance (a text build)?
 pub fn is_build(a: &Animation) -> bool {
     a.class == AnimClass::Entrance && a.text_build == TextBuild::ByParagraph && a.paragraph.is_none()

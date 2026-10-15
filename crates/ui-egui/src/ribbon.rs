@@ -125,13 +125,15 @@ pub fn title_bar(app: &mut SlideApp, ui: &mut Ui) {
 /// Height of the document tab row.
 pub const TABS_H: f32 = 30.0;
 
-/// The tab row under the title bar while more than one presentation is open, as in canvas
-/// editors: Home, then one tab per presentation (an icon and its name, fading out when it's
+/// The tab row under the title bar while a presentation is open, as in canvas editors: Home, then one tab per presentation (an icon and its name, fading out when it's
 /// long; a dot while it has unsaved changes, the close button on hover and on the current tab),
 /// then + for a new one. Click a tab to switch to it (⌃Tab and ⌘` go to the next one),
 /// middle-click to close it.
 pub fn doc_strip(app: &mut SlideApp, ui: &mut Ui) {
-    if app.session.documents().len() < 2 {
+    // The canvas layout always has it while a presentation is open, as canvas editors do (Home
+    // and + live in it); the ribbon, once a second presentation is open.
+    let min = if app.ui.shell == crate::Shell::Canvas { 1 } else { 2 };
+    if app.session.documents().len() < min {
         return;
     }
     let t = Tokens::get(ui.ctx());
@@ -514,6 +516,11 @@ fn clipboard_group(app: &mut SlideApp, ui: &mut Ui) {
 }
 
 pub(crate) fn layout_menu(app: &mut SlideApp, ui: &mut Ui, cmd: &str) {
+    layout_menu_ex(app, ui, cmd, json!({}));
+}
+
+/// [`layout_menu`] with more parameters for the command (the canvas panel adopts the layout).
+pub(crate) fn layout_menu_ex(app: &mut SlideApp, ui: &mut Ui, cmd: &str, extra: Value) {
     let layouts: Vec<(String, deckcraft_model::LayoutId)> = app
         .session
         .active()
@@ -551,7 +558,9 @@ pub(crate) fn layout_menu(app: &mut SlideApp, ui: &mut Ui, cmd: &str) {
                 resp
             });
             if resp.inner.clicked() {
-                run(app, cmd, json!({"layout": id.0}));
+                let mut p = extra.clone();
+                p["layout"] = json!(id.0);
+                run(app, cmd, p);
                 ui.close();
             }
             if k % 4 == 3 {

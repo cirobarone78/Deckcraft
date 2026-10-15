@@ -509,3 +509,15 @@ fn a_relative_edit_on_mixed_values_moves_each_layer_by_it() {
         assert!((a - b - 10.0).abs() < 0.01, "each moved 20 px (10 pt): {before:?} → {after:?}");
     }
 }
+
+#[test]
+fn a_plain_text_box_on_a_slide_can_be_tagged() {
+    let mut h = harness();
+    h.state_mut().session.execute("slide.new", &json!({})).unwrap();
+    h.run_steps(2);
+    let id = text_box(&mut h);
+    click(&mut h, "Placeholder: what this box is on the slide's layout");
+    click(&mut h, "Title");
+    assert!(shape(h.state(), id).ph_type().is_some_and(|k| k.is_title()), "an imported box joins the masters");
+    assert!(h.query_by_label("Placeholder: what this box is on the slide's layout").is_none(), "once it's a placeholder the tag goes");
+}

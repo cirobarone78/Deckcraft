@@ -230,3 +230,36 @@ fn reset_by_id_puts_back_just_that_box() {
     assert!(!title_at(&mut s, 1).2);
     assert!(title_at(&mut s, 2).2, "the other slide's title stays where it was moved");
 }
+
+#[test]
+fn an_imported_slide_joins_the_masters_without_doubling_up() {
+    let mut s = Session::with_new();
+    // An imported slide: plain text boxes with their own look, on a blank layout.
+    s.execute("slide.new", &json!({"layout": "Blank"})).unwrap();
+    let t =
+        s.execute("insert.textBox", &json!({"rect": [40.0, 30.0, 500.0, 60.0], "text": "Imported title"})).unwrap()["id"].as_u64().unwrap() as u32;
+    let b = s.execute("insert.textBox", &json!({"rect": [40.0, 120.0, 500.0, 200.0], "text": "Point one\nPoint two"})).unwrap()["id"]
+        .as_u64()
+        .unwrap() as u32;
+    s.execute("selection.select", &json!({"ids": [t]})).unwrap();
+    s.execute("format.size", &json!({"size": 40})).unwrap();
+    let count = |s: &Session| s.doc().unwrap().doc.slides[1].shapes.len();
+    let before = count(&s);
+    // The page format: Title and Content, adopted (no empty placeholders copied in).
+    s.execute("slide.layout", &json!({"layout": "Title and Content", "adopt": true})).unwrap();
+    assert_eq!(count(&s), before, "nothing added");
+    // Tags: title and body.
+    s.execute("placeholder.assign", &json!({"id": t, "kind": "title"})).unwrap();
+    s.execute("placeholder.assign", &json!({"id": b, "kind": "body"})).unwrap();
+    assert_eq!(count(&s), before, "tagging adds nothing either");
+    // Reset the title: the master's position and look.
+    s.execute("placeholder.reset", &json!({"ids": [t], "formatting": true})).unwrap();
+    let sh = shape(&s, 1, t).unwrap();
+    assert!(sh.xfrm.is_none(), "on the layout's place");
+    assert!(sh.text.as_ref().unwrap().paragraphs[0].runs.iter().all(|r| r.props.size.is_none()), "the master's size");
+    assert_eq!(sh.text.as_ref().unwrap().text(), "Imported title", "the words stay");
+    // Reset Slide in the same spirit: still nothing doubled.
+    s.execute("slide.reset", &json!({"adopt": true})).unwrap();
+    assert_eq!(count(&s), before);
+    assert!(shape(&s, 1, b).unwrap().xfrm.is_none(), "the body is on its layout place too");
+}

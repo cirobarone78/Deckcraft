@@ -18,6 +18,7 @@ pub mod doc_window;
 pub mod eyedropper;
 pub mod field_math;
 pub mod fillui;
+pub mod find;
 pub mod form;
 pub mod icons;
 pub mod inspector;
@@ -512,6 +513,8 @@ pub struct SlideApp {
     /// A brief notice over the bottom of the window (missing fonts on opening a file).
     /// Notices showing (see `toast.rs`).
     pub toasts: Vec<toast::Toast>,
+    /// The find bar, while it's open (⌘F).
+    pub find: Option<find::FindBar>,
     /// The macOS menu bar, when the desktop app installed one (else the menus are in the window).
     pub native_menu: Option<native_menu::NativeMenu>,
     /// Documents (by uid) whose missing fonts have been mentioned.
@@ -617,6 +620,7 @@ impl SlideApp {
             opening: None,
             toasts: Vec::new(),
             native_menu: None,
+            find: None,
             fonts_noted: Default::default(),
             perf: Perf { frame_ms: 0.0, render_ms: 0.0, fps: 0.0 },
             synthetic: vec![],
@@ -2098,6 +2102,7 @@ impl SlideApp {
     fn finish_frame(&mut self, ctx: &egui::Context, t0: f64) {
         toast::note_missing_fonts(self);
         toast::show(self, ctx);
+        find::show(self, ctx);
         dialogs::show(self, ctx);
         menus::palette(self, ctx);
         for url in std::mem::take(&mut self.pending_urls) {

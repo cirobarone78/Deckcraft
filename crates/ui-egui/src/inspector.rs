@@ -229,10 +229,12 @@ fn slide(app: &mut SlideApp, ui: &mut Ui) {
     let full = cols(ui) * 2.0 + GAP;
     // Reset: the slide's placeholders back on their layout's positions, sizes and formatting.
     if crate::props::section(ui, "Slide", false, &[(Icon::Revert, "Reset slide to its layout")]) == Some(0) {
-        run(app, "slide.reset", json!({}));
+        run(app, "slide.reset", json!({"adopt": true}));
     }
     caption(ui, "Layout");
-    pick_wide(ui, "Layout", &layout.unwrap_or_else(|| "Layout".into()), full, 420.0, true, |ui| crate::ribbon::layout_menu(app, ui, "slide.layout"));
+    pick_wide(ui, "Layout", &layout.unwrap_or_else(|| "Layout".into()), full, 420.0, true, |ui| {
+        crate::ribbon::layout_menu_ex(app, ui, "slide.layout", json!({"adopt": true}))
+    });
     background_editor(app, ui, own, Some("Follow the layout"), true, Some(hide));
 }
 

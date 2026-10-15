@@ -29,7 +29,7 @@ pub fn specs() -> Vec<CommandSpec> {
             "Reset Placeholder Positions",
             [],
             None,
-            "{ids?: [placeholders on the current slide] | kind?: (default: the selected placeholder's), slides?: [index] (default: every slide)} → {reset}: those placeholders take their layout's position and size again (text and formatting stay)",
+            "{ids?: [placeholders on the current slide], formatting?: bool (their own formatting too) | kind?: (default: the selected placeholder's), slides?: [index] (default: every slide)} → {reset}: those placeholders take their layout's position and size again (text and formatting stay)",
             has_doc,
             reset
         ),
@@ -126,8 +126,24 @@ fn clear(doc: &mut Presentation, targets: &[(usize, ShapeId, PhType)]) {
 }
 
 fn reset(s: &mut Session, p: &Value) -> Result<Value> {
-    // Just these placeholders on the current slide.
+    // Just these placeholders on the current slide; `formatting`: their own formatting too, so
+    // the layout and master drive them again.
     if let Some(ids) = ids_param(p, "ids") {
+        let formatting = bool_or(p, "formatting", false);
+        let at = s.doc()?.selection.slide;
+        if formatting {
+            return s.edit(|doc, _| {
+                let sl = Arc::make_mut(doc.slides.get_mut(at).ok_or_else(|| bad("placeholder.reset", "no slide"))?);
+                let mut n = 0;
+                for id in &ids {
+                    if let Some(sh) = deckcraft_model::find_shape_mut(&mut sl.shapes, *id).filter(|sh| sh.ph.is_some()) {
+                        super::slide::clear_own_format(sh);
+                        n += 1;
+                    }
+                }
+                Ok(json!({"reset": n}))
+            });
+        }
         let st = s.doc()?;
         let targets: Vec<_> = placed(&st.doc, &[st.selection.slide], None, false).into_iter().filter(|t| ids.contains(&t.1)).collect();
         if targets.is_empty() {

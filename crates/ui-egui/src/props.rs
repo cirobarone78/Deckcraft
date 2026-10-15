@@ -444,16 +444,23 @@ fn header_row(app: &mut SlideApp, ui: &mut Ui, sh: &Shape, multi: bool, n: usize
                 }
                 let r = icon_button(ui, Icon::Link, "Link", enabled(app, "insert.hyperlink"));
                 egui::Popup::menu(&r).width(260.0).close_behavior(egui::PopupCloseBehavior::CloseOnClickOutside).show(|ui| link_field(app, ui));
-                // A slide's placeholder: back to its layout's position and size.
+                // A slide's placeholder: back to its layout's position, size and look (the master
+                // drives it again).
                 if target == Some(deckcraft_engine::Target::Slides) && sh.ph.is_some() {
-                    let moved = sh.xfrm.is_some();
-                    let tip = if moved { "Reset to layout" } else { "Reset to layout (it's where its layout has it)" };
-                    if icon_button(ui, Icon::Revert, tip, moved).clicked() {
-                        run(app, "placeholder.reset", json!({"ids": [sh.id]}));
+                    let own = sh.xfrm.is_some() || has_own_look(sh);
+                    let tip = if own { "Reset to layout" } else { "Reset to layout (it follows its layout)" };
+                    if icon_button(ui, Icon::Revert, tip, own).clicked() {
+                        run(app, "placeholder.reset", json!({"ids": [sh.id], "formatting": true}));
                     }
                 }
-                // Boxes are made placeholders in Slide Master view; slides take their layout's.
-                if target.is_some_and(|t| t != deckcraft_engine::Target::Slides) && matches!(sh.kind, ShapeKind::Shape) {
+                // Tags: boxes are made placeholders in Slide Master view, and on a slide a box that
+                // isn't one yet (an imported slide's text joining the masters).
+                let taggable = match target {
+                    Some(deckcraft_engine::Target::Slides) => sh.ph.is_none(),
+                    Some(_) => true,
+                    None => false,
+                };
+                if taggable && matches!(sh.kind, ShapeKind::Shape) {
                     let r = icon_button(ui, Icon::Tag, "Placeholder: what this box is on the slide's layout", true);
                     egui::Popup::menu(&r).width(220.0).show(|ui| placeholder_menu(app, ui, sh));
                 }
@@ -532,6 +539,20 @@ fn placeholder_menu(app: &mut SlideApp, ui: &mut Ui, sh: &Shape) {
         run(app, "placeholder.assign", json!({"id": sh.id, "kind": "none"}));
         ui.close();
     }
+}
+
+/// Does placeholder `sh` set its own look (fill, outline, effects, text formatting) instead of
+/// following its layout and master?
+fn has_own_look(sh: &Shape) -> bool {
+    let plain = |r: &deckcraft_model::text::RunProps| deckcraft_model::text::RunProps { link: None, lang: None, ..r.clone() } == Default::default();
+    sh.fill.is_some()
+        || sh.line.is_some()
+        || sh.effects.is_some()
+        || sh.text.as_ref().is_some_and(|t| {
+            t.body != Default::default()
+                || !t.list_style.is_empty()
+                || t.paragraphs.iter().any(|p| p.props != Default::default() || p.runs.iter().any(|r| !plain(&r.props)))
+        })
 }
 
 /// `shape.merge` operations, as the Merge shapes menu lists them.

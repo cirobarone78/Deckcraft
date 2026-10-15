@@ -295,8 +295,56 @@ fn control_tab_goes_to_the_next_and_previous_presentation() {
 }
 
 #[test]
-fn one_presentation_shows_its_title_not_a_tab() {
+fn one_presentation_still_has_its_tab() {
     use egui_kittest::kittest::Queryable;
-    let (h, _) = harness();
-    assert!(h.query_by_label("New Presentation").is_none());
+    let (mut h, _) = harness();
+    assert!(h.query_by_label("Home tab").is_none(), "the ribbon shows the row from a second presentation on");
+    h.state_mut().run("view.shell", json!({"shell": "canvas"})).unwrap();
+    h.run_steps(2);
+    assert!(h.query_by_label("New Presentation").is_some(), "the canvas layout's tab row shows with one presentation");
+    assert!(h.query_by_label("Home tab").is_some());
+}
+
+#[test]
+fn command_l_toggles_the_lock_and_shift_command_l_unlocks_everything_in_the_canvas_layout() {
+    let (mut h, ids) = harness();
+    h.state_mut().run("view.shell", json!({"shell": "canvas"})).unwrap();
+    h.state_mut().run("selection.select", json!({"ids": [ids[0].0, ids[1].0]})).unwrap();
+    h.run_steps(2);
+    let locked = |h: &Harness<'static, SlideApp>, id: ShapeId| get(h, id).locked;
+    press(&mut h, Key::L, CMD);
+    assert!(locked(&h, ids[0]) && locked(&h, ids[1]), "⌘L locks");
+    press(&mut h, Key::L, CMD);
+    assert!(!locked(&h, ids[0]), "and unlocks again");
+    press(&mut h, Key::L, CMD);
+    h.state_mut().run("slide.go", json!({"index": 0})).unwrap();
+    h.run_steps(2);
+    press(&mut h, Key::L, CMD | Modifiers::SHIFT);
+    assert!(!locked(&h, ids[0]) && !locked(&h, ids[1]), "⇧⌘L unlocks every layer, nothing selected");
+}
+
+#[test]
+fn command_f_finds_words_on_the_slides() {
+    let (mut h, _) = harness();
+    let app = h.state_mut();
+    // (The ribbon's ⌘F opens Find and Replace instead.)
+    app.run("view.shell", json!({"shell": "canvas"})).unwrap();
+    app.run("insert.textBox", json!({"rect": [50, 300, 300, 50], "text": "Quarterly plan"})).unwrap();
+    app.run("slide.new", json!({})).unwrap();
+    app.run("insert.textBox", json!({"rect": [50, 300, 300, 50], "text": "The plan, and a plan B"})).unwrap();
+    app.run("slide.go", json!({"index": 0})).unwrap();
+    h.run_steps(2);
+    press(&mut h, Key::F, CMD);
+    assert!(h.state().find.is_some(), "⌘F opens the find bar");
+    h.event(egui::Event::Text("plan".into()));
+    h.run_steps(3);
+    let bar = h.state().find.as_ref().unwrap();
+    assert_eq!(bar.matches.len(), 3);
+    let sel = |h: &Harness<'static, SlideApp>| h.state().session.active().unwrap().selection.clone();
+    assert_eq!(sel(&h).slide, 0, "the first match is shown");
+    assert!(sel(&h).text.is_some(), "its words selected");
+    press(&mut h, Key::Enter, Modifiers::NONE);
+    assert_eq!(sel(&h).slide, 1, "Enter goes to the next");
+    press(&mut h, Key::Escape, Modifiers::NONE);
+    assert!(h.state().find.is_none(), "Esc closes it");
 }

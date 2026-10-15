@@ -237,8 +237,14 @@ pub fn shortcut_of(id: &str) -> Option<String> {
         "arrange.sendToBack" => Some("Cmd+Alt+["),
         "view.fit" => Some("Cmd+0"),
         "app.find" => Some("Cmd+F"),
+        "app.lockToggle" => Some("Cmd+L"),
+        "app.unlockAll" => Some("Cmd+Shift+L"),
         _ => None,
     };
+    // ⌘L locks layers in the canvas layout; Align Left keeps it in the ribbon.
+    if id == "format.alignLeft" {
+        return None;
+    }
     mac.map(str::to_string)
         .or_else(|| deckcraft_engine::find_command(id).and_then(|c| c.shortcut).map(str::to_string))
         .or_else(|| crate::UI_COMMANDS.iter().find(|c| c.0 == id).and_then(|c| c.2).map(str::to_string))
@@ -309,7 +315,7 @@ fn definition() -> Vec<(&'static str, MenuRole, Vec<Row>)> {
                 Cmd("edit.selectAll", "Select All"),
                 Cmd("edit.deselect", "Deselect"),
                 Sep,
-                Cmd("app.find", "Find Command…"),
+                Cmd("app.find", "Find…"),
             ],
         ),
         (
@@ -375,6 +381,9 @@ fn definition() -> Vec<(&'static str, MenuRole, Vec<Row>)> {
                 Cmd("arrange.group", "Group"),
                 Cmd("arrange.ungroup", "Ungroup"),
                 Sep,
+                Cmd("app.lockToggle", "Lock / Unlock"),
+                Cmd("app.unlockAll", "Unlock All"),
+                Sep,
                 Cmd("arrange.flipHorizontal", "Flip Horizontally"),
                 Cmd("arrange.flipVertical", "Flip Vertically"),
                 Cmd("arrange.rotateLeft", "Rotate Left"),
@@ -422,7 +431,7 @@ fn definition() -> Vec<(&'static str, MenuRole, Vec<Row>)> {
 
 /// Commands the menus run themselves (not engine or UI commands).
 fn own(id: &str) -> bool {
-    matches!(id, QUIT | HIDE | MINIMIZE | "app.find" | "app.paragraphDialog") || id.starts_with(DOC_PREFIX)
+    matches!(id, QUIT | HIDE | MINIMIZE | "app.find" | "app.paragraphDialog" | "app.lockToggle" | "app.unlockAll") || id.starts_with(DOC_PREFIX)
 }
 
 /// The check mark an item shows, for the settings it toggles.
@@ -486,14 +495,20 @@ pub fn invoke(app: &mut SlideApp, ctx: &egui::Context, id: &str) {
         QUIT => ctx.send_viewport_cmd(egui::ViewportCommand::Close),
         MINIMIZE => ctx.send_viewport_cmd(egui::ViewportCommand::Minimized(true)),
         HIDE => {}
-        "app.find" => app.palette = Some((String::new(), 0)),
+        "app.find" => crate::find::open(app),
         "app.paragraphDialog" => app.dialog = Some(crate::dialogs::Dialog::new("paragraph")),
+        "app.lockToggle" | "app.unlockAll" => {
+            let shift = id == "app.unlockAll";
+            crate::menus::mac_shortcut(app, egui::Key::L, deckcraft_engine::Mods { cmd: true, shift, alt: false });
+        }
         _ => {
             if let Some(i) = id.strip_prefix(DOC_PREFIX).and_then(|n| n.parse::<usize>().ok()) {
                 let _ = app.run("window.next", json!({"index": i}));
                 return;
             }
-            if let Err(e) = app.run(id, json!({})) {
+            // Reset Slide in the canvas layout keeps the slide's layers (nothing added).
+            let p = if id == "slide.reset" && app.ui.shell == crate::Shell::Canvas { json!({"adopt": true}) } else { json!({}) };
+            if let Err(e) = app.run(id, p) {
                 app.set_status(e);
             }
         }

@@ -49,7 +49,7 @@ fn the_canvas_shell_replaces_the_ribbon_with_sidebar_inspector_and_toolbar() {
     let h = harness(Shell::Canvas);
     assert!(h.query_by_label("Home").is_none() && h.query_by_label("Transitions").is_none(), "no ribbon tabs");
     assert!(h.query_by_label("File").is_some() && h.query_by_label("Arrange").is_some(), "the menus under the title bar (no native menu here)");
-    for label in ["Layers", "Sort", "Animate", "Present", "Select (V)", "Text box (T)"] {
+    for label in ["Layers", "Single slide", "Grid", "Masters", "Design", "Animate", "Play", "Select (V)", "Text box (T)"] {
         assert!(h.query_all_by_label(label).next().is_some(), "`{label}` is shown");
     }
     assert!(h.state().slide_rect.is_some(), "the slide is on the canvas");
@@ -73,21 +73,40 @@ fn switching_layouts_leaves_the_presentation_alone() {
 }
 
 #[test]
-fn the_panel_buttons_animate_sort_and_present() {
+fn the_views_are_exclusive_and_animate_is_a_panel_tab() {
     let mut h = harness(Shell::Canvas);
-    assert_eq!(h.state().ui.inspector_tab, "design");
+    let now = |h: &Harness<'static, SlideApp>| super::view(h.state());
+    let tab = |h: &Harness<'static, SlideApp>| h.state().ui.inspector_tab.clone();
+    assert_eq!(now(&h), super::View::Slide);
     h.get_by_label("Animate").click();
     h.run_steps(2);
-    assert_eq!(h.state().ui.inspector_tab, "animate");
+    assert_eq!(tab(&h), "animate", "the panel's Animate tab");
+    h.get_by_label("Design").click();
+    h.run_steps(2);
+    assert_eq!(tab(&h), "design");
     h.get_by_label("Animate").click();
     h.run_steps(2);
-    assert_eq!(h.state().ui.inspector_tab, "design", "pressed again, back to the design panel");
-    h.get_by_label("Sort").click();
+    // Masters: Animate goes back to Design and can't be picked there.
+    h.get_by_label("Masters").click();
     h.run_steps(2);
-    assert_eq!(h.state().ui.view, crate::ViewMode::Sorter);
-    h.get_by_label("Sort").click();
+    assert_eq!(now(&h), super::View::Masters);
+    assert_eq!(tab(&h), "design", "Animate is off in the masters");
+    h.get_by_label("Animate").click();
     h.run_steps(2);
-    assert_eq!(h.state().ui.view, crate::ViewMode::Normal);
+    assert_eq!(tab(&h), "design", "and greyed out there");
+    h.get_by_label("Grid").click();
+    h.run_steps(2);
+    assert_eq!(now(&h), super::View::Grid, "the grid leaves the masters");
+    assert_eq!(h.state().session.active().unwrap().selection.target, deckcraft_engine::Target::Slides);
+    h.get_by_label("Single slide").click();
+    h.run_steps(2);
+    assert_eq!(now(&h), super::View::Slide);
+    // Opened another way (the View menu), the masters still turn Animate off.
+    h.get_by_label("Animate").click();
+    h.run_steps(2);
+    h.state_mut().run("view.slideMaster", json!({})).unwrap();
+    h.run_steps(2);
+    assert_eq!(tab(&h), "design");
 }
 
 #[test]
@@ -229,7 +248,7 @@ fn the_inspector_shows_a_title_size_in_pixels() {
 #[test]
 fn the_sidebar_opens_and_closes_the_slide_masters() {
     let mut h = harness(Shell::Canvas);
-    h.get_by_label("Edit slide masters and layouts").click();
+    h.get_by_label("Masters").click();
     h.run_steps(3);
     let target = |h: &Harness<'static, SlideApp>| h.state().session.active().unwrap().selection.target;
     assert!(matches!(target(&h), deckcraft_engine::Target::Layout { .. }), "opens on the slide's layout");
@@ -269,4 +288,14 @@ fn command_period_hides_the_side_panels_and_buttons_bring_them_back() {
     h.get_by_label("Hide the left panel (⌥⌘.)").click();
     h.run_steps(3);
     assert!(h.state().ui.hide_left, "the sidebar's own button hides it");
+}
+
+#[test]
+fn layers_list_the_master_and_layouts_too() {
+    let mut h = harness(Shell::Canvas);
+    h.state_mut().run("view.slideMaster", json!({"master": 0, "layout": null})).unwrap();
+    h.run_steps(3);
+    assert!(h.query_by_label("Layers").is_some(), "the Layers list shows in Slide Master view");
+    let first = h.state().session.active().unwrap().doc.masters[0].shapes.first().map(|s| s.name.clone()).unwrap();
+    assert!(h.query_all_by_label(&first).next().is_some(), "the master's own layers: {first}");
 }

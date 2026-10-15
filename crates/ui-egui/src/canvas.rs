@@ -1352,7 +1352,9 @@ fn context_menu(app: &mut SlideApp, resp: &egui::Response) {
                 }
             });
             if ui.button("Reset Slide").clicked() {
-                let _ = app.run("slide.reset", json!({}));
+                // The canvas layout keeps the slide's layers (no empty placeholders added).
+                let adopt = app.ui.shell == crate::Shell::Canvas;
+                let _ = app.run("slide.reset", json!({"adopt": adopt}));
                 ui.close();
             }
             if ui.button("Format Background…").clicked() {

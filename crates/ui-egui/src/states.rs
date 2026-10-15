@@ -290,12 +290,12 @@ pub fn move_state(app: &mut SlideApp, i: usize, forth: bool) {
 /// Height of the strip's thumbnails.
 pub const STRIP_THUMB_H: f32 = 54.0;
 
-/// Should the strip show: the slide has states, or it was turned on.
+/// Should the strip show: the slide has states, or the Animate panel is open (or it was turned on).
 pub fn strip_shown(app: &SlideApp) -> bool {
     let Some(st) = app.session.active() else { return false };
     st.selection.target == deckcraft_engine::Target::Slides
         && !st.doc.slides.is_empty()
-        && (app.ui.states_strip || run_of(&st.doc, st.selection.slide).len() > 1)
+        && (app.ui.states_strip || app.ui.inspector_tab == "animate" || run_of(&st.doc, st.selection.slide).len() > 1)
 }
 
 /// The current slide's states in a row under the slide (canvas shell): click one to edit it, + after

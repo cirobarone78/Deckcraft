@@ -84,6 +84,11 @@ pub fn ui_shortcut(app: &mut SlideApp, key: egui::Key, m: Mods) -> bool {
             app.dialog = Some(crate::dialogs::Dialog::new("hyperlink"));
             return true;
         }
+        // ⌘F: in the canvas layout, the find bar over the slide; in the ribbon, Find and Replace.
+        (F, true, false, false) if app.ui.shell == crate::Shell::Canvas => {
+            crate::find::open(app);
+            return true;
+        }
         (F, true, false, false) => "app.find",
         (H, true, false, false) => "app.replace",
         _ => return false,
@@ -123,6 +128,21 @@ pub fn mac_shortcut(app: &mut SlideApp, key: egui::Key, m: Mods) -> bool {
         return true;
     }
     let Some(st) = app.session.active() else { return false };
+    let canvas = app.ui.shell == crate::Shell::Canvas;
+    // Canvas layout, as in canvas editors: ⇧⌘L unlocks every layer here (locked layers can't be
+    // clicked there, so it works with nothing selected).
+    if canvas && st.selection.text.is_none() && (key, m.shift, m.alt) == (L, true, false) {
+        let mut ids = vec![];
+        deckcraft_model::walk(st.shapes(), &mut |sh, _| {
+            if sh.locked {
+                ids.push(sh.id.0);
+            }
+        });
+        if !ids.is_empty() {
+            let _ = app.run("shape.lock", json!({"ids": ids, "locked": false}));
+        }
+        return true;
+    }
     if st.selection.text.is_some() || st.selection.shapes.is_empty() {
         return false;
     }
@@ -135,6 +155,8 @@ pub fn mac_shortcut(app: &mut SlideApp, key: egui::Key, m: Mods) -> bool {
         (G, true, false) => ("arrange.ungroup", json!({})),
         (CloseBracket | CloseCurlyBracket, false, true) => ("arrange.bringToFront", json!({})),
         (OpenBracket | OpenCurlyBracket, false, true) => ("arrange.sendToBack", json!({})),
+        // ⌘L toggles the lock in the canvas layout (the ribbon keeps ⌘L for Align Left).
+        (L, false, false) if canvas => ("shape.lock", json!({"locked": any_unlocked})),
         (L, true, false) => ("shape.lock", json!({"locked": any_unlocked})),
         (H, true, false) => ("shape.visible", json!({"visible": !any_shown})),
         (R, true, false) => ("edit.pasteToReplace", json!({})),

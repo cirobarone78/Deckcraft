@@ -25,6 +25,11 @@ pub fn show(app: &mut SlideApp, ui: &mut Ui) {
         egui::CentralPanel::default().frame(egui::Frame::NONE.fill(t.chrome)).show(ui, |_| {});
         return;
     }
+    // The views are exclusive: Animate is off in the masters and the grid, however they were
+    // opened (View menu, keys).
+    if app.ui.inspector_tab == "animate" && view(app) != View::Slide {
+        app.ui.inspector_tab = "design".into();
+    }
     if !app.ui.hide_left {
         sidebar(app, ui);
     }
@@ -32,11 +37,12 @@ pub fn show(app: &mut SlideApp, ui: &mut Ui) {
         inspector(app, ui);
     }
     egui::CentralPanel::default().frame(egui::Frame::NONE.fill(t.chrome)).show(ui, |ui| {
+        // The toolbar in every view: its Grid button brings the slide back from the grid.
+        toolbar(app, ui);
         match app.ui.view {
             ViewMode::Sorter => crate::sorter::show(app, ui),
             ViewMode::NotesPage => crate::sorter::notes_page(app, ui),
             ViewMode::Normal | ViewMode::Outline | ViewMode::Reading => {
-                toolbar(app, ui);
                 if app.ui.notes {
                     notes_card(app, ui);
                 }
@@ -96,8 +102,8 @@ fn sidebar(app: &mut SlideApp, ui: &mut Ui) {
         .show(ui, |ui| {
             app.ui.thumbs_width = ui.available_width();
             edge(ui, ui.max_rect().max.x, &t);
-            header(app, ui);
-            ui.add_space(6.0);
+            // The presentation's name and folder are in the title bar; its commands in the menus.
+            ui.add_space(12.0);
             if in_master {
                 master_row(app, ui);
             } else {
@@ -105,9 +111,8 @@ fn sidebar(app: &mut SlideApp, ui: &mut Ui) {
             }
             ui.add_space(6.0);
             ui.painter().hline(ui.max_rect().x_range(), ui.cursor().min.y, Stroke::new(1.0, t.separator));
-            if !in_master {
-                layers(app, ui);
-            }
+            // Layers for whatever is being edited: the slide, or a layout or the master.
+            layers(app, ui);
             if in_master {
                 crate::thumbs::master_list(app, ui);
                 return;
@@ -147,66 +152,11 @@ fn hidden_panel_buttons(app: &mut SlideApp, ui: &mut Ui) {
     }
 }
 
-/// Name and folder of the presentation, and the slide / grid view switch.
-fn header(app: &mut SlideApp, ui: &mut Ui) {
-    let t = Tokens::get(ui.ctx());
-    let Some(st) = app.session.active() else { return };
-    let title = st.title();
-    let place = st
-        .path
-        .as_deref()
-        .and_then(|p| std::path::Path::new(p).parent())
-        .and_then(|p| p.file_name())
-        .map(|n| n.to_string_lossy().to_string())
-        .unwrap_or_else(|| "Not saved".into());
-    let dirty = st.is_dirty();
-    egui::Frame::NONE.inner_margin(egui::Margin { left: 14, right: 10, top: 12, bottom: 0 }).show(ui, |ui| {
-        ui.horizontal(|ui| {
-            ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                ui.spacing_mut().item_spacing.x = 2.0;
-                if icon_toggle(ui, Icon::PanelLeft, "Hide the left panel (⌥⌘.)", true, false).clicked() {
-                    app.ui.hide_left = true;
-                }
-                let in_master = app.session.active().is_some_and(|d| d.selection.target != Target::Slides);
-                let tip = if in_master { "Close slide masters" } else { "Edit slide masters and layouts" };
-                if icon_toggle(ui, Icon::SlideMaster, tip, true, in_master).clicked() {
-                    let _ = app.run(if in_master { "view.closeMaster" } else { "view.slideMaster" }, json!({}));
-                }
-                ui.add_space(6.0);
-                let sorter = app.ui.view == ViewMode::Sorter && !in_master;
-                if icon_toggle(ui, Icon::Grid, "Grid view", true, sorter).clicked() {
-                    let _ = app.run("view.sorter", json!({}));
-                }
-                if icon_toggle(ui, Icon::ViewNormalSmall, "Slide view", true, !sorter).clicked() {
-                    let _ = app.run("view.normal", json!({}));
-                }
-                ui.with_layout(egui::Layout::left_to_right(egui::Align::Center), |ui| {
-                    let name = format!("{title}{}", if dirty { " •" } else { "" });
-                    let r = ui.add(egui::Button::new(egui::RichText::new(name).font(theme::bold(15.0))).frame(false).truncate());
-                    egui::Popup::menu(&r).show(|ui| {
-                        if ui.button("Home").clicked() {
-                            let _ = app.run("app.home", json!({}));
-                        }
-                        if ui.button("Save").clicked() {
-                            app.save();
-                        }
-                        for (label, page) in [("Info…", "info"), ("Save As…", "saveAs"), ("Export…", "export"), ("Print…", "print")] {
-                            if ui.button(label).clicked() {
-                                let _ = app.run("app.backstage", json!({"page": page}));
-                            }
-                        }
-                        ui.separator();
-                        if ui.button("Close").clicked() {
-                            let _ = app.run("app.closePresentation", json!({}));
-                        }
-                    });
-                });
-            });
-        });
-        let in_master = app.session.active().is_some_and(|d| d.selection.target != Target::Slides);
-        let sub = if in_master { "Editing slide masters".to_string() } else { place };
-        ui.label(egui::RichText::new(sub).font(theme::font(12.0)).color(if in_master { t.accent } else { t.text_dim }));
-    });
+/// Hide the left panel (⌥⌘.), at the end of its first row.
+fn hide_panel_button(app: &mut SlideApp, ui: &mut Ui) {
+    if icon_toggle(ui, Icon::PanelLeft, "Hide the left panel (⌥⌘.)", true, false).clicked() {
+        app.ui.hide_left = true;
+    }
 }
 
 /// In Slide Master view: "Close masters" back to the slides, and + for a new layout.
@@ -214,7 +164,7 @@ fn master_row(app: &mut SlideApp, ui: &mut Ui) {
     let t = Tokens::get(ui.ctx());
     egui::Frame::NONE.inner_margin(egui::Margin::symmetric(10, 0)).show(ui, |ui| {
         ui.horizontal(|ui| {
-            let w = ui.available_width() - 34.0;
+            let w = ui.available_width() - 34.0 - 30.0;
             let (r, resp) = ui.allocate_exact_size(vec2(w, 28.0), Sense::click());
             ui.painter().rect(
                 r,
@@ -241,6 +191,7 @@ fn master_row(app: &mut SlideApp, ui: &mut Ui) {
             if presp.on_hover_text("New layout").clicked() {
                 let _ = app.run("master.insertLayout", json!({}));
             }
+            hide_panel_button(app, ui);
         });
     });
 }
@@ -251,7 +202,7 @@ fn new_slide_row(app: &mut SlideApp, ui: &mut Ui) {
     let en = crate::ribbon::enabled(app, "slide.new");
     egui::Frame::NONE.inner_margin(egui::Margin::symmetric(10, 0)).show(ui, |ui| {
         ui.horizontal(|ui| {
-            let w = ui.available_width() - 34.0;
+            let w = ui.available_width() - 34.0 - 30.0;
             let (r, resp) = ui.allocate_exact_size(vec2(w, 28.0), if en { Sense::click() } else { Sense::hover() });
             ui.painter().rect(
                 r,
@@ -287,6 +238,7 @@ fn new_slide_row(app: &mut SlideApp, ui: &mut Ui) {
             if presp.on_hover_text("New Slide (⇧⌘N)").clicked() {
                 let _ = app.run("slide.new", json!({}));
             }
+            hide_panel_button(app, ui);
         });
     });
 }
@@ -306,9 +258,16 @@ fn layers(app: &mut SlideApp, ui: &mut Ui) {
             ui.add_space(4.0);
             egui::ScrollArea::vertical().id_salt("canvas_layers_list").auto_shrink([false, false]).show(ui, |ui| {
                 if app.session.active().is_some_and(|d| d.shapes().is_empty()) {
-                    ui.label(egui::RichText::new("Nothing on this slide yet").font(theme::font(12.0)).color(t.text_faint));
+                    let what = match app.session.active().map(|d| d.selection.target) {
+                        Some(Target::Master { .. }) => "Nothing on the master yet",
+                        Some(Target::Layout { .. }) => "Nothing on this layout yet",
+                        _ => "Nothing on this slide yet",
+                    };
+                    ui.label(egui::RichText::new(what).font(theme::font(12.0)).color(t.text_faint));
                 } else {
-                    let marked = crate::states::changed_layers(app);
+                    // Layers changed from the previous state (slides only).
+                    let on_slide = app.session.active().is_some_and(|d| d.selection.target == Target::Slides);
+                    let marked = if on_slide { crate::states::changed_layers(app) } else { Default::default() };
                     crate::selpane::list_marked(app, ui, &marked);
                 }
             });
@@ -326,8 +285,8 @@ fn inspector(app: &mut SlideApp, ui: &mut Ui) {
         .frame(egui::Frame::NONE.fill(t.card).inner_margin(egui::Margin { left: 12, right: 12, top: 10, bottom: 0 }))
         .show(ui, |ui| {
             edge(ui, ui.max_rect().min.x - 12.0, &t);
-            inspector_header(app, ui);
-            ui.add_space(4.0);
+            panel_tabs(app, ui);
+            ui.add_space(6.0);
             let r = ui.max_rect();
             ui.painter().hline(r.x_range().expand(12.0), ui.cursor().min.y, Stroke::new(1.0, t.separator));
             ui.add_space(8.0);
@@ -347,49 +306,94 @@ fn inspector(app: &mut SlideApp, ui: &mut Ui) {
         });
 }
 
-/// Sort (the grid of slides), Animate (the panel's states and effects) and Present, as big
-/// buttons across the top of the panel.
-fn inspector_header(app: &mut SlideApp, ui: &mut Ui) {
-    let t = Tokens::get(ui.ctx());
-    let w = ui.available_width();
-    let tile = 52.0;
-    let col = w / 3.0;
-    let (row, _) = ui.allocate_exact_size(vec2(w, tile + 24.0), Sense::hover());
-    let sorter = app.ui.view == ViewMode::Sorter;
-    let animate = app.ui.inspector_tab == "animate";
+/// The canvas layout's views, one at a time: one slide, the grid of slides, and the slide masters.
+/// (Animating is a panel tab, beside Design, on the single slide.)
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum View {
+    Slide,
+    Grid,
+    Masters,
+}
+
+/// The view shown now.
+pub fn view(app: &SlideApp) -> View {
+    let in_master = app.session.active().is_some_and(|d| d.selection.target != Target::Slides);
+    if in_master {
+        View::Masters
+    } else if app.ui.view == ViewMode::Sorter {
+        View::Grid
+    } else {
+        View::Slide
+    }
+}
+
+/// Switch to view `v`, leaving whichever one was shown (the Animate tab closes outside the slide).
+pub fn set_view(app: &mut SlideApp, v: View) {
+    let in_master = app.session.active().is_some_and(|d| d.selection.target != Target::Slides);
+    if in_master && v != View::Masters {
+        let _ = app.run("view.closeMaster", json!({}));
+    }
+    let _ = app.run(if v == View::Grid { "view.sorter" } else { "view.normal" }, json!({}));
+    if v != View::Slide {
+        app.ui.inspector_tab = "design".into();
+    }
+    if v == View::Masters && !in_master {
+        let _ = app.run("view.slideMaster", json!({}));
+    }
+}
+
+/// The views in the toolbar, exclusive: Single slide, Grid, Masters (the one shown is
+/// highlighted; clicking Masters again goes back to the slide), then Play.
+fn view_toggles(app: &mut SlideApp, ui: &mut Ui) {
+    let now = view(app);
     let items = [
-        (Icon::Grid, "Sort", "Grid of slides", sorter),
-        (Icon::Play, "Animate", "States and effects", animate),
-        (Icon::Present, "Present", "Present from this slide (⌘↩)", false),
+        (View::Slide, Icon::ViewNormalSmall, "Single slide", "One slide at a time"),
+        (View::Grid, Icon::Grid, "Grid", "All the slides in a grid"),
+        (View::Masters, Icon::SlideMaster, "Masters", "Edit the slide masters and layouts"),
     ];
-    for (k, (icon, label, tip, on)) in items.into_iter().enumerate() {
-        let cx = row.min.x + col * (k as f32 + 0.5);
-        let r = Rect::from_center_size(pos2(cx, row.min.y + tile / 2.0), vec2(tile, tile));
-        let resp =
-            ui.interact(r.union(Rect::from_center_size(pos2(cx, r.max.y + 12.0), vec2(col, 20.0))), ui.id().with(("panel-tile", k)), Sense::click());
-        let p = ui.painter();
-        let fill = if on {
-            t.selected
-        } else if resp.hovered() {
-            t.hover
+    for (v, icon, label, tip) in items {
+        if view_toggle(ui, icon, label, tip, now == v).clicked() {
+            set_view(app, if now == v && v == View::Masters { View::Slide } else { v });
+        }
+    }
+    let sep = ui.allocate_exact_size(vec2(9.0, 28.0), Sense::hover()).0;
+    ui.painter().vline(sep.center().x, sep.y_range(), Stroke::new(1.0, Tokens::get(ui.ctx()).separator));
+    if view_toggle(ui, Icon::Play, "Play", "Present from this slide (⌘↩)", false).clicked() {
+        let from = app.session.active().map(|d| d.selection.slide).unwrap_or(0);
+        app.start_show(from, false);
+    }
+}
+
+/// Design | Animate across the top of the panel (as canvas editors' Design | Prototype). Animate
+/// is for the slide: greyed out in the masters and the grid.
+fn panel_tabs(app: &mut SlideApp, ui: &mut Ui) {
+    let t = Tokens::get(ui.ctx());
+    let can_animate = view(app) == View::Slide;
+    let w = ui.available_width();
+    let (r, _) = ui.allocate_exact_size(vec2(w, 30.0), Sense::hover());
+    ui.painter().rect_filled(r, CornerRadius::same(7), t.field);
+    for (k, (id, label)) in [("design", "Design"), ("animate", "Animate")].into_iter().enumerate() {
+        let cell = Rect::from_min_size(pos2(r.min.x + k as f32 * w / 2.0, r.min.y), vec2(w / 2.0, r.height()));
+        let enabled = id == "design" || can_animate;
+        let resp = ui.interact(cell, ui.id().with(("panel-tab", id)), if enabled { Sense::click() } else { Sense::hover() });
+        let on = app.ui.inspector_tab == id || (id == "design" && app.ui.inspector_tab != "animate");
+        if on {
+            ui.painter().rect(cell.shrink(2.0), CornerRadius::same(6), t.card, Stroke::new(1.0, t.card_border), egui::StrokeKind::Inside);
+        } else if enabled && resp.hovered() {
+            ui.painter().rect_filled(cell.shrink(2.0), CornerRadius::same(6), t.hover);
+        }
+        let ink = if !enabled {
+            t.text_faint
+        } else if on {
+            t.text
         } else {
-            t.card
+            t.text_dim
         };
-        p.rect(r, CornerRadius::same(10), fill, Stroke::new(1.0, if on { t.text_faint } else { t.border }), egui::StrokeKind::Inside);
-        icons::paint_mono(p, r.shrink(13.0), icon, if on { t.text } else { t.text_dim }, false);
-        p.text(pos2(cx, r.max.y + 12.0), Align2::CENTER_CENTER, label, theme::font(12.5), t.text);
-        resp.widget_info(|| egui::WidgetInfo::selected(egui::WidgetType::Button, true, on, label));
-        if resp.on_hover_text(tip).clicked() {
-            match k {
-                0 => {
-                    let _ = app.run(if sorter { "view.normal" } else { "view.sorter" }, json!({}));
-                }
-                1 => app.ui.inspector_tab = if animate { "design".into() } else { "animate".into() },
-                _ => {
-                    let from = app.session.active().map(|d| d.selection.slide).unwrap_or(0);
-                    app.start_show(from, false);
-                }
-            }
+        ui.painter().text(cell.center(), Align2::CENTER_CENTER, label, if on { theme::bold(13.0) } else { theme::font(13.0) }, ink);
+        resp.widget_info(|| egui::WidgetInfo::selected(egui::WidgetType::SelectableLabel, enabled, on, label));
+        let resp = if enabled { resp } else { resp.on_hover_text("Animating is for slides: back to a single slide to animate") };
+        if resp.clicked() {
+            app.ui.inspector_tab = id.into();
         }
     }
 }
@@ -466,15 +470,16 @@ fn states_strip(app: &mut SlideApp, ui: &mut Ui) {
 
 /// One tool button in the floating toolbar: the current tool is filled with the accent.
 fn tool(ui: &mut Ui, icon: Icon, tip: &str, on: bool, enabled: bool) -> egui::Response {
-    tool_button(ui, icon, tip, on, enabled, true)
+    tool_button(ui, icon, tip, tip, on, enabled, true)
 }
 
-/// A view toggle in the toolbar: shown on in grey, so it isn't mistaken for the current tool.
-fn toggle(ui: &mut Ui, icon: Icon, tip: &str, on: bool) -> egui::Response {
-    tool_button(ui, icon, tip, on, true, false)
+/// A view toggle named `label` (for screen readers and tests), with a longer tooltip: shown on
+/// in grey, so it isn't mistaken for the current tool.
+fn view_toggle(ui: &mut Ui, icon: Icon, label: &str, tip: &str, on: bool) -> egui::Response {
+    tool_button(ui, icon, label, tip, on, true, false)
 }
 
-fn tool_button(ui: &mut Ui, icon: Icon, tip: &str, on: bool, enabled: bool, accent: bool) -> egui::Response {
+fn tool_button(ui: &mut Ui, icon: Icon, label: &str, tip: &str, on: bool, enabled: bool, accent: bool) -> egui::Response {
     let t = Tokens::get(ui.ctx());
     let (r, resp) = ui.allocate_exact_size(vec2(36.0, 36.0), if enabled { Sense::click() } else { Sense::hover() });
     let p = ui.painter_at(r);
@@ -487,7 +492,7 @@ fn tool_button(ui: &mut Ui, icon: Icon, tip: &str, on: bool, enabled: bool, acce
         p.rect_filled(r, CornerRadius::same(8), t.hover);
     }
     icons::paint(&p, r.shrink(9.0), icon, if filled { t.accent_text } else { t.text }, !enabled);
-    resp.widget_info(|| egui::WidgetInfo::selected(egui::WidgetType::Button, enabled, on, tip));
+    resp.widget_info(|| egui::WidgetInfo::selected(egui::WidgetType::Button, enabled, on, label));
     resp.on_hover_text(tip)
 }
 
@@ -496,7 +501,7 @@ fn toolbar(app: &mut SlideApp, ui: &mut Ui) {
     let t = Tokens::get(ui.ctx());
     egui::Panel::bottom("canvas_toolbar").exact_size(TOOLBAR_H).show_separator_line(false).frame(egui::Frame::NONE).show(ui, |ui| {
         let area = ui.max_rect();
-        let w = 7.0 * 38.0 + 1.0 + 3.0 * 38.0 + 9.0 + 50.0 + 16.0;
+        let w = 7.0 * 38.0 + 9.0 + 3.0 * 38.0 + 9.0 + 38.0 + 9.0 + 50.0 + 16.0;
         let bar = Rect::from_center_size(pos2(area.center().x, area.center().y - 4.0), vec2(w, 48.0));
         let shadow = egui::epaint::Shadow { offset: [0, 2], blur: 10, spread: 0, color: t.shadow };
         ui.painter().add(shadow.as_shape(bar, CornerRadius::same(12)));
@@ -537,16 +542,7 @@ fn toolbar(app: &mut SlideApp, ui: &mut Ui) {
         }
         let sep = ui.allocate_exact_size(vec2(9.0, 28.0), Sense::hover()).0;
         ui.painter().vline(sep.center().x, sep.y_range(), Stroke::new(1.0, t.separator));
-        if toggle(ui, Icon::NotesSmall, "Presenter notes", app.ui.notes).clicked() {
-            let _ = app.run("view.notes", json!({}));
-        }
-        // The strip always shows while the slide has states; this keeps it open without.
-        if toggle(ui, Icon::States, "States under the slide", crate::states::strip_shown(app)).clicked() {
-            app.ui.states_strip = !crate::states::strip_shown(app);
-        }
-        if toggle(ui, Icon::Search, "Search commands (⇧⌘P)", false).clicked() {
-            app.palette = Some((String::new(), 0));
-        }
+        view_toggles(app, ui);
         let sep = ui.allocate_exact_size(vec2(9.0, 28.0), Sense::hover()).0;
         ui.painter().vline(sep.center().x, sep.y_range(), Stroke::new(1.0, t.separator));
         zoom_menu(app, ui);

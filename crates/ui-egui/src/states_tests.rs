@@ -158,7 +158,7 @@ fn the_strip_adds_states_after_any_state() {
     let (app, _) = app_with_box();
     let mut h = canvas(app);
     assert!(h.query_by_label("State 1").is_none(), "no strip for a slide without states");
-    h.get_by_label("States under the slide").click();
+    h.get_by_label("Animate").click();
     h.run_steps(3);
     h.get_by_label("Add a state after state 1").click();
     h.run_steps(3);
@@ -170,6 +170,7 @@ fn the_strip_adds_states_after_any_state() {
     assert_eq!(h.state().session.active().unwrap().selection.slide, 1, "the new state went in after the first");
     assert!(h.query_by_label("Morph into state 2").is_some(), "timing between states");
     h.state_mut().ui.states_strip = false;
+    h.state_mut().ui.inspector_tab = "design".into();
     h.run_steps(2);
     assert!(h.query_by_label("State 3").is_some(), "the strip stays while there are states");
 }
