@@ -75,3 +75,12 @@ is copied into this repository. The licence text is in `licenses/pdf-writer/LICE
 | `krilla 0.8.2 / icc/sGrey-v4.icc` | Clinton Ingram (Compact ICC Profiles) | https://github.com/LaurenzV/krilla/blob/3ffdf0588cf98050aad6edba51ca70162e1fb5b5/crates/krilla/icc/sGrey-v4.icc | CC0-1.0 | `00c0f94e09127520a17dc0e1d9264b5702081d96dbdb1549ee88e3631ce42a9d` | PDF export colour profiles |
 | `krilla 0.8.2 / icc/sRGB-v2-magic.icc` | Clinton Ingram (Compact ICC Profiles) | https://github.com/LaurenzV/krilla/blob/3ffdf0588cf98050aad6edba51ca70162e1fb5b5/crates/krilla/icc/sRGB-v2-magic.icc | CC0-1.0 | `af4efe28f6d311799865f325ba39184a2e978b113ca74124d60af7de22b105f4` | PDF export colour profiles |
 | `krilla 0.8.2 / icc/sRGB-v4.icc` | Clinton Ingram (Compact ICC Profiles) | https://github.com/LaurenzV/krilla/blob/3ffdf0588cf98050aad6edba51ca70162e1fb5b5/crates/krilla/icc/sRGB-v4.icc | CC0-1.0 | `c56e1685d888f5edb92fe07f2750f387f8fe8e91b32ff8fb0b56bfbbb9458353` | PDF export colour profiles |
+
+## Linux Wayland frame (Cargo dependency)
+
+| Dependency asset | Title | Author | Source | Licence |
+|---|---|---|---|---|
+| `sctk-adwaita` 0.10.1: `src/title/Cantarell-Regular.ttf` | Cantarell Regular, unmodified fallback window-title font; Linux only | Understanding Limited; Jakub Steiner | [sctk-adwaita at d5f343c](https://github.com/PolyMeilex/sctk-adwaita/blob/d5f343c45c04d4a026db57f76760819b7325db00/src/title/Cantarell-Regular.ttf) | OFL-1.1; full copyright and licence in `NOTICE` |
+
+The font is embedded by the dependency, with no font file added to this repository.
+Adwaita window buttons are vector paths and do not depend on font glyphs.
