@@ -227,7 +227,7 @@ impl Exp<'_> {
             let mut co = Out::new(&name);
             let xml = if workbook
                 && let Some(source) = chart::source(c)
-                && let Some(book) = self.original_workbook(&mut co, c, &source.edits)
+                && let Some(book) = self.original_workbook(&mut co, c, &source.edits, source.area.as_ref())
             {
                 chart::build_chart_xml(c, Some(&book), Some(&source.refs))
             } else {
@@ -250,9 +250,9 @@ impl Exp<'_> {
         Some(co.rels.add("package", &opc::relative(&co.name, &part), false))
     }
     /// The relationship from chart part `co` to the chart's own workbook, with `edits` applied to
-    /// its cells. With no edits the workbook is written as it was read; a linked one stays a link.
+    /// its cells (and a table over the chart data moved with `area`). With no edits the workbook is written as it was read; a linked one stays a link.
     /// `None` when there is none, or when the edits can't be applied in place.
-    fn original_workbook(&mut self, co: &mut Out, c: &deckcraft_model::Chart, edits: &[xlsx::Edit]) -> Option<String> {
+    fn original_workbook(&mut self, co: &mut Out, c: &deckcraft_model::Chart, edits: &[xlsx::Edit], area: Option<&xlsx::AreaMove>) -> Option<String> {
         let Some(part) = c.kept.workbook() else {
             let link = c
                 .kept
@@ -266,7 +266,7 @@ impl Exp<'_> {
         let data = if edits.is_empty() {
             part.bytes.clone()
         } else if is_xlsx {
-            xlsx::patch(&part.bytes, edits)?
+            xlsx::patch(&part.bytes, edits, area)?
         } else {
             return None;
         };
