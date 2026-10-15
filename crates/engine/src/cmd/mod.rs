@@ -416,7 +416,46 @@ pub fn xfrm_of(doc: &deckcraft_model::Presentation, sel: &crate::Selection, shap
             x.h = drawn;
         }
     }
-    x
+    // A grouped layer's box is stored in its group's space; this is where it is on the slide.
+    match group_frame(doc, sel, shape.id) {
+        Some((g, ch)) => arrange::child_to_parent(&g, &ch, &x),
+        None => x,
+    }
+}
+
+/// For a layer inside groups: its innermost group's box on the slide and that group's child
+/// space (`chOff` / `chExt`). None for a top-level layer.
+pub fn group_frame(doc: &deckcraft_model::Presentation, sel: &crate::Selection, id: ShapeId) -> Option<(Xfrm, Xfrm)> {
+    fn rec(shapes: &[deckcraft_model::Shape], id: ShapeId, frame: Option<(Xfrm, Xfrm)>, depth: usize) -> Option<Option<(Xfrm, Xfrm)>> {
+        if depth > 64 {
+            return None;
+        }
+        for s in shapes {
+            if s.id == id {
+                return Some(frame);
+            }
+            if let deckcraft_model::ShapeKind::Group { children, child } = &s.kind {
+                let own = s.xfrm.unwrap_or_default();
+                let on_slide = match frame {
+                    Some((g, ch)) => arrange::child_to_parent(&g, &ch, &own),
+                    None => own,
+                };
+                if let Some(f) = rec(children, id, Some((on_slide, *child)), depth + 1) {
+                    return Some(f);
+                }
+            }
+        }
+        None
+    }
+    rec(current_shapes(doc, sel)?, id, None, 0).flatten()
+}
+
+/// A box on the slide as layer `id` stores it: in its group's space when it's grouped.
+pub fn stored_xfrm(frame: Option<(Xfrm, Xfrm)>, x: Xfrm) -> Xfrm {
+    match frame {
+        Some((g, ch)) => arrange::parent_to_child(&g, &ch, &x),
+        None => x,
+    }
 }
 
 /// Row heights of table `t` as drawn: a stored height is a minimum, rows grow to fit their text.
@@ -454,14 +493,26 @@ pub(crate) fn edit_shapes(s: &mut Session, p: &Value, cmd: &str, f: impl Fn(&mut
                 ids.iter().filter_map(|id| current_shapes(doc, sel).and_then(|v| deckcraft_model::find_shape(v, *id)).cloned()).collect();
             st_shapes.iter().map(|sh| (sh.id, xfrm_of(doc, sel, sh))).collect()
         };
+        let frames: Vec<(ShapeId, Option<(Xfrm, Xfrm)>)> = ids.iter().map(|id| (*id, group_frame(doc, sel, *id))).collect();
         let shapes = crate::shapes_mut(doc, sel).ok_or_else(|| bad(cmd, "no slide"))?;
         let mut n = 0;
         for id in &ids {
             if let Some(sh) = deckcraft_model::find_shape_mut(shapes, *id) {
-                if sh.xfrm.is_none() {
-                    sh.xfrm = boxes.iter().find(|(i, _)| i == id).map(|(_, x)| *x);
+                let frame = frames.iter().find(|(i, _)| i == id).and_then(|(_, f)| *f);
+                let on_slide = boxes.iter().find(|(i, _)| i == id).map(|(_, x)| *x);
+                if frame.is_some() {
+                    // The edit sees the grouped layer's box on the slide, and what it changes is
+                    // stored back in the group's space.
+                    let stored = sh.xfrm;
+                    sh.xfrm = on_slide;
+                    f(sh)?;
+                    sh.xfrm = if sh.xfrm == on_slide { stored } else { sh.xfrm.map(|x| stored_xfrm(frame, x)) };
+                } else {
+                    if sh.xfrm.is_none() {
+                        sh.xfrm = on_slide;
+                    }
+                    f(sh)?;
                 }
-                f(sh)?;
                 n += 1;
             }
         }

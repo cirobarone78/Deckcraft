@@ -313,6 +313,9 @@ pub struct UiState {
     /// Canvas shell: the strip of the current slide's states under the slide, shown even when it
     /// has none yet (it always shows while it has some).
     pub states_strip: bool,
+    /// Canvas shell: the left panel (slides and layers) and the right panel (design) are hidden.
+    pub hide_left: bool,
+    pub hide_right: bool,
 }
 
 impl Default for UiState {
@@ -344,6 +347,8 @@ impl Default for UiState {
             smartart_focus: None,
             smartart_drafts: (0, vec![]),
             states_strip: false,
+            hide_left: false,
+            hide_right: false,
             grayscale: false,
             comment_focus: None,
             qat: qat::defaults(),
@@ -406,6 +411,8 @@ pub const UI_COMMANDS: &[(&str, &str, Option<&str>, &str)] = &[
     ("view.reading", "Reading View", None, "{}"),
     ("view.notes", "Notes", None, "{on?: bool}"),
     ("view.ruler", "Ruler", None, "{on?: bool}"),
+    ("view.panels", "Show/Hide Side Panels", Some("Cmd+."), "{on?: bool} (canvas layout: both side panels)"),
+    ("view.leftPanel", "Show/Hide Left Panel", Some("Alt+Cmd+."), "{on?: bool} (canvas layout: slides and layers)"),
     ("view.gridlines", "Gridlines", Some("Shift+F9"), "{on?: bool}"),
     ("view.guides", "Guides", Some("Alt+F9"), "{on?: bool}"),
     ("view.gridOptions", "Grid Options…", None, "{spacing?: pt, snap?: bool, smartGuides?: bool, gridlines?: bool, guides?: bool}"),
@@ -652,6 +659,8 @@ impl SlideApp {
     /// layers (select them in the Layers list); the ribbon keeps PowerPoint's lock.
     fn sync_shell_prefs(&mut self) {
         self.session.prefs.locked_click_through = self.ui.shell == Shell::Canvas;
+        self.session.prefs.cmd_deep_select = self.ui.shell == Shell::Canvas;
+        self.session.prefs.group_keeps_aspect = self.ui.shell == Shell::Canvas;
     }
 
     /// Run `cmds` as one undo step named `label` (each command would make its own).
@@ -925,6 +934,14 @@ impl SlideApp {
             "view.reading" => self.start_show(self.session.active().map(|d| d.selection.slide).unwrap_or(0), true),
             "view.notes" => self.ui.notes = self.flag(p, self.ui.notes),
             "view.ruler" => self.ui.ruler = self.flag(p, self.ui.ruler),
+            "view.panels" => {
+                // Hide both while either shows; show both when both are hidden.
+                // `on`: the panels shown.
+                let shown = self.flag(p, !self.ui.hide_left || !self.ui.hide_right);
+                self.ui.hide_left = !shown;
+                self.ui.hide_right = !shown;
+            }
+            "view.leftPanel" => self.ui.hide_left = !self.flag(p, !self.ui.hide_left),
             "view.gridlines" => self.ui.gridlines = self.flag(p, self.ui.gridlines),
             "view.guides" => {
                 self.ui.guides = self.flag(p, self.ui.guides);

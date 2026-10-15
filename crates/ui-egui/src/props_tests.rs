@@ -51,10 +51,11 @@ fn a_shape_shows_every_section() {
     select_box(&mut h, "rect");
     for label in [
         "Rectangle",
+        "Text tab",
+        "Shape tab",
         "Position",
         "Layout",
         "Appearance",
-        "Typography",
         "Fill",
         "Stroke",
         "Effects",
@@ -69,6 +70,13 @@ fn a_shape_shows_every_section() {
     for value in ["200", "400", "3366CC", "100%"] {
         assert!(h.query_all_by_value(value).next().is_some(), "a field reads {value}");
     }
+    // A shape opens on its Shape tab; its text is on the Text tab.
+    assert!(h.query_by_label("Typography").is_none());
+    click(&mut h, "Text tab");
+    for label in ["Typography", "Text box", "Auto width"] {
+        assert!(h.query_all_by_label(label).next().is_some(), "`{label}` is on the Text tab");
+    }
+    assert!(h.query_by_label("Position").is_none());
 }
 
 #[test]
@@ -87,6 +95,7 @@ fn position_buttons_align_rotate_and_flip() {
 fn resizing_buttons_set_wrap_and_autofit() {
     let mut h = harness();
     let id = select_box(&mut h, "rect");
+    click(&mut h, "Text tab");
     click(&mut h, "Auto width");
     assert_eq!(resizing_of(&shape(h.state(), id)), Resizing::AutoWidth);
     click(&mut h, "Auto height");
@@ -119,13 +128,14 @@ fn a_text_box_fill_is_its_text_colour() {
     app.run("format.color", json!({"color": "#AA2200"})).unwrap();
     h.run_steps(3);
     assert!(h.query_by_label("Text").is_some(), "the header names a text layer");
-    assert!(h.query_all_by_value("AA2200").next().is_some(), "Fill shows the text colour");
+    assert!(h.query_all_by_value("AA2200").next().is_some(), "a text box opens on its Text tab, with the text colour");
 }
 
 #[test]
 fn type_details_open_from_the_tune_button() {
     let mut h = harness();
     select_box(&mut h, "rect");
+    click(&mut h, "Text tab");
     assert!(h.query_by_label("Bold (⌘B)").is_none(), "details start folded");
     click(&mut h, "Type details: bold, italic, underline, lists");
     click(&mut h, "Bold (⌘B)");
@@ -229,13 +239,15 @@ fn a_text_style_keeps_the_texts_own_colour() {
 fn a_shape_with_text_has_a_text_colour_row() {
     let mut h = harness();
     select_box(&mut h, "rect");
-    assert!(h.query_by_label("Text color").is_some(), "its Fill is the shape's, so the text gets its own colour swatch");
+    click(&mut h, "Text tab");
+    assert!(h.query_by_label("Text color").is_some(), "the text's colour is on the Text tab");
     let mut h = harness();
     let app = h.state_mut();
     app.run("insert.textBox", json!({"rect": [50, 50, 300, 40], "text": "Hello"})).unwrap();
     h.run_steps(3);
-    assert!(h.query_by_label("Text color").is_none(), "a text box's Fill is its text colour");
-    assert!(h.query_by_label("Fill color").is_some());
+    assert!(h.query_by_label("Text color").is_some(), "a text box too");
+    click(&mut h, "Shape tab");
+    assert!(h.query_by_label("Fill").is_some(), "the Shape tab's Fill is the box's own");
 }
 
 fn text_box(h: &mut Harness<'static, SlideApp>) -> u32 {

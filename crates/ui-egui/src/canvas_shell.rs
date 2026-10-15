@@ -25,19 +25,26 @@ pub fn show(app: &mut SlideApp, ui: &mut Ui) {
         egui::CentralPanel::default().frame(egui::Frame::NONE.fill(t.chrome)).show(ui, |_| {});
         return;
     }
-    sidebar(app, ui);
-    inspector(app, ui);
-    egui::CentralPanel::default().frame(egui::Frame::NONE.fill(t.chrome)).show(ui, |ui| match app.ui.view {
-        ViewMode::Sorter => crate::sorter::show(app, ui),
-        ViewMode::NotesPage => crate::sorter::notes_page(app, ui),
-        ViewMode::Normal | ViewMode::Outline | ViewMode::Reading => {
-            toolbar(app, ui);
-            if app.ui.notes {
-                notes_card(app, ui);
+    if !app.ui.hide_left {
+        sidebar(app, ui);
+    }
+    if !app.ui.hide_right {
+        inspector(app, ui);
+    }
+    egui::CentralPanel::default().frame(egui::Frame::NONE.fill(t.chrome)).show(ui, |ui| {
+        match app.ui.view {
+            ViewMode::Sorter => crate::sorter::show(app, ui),
+            ViewMode::NotesPage => crate::sorter::notes_page(app, ui),
+            ViewMode::Normal | ViewMode::Outline | ViewMode::Reading => {
+                toolbar(app, ui);
+                if app.ui.notes {
+                    notes_card(app, ui);
+                }
+                states_strip(app, ui);
+                crate::canvas::show(app, ui);
             }
-            states_strip(app, ui);
-            crate::canvas::show(app, ui);
         }
+        hidden_panel_buttons(app, ui);
     });
 }
 
@@ -113,6 +120,33 @@ fn sidebar(app: &mut SlideApp, ui: &mut Ui) {
         });
 }
 
+/// While a side panel is hidden, a button in that top corner of the canvas brings it back.
+fn hidden_panel_buttons(app: &mut SlideApp, ui: &mut Ui) {
+    let t = Tokens::get(ui.ctx());
+    let area = ui.max_rect();
+    for (left, hidden) in [(true, app.ui.hide_left), (false, app.ui.hide_right)] {
+        if !hidden {
+            continue;
+        }
+        let at = if left { pos2(area.min.x + 10.0, area.min.y + 10.0) } else { pos2(area.max.x - 42.0, area.min.y + 10.0) };
+        let r = Rect::from_min_size(at, vec2(32.0, 32.0));
+        let resp = ui.interact(r, ui.id().with(("show-panel", left)), Sense::click());
+        let p = ui.painter();
+        p.add(egui::epaint::Shadow { offset: [0, 1], blur: 6, spread: 0, color: t.shadow }.as_shape(r, CornerRadius::same(8)));
+        p.rect(r, CornerRadius::same(8), if resp.hovered() { t.hover } else { t.card }, Stroke::new(1.0, t.card_border), egui::StrokeKind::Inside);
+        icons::paint_mono(p, r.shrink(8.0), if left { Icon::PanelLeft } else { Icon::PanelRight }, t.text, false);
+        let tip = if left { "Show the left panel (⌥⌘.)" } else { "Show the design panel (⌘.)" };
+        resp.widget_info(|| egui::WidgetInfo::labeled(egui::WidgetType::Button, true, tip));
+        if resp.on_hover_text(tip).clicked() {
+            if left {
+                app.ui.hide_left = false;
+            } else {
+                app.ui.hide_right = false;
+            }
+        }
+    }
+}
+
 /// Name and folder of the presentation, and the slide / grid view switch.
 fn header(app: &mut SlideApp, ui: &mut Ui) {
     let t = Tokens::get(ui.ctx());
@@ -130,6 +164,9 @@ fn header(app: &mut SlideApp, ui: &mut Ui) {
         ui.horizontal(|ui| {
             ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                 ui.spacing_mut().item_spacing.x = 2.0;
+                if icon_toggle(ui, Icon::PanelLeft, "Hide the left panel (⌥⌘.)", true, false).clicked() {
+                    app.ui.hide_left = true;
+                }
                 let in_master = app.session.active().is_some_and(|d| d.selection.target != Target::Slides);
                 let tip = if in_master { "Close slide masters" } else { "Edit slide masters and layouts" };
                 if icon_toggle(ui, Icon::SlideMaster, tip, true, in_master).clicked() {
@@ -147,6 +184,12 @@ fn header(app: &mut SlideApp, ui: &mut Ui) {
                     let name = format!("{title}{}", if dirty { " •" } else { "" });
                     let r = ui.add(egui::Button::new(egui::RichText::new(name).font(theme::bold(15.0))).frame(false).truncate());
                     egui::Popup::menu(&r).show(|ui| {
+                        if ui.button("Home").clicked() {
+                            let _ = app.run("app.home", json!({}));
+                        }
+                        if ui.button("Save").clicked() {
+                            app.save();
+                        }
                         for (label, page) in [("Info…", "info"), ("Save As…", "saveAs"), ("Export…", "export"), ("Print…", "print")] {
                             if ui.button(label).clicked() {
                                 let _ = app.run("app.backstage", json!({"page": page}));
@@ -284,8 +327,6 @@ fn inspector(app: &mut SlideApp, ui: &mut Ui) {
         .show(ui, |ui| {
             edge(ui, ui.max_rect().min.x - 12.0, &t);
             inspector_header(app, ui);
-            ui.add_space(8.0);
-            inspector_tabs(app, ui);
             ui.add_space(4.0);
             let r = ui.max_rect();
             ui.painter().hline(r.x_range().expand(12.0), ui.cursor().min.y, Stroke::new(1.0, t.separator));
@@ -306,75 +347,74 @@ fn inspector(app: &mut SlideApp, ui: &mut Ui) {
         });
 }
 
-/// Play from the current slide, and Export.
+/// Sort (the grid of slides), Animate (the panel's states and effects) and Present, as big
+/// buttons across the top of the panel.
 fn inspector_header(app: &mut SlideApp, ui: &mut Ui) {
     let t = Tokens::get(ui.ctx());
-    ui.horizontal(|ui| {
-        ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-            let export = ui.add(
-                egui::Button::new(egui::RichText::new("Export").color(t.accent_text).font(theme::bold(13.0)))
-                    .fill(t.accent)
-                    .corner_radius(CornerRadius::same(6))
-                    .min_size(vec2(72.0, 28.0)),
-            );
-            if export.clicked() {
-                let _ = app.run("app.backstage", json!({"page": "export"}));
-            }
-            let (r, resp) = ui.allocate_exact_size(vec2(28.0, 28.0), Sense::click());
-            if resp.hovered() {
-                ui.painter().rect_filled(r, CornerRadius::same(6), t.hover);
-            }
-            icons::paint(ui.painter(), r.shrink(6.0), Icon::Play, t.text, false);
-            if resp.on_hover_text("Present from this slide").clicked() {
-                let from = app.session.active().map(|d| d.selection.slide).unwrap_or(0);
-                app.start_show(from, false);
-            }
-        });
-    });
-}
-
-/// Design / Animate, and the zoom menu.
-fn inspector_tabs(app: &mut SlideApp, ui: &mut Ui) {
-    let t = Tokens::get(ui.ctx());
-    ui.horizontal(|ui| {
-        for (id, label) in [("design", "Design"), ("animate", "Animate")] {
-            let on = app.ui.inspector_tab == id;
-            let r = ui.add(
-                egui::Button::new(egui::RichText::new(label).font(if on { theme::bold(13.0) } else { theme::font(13.0) }).color(if on {
-                    t.text
-                } else {
-                    t.text_dim
-                }))
-                .fill(if on { t.selected } else { egui::Color32::TRANSPARENT })
-                .corner_radius(CornerRadius::same(5)),
-            );
-            if r.clicked() {
-                app.ui.inspector_tab = id.to_string();
+    let w = ui.available_width();
+    let tile = 52.0;
+    let col = w / 3.0;
+    let (row, _) = ui.allocate_exact_size(vec2(w, tile + 24.0), Sense::hover());
+    let sorter = app.ui.view == ViewMode::Sorter;
+    let animate = app.ui.inspector_tab == "animate";
+    let items = [
+        (Icon::Grid, "Sort", "Grid of slides", sorter),
+        (Icon::Play, "Animate", "States and effects", animate),
+        (Icon::Present, "Present", "Present from this slide (⌘↩)", false),
+    ];
+    for (k, (icon, label, tip, on)) in items.into_iter().enumerate() {
+        let cx = row.min.x + col * (k as f32 + 0.5);
+        let r = Rect::from_center_size(pos2(cx, row.min.y + tile / 2.0), vec2(tile, tile));
+        let resp =
+            ui.interact(r.union(Rect::from_center_size(pos2(cx, r.max.y + 12.0), vec2(col, 20.0))), ui.id().with(("panel-tile", k)), Sense::click());
+        let p = ui.painter();
+        let fill = if on {
+            t.selected
+        } else if resp.hovered() {
+            t.hover
+        } else {
+            t.card
+        };
+        p.rect(r, CornerRadius::same(10), fill, Stroke::new(1.0, if on { t.text_faint } else { t.border }), egui::StrokeKind::Inside);
+        icons::paint_mono(p, r.shrink(13.0), icon, if on { t.text } else { t.text_dim }, false);
+        p.text(pos2(cx, r.max.y + 12.0), Align2::CENTER_CENTER, label, theme::font(12.5), t.text);
+        resp.widget_info(|| egui::WidgetInfo::selected(egui::WidgetType::Button, true, on, label));
+        if resp.on_hover_text(tip).clicked() {
+            match k {
+                0 => {
+                    let _ = app.run(if sorter { "view.normal" } else { "view.sorter" }, json!({}));
+                }
+                1 => app.ui.inspector_tab = if animate { "design".into() } else { "animate".into() },
+                _ => {
+                    let from = app.session.active().map(|d| d.selection.slide).unwrap_or(0);
+                    app.start_show(from, false);
+                }
             }
         }
-        ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-            let pct = (crate::units::zoom_shown(app, app.ui.zoom.unwrap_or(app.canvas_scale)) * 100.0).round();
-            let label = format!("{pct}%");
-            let r = ui.add(egui::Button::new(egui::RichText::new(label).font(theme::font(13.0))).frame(false));
-            egui::Popup::menu(&r).show(|ui| {
-                if ui.button("Zoom In").clicked() {
-                    let _ = app.run("view.zoomIn", json!({}));
-                }
-                if ui.button("Zoom Out").clicked() {
-                    let _ = app.run("view.zoomOut", json!({}));
-                }
-                if ui.button("Fit").clicked() {
-                    let _ = app.run("view.fit", json!({}));
-                }
-                ui.separator();
-                for z in ZOOMS {
-                    if ui.button(format!("{z}%")).clicked() {
-                        let p = crate::units::zoom_percent(app, z as f64);
-                        let _ = app.run("view.zoom", json!({"percent": p}));
-                    }
-                }
-            });
-        });
+    }
+}
+
+/// The zoom level, as a menu (the floating toolbar's end).
+fn zoom_menu(app: &mut SlideApp, ui: &mut Ui) {
+    let pct = (crate::units::zoom_shown(app, app.ui.zoom.unwrap_or(app.canvas_scale)) * 100.0).round();
+    let r = ui.add_sized(vec2(48.0, 36.0), egui::Button::new(egui::RichText::new(format!("{pct}%")).font(theme::font(12.5))).frame(false));
+    egui::Popup::menu(&r).show(|ui| {
+        if ui.button("Zoom In").clicked() {
+            let _ = app.run("view.zoomIn", json!({}));
+        }
+        if ui.button("Zoom Out").clicked() {
+            let _ = app.run("view.zoomOut", json!({}));
+        }
+        if ui.button("Fit").clicked() {
+            let _ = app.run("view.fit", json!({}));
+        }
+        ui.separator();
+        for z in ZOOMS {
+            if ui.button(format!("{z}%")).clicked() {
+                let p = crate::units::zoom_percent(app, z as f64);
+                let _ = app.run("view.zoom", json!({"percent": p}));
+            }
+        }
     });
 }
 
@@ -456,7 +496,7 @@ fn toolbar(app: &mut SlideApp, ui: &mut Ui) {
     let t = Tokens::get(ui.ctx());
     egui::Panel::bottom("canvas_toolbar").exact_size(TOOLBAR_H).show_separator_line(false).frame(egui::Frame::NONE).show(ui, |ui| {
         let area = ui.max_rect();
-        let w = 7.0 * 38.0 + 1.0 + 3.0 * 38.0 + 16.0;
+        let w = 7.0 * 38.0 + 1.0 + 3.0 * 38.0 + 9.0 + 50.0 + 16.0;
         let bar = Rect::from_center_size(pos2(area.center().x, area.center().y - 4.0), vec2(w, 48.0));
         let shadow = egui::epaint::Shadow { offset: [0, 2], blur: 10, spread: 0, color: t.shadow };
         ui.painter().add(shadow.as_shape(bar, CornerRadius::same(12)));
@@ -507,6 +547,9 @@ fn toolbar(app: &mut SlideApp, ui: &mut Ui) {
         if toggle(ui, Icon::Search, "Search commands (⇧⌘P)", false).clicked() {
             app.palette = Some((String::new(), 0));
         }
+        let sep = ui.allocate_exact_size(vec2(9.0, 28.0), Sense::hover()).0;
+        ui.painter().vline(sep.center().x, sep.y_range(), Stroke::new(1.0, t.separator));
+        zoom_menu(app, ui);
     });
 }
 

@@ -71,6 +71,9 @@ pub fn ui_shortcut(app: &mut SlideApp, key: egui::Key, m: Mods) -> bool {
         }
         (P, true, true, false) => "app.palette",
         (Comma, true, false, false) => "app.preferences",
+        // As in canvas editors: ⌘. (or ⌘\) hides both side panels, ⌥⌘. the left one.
+        (Period | Backslash, true, false, false) if app.ui.shell == crate::Shell::Canvas => "view.panels",
+        (Period, true, false, true) if app.ui.shell == crate::Shell::Canvas => "view.leftPanel",
         (Equals | Plus, true, false, false) => "view.zoomIn",
         (Minus, true, false, false) => "view.zoomOut",
         (Num0, true, false, false) => "view.fit",
@@ -257,6 +260,9 @@ pub fn menu_tree() -> Vec<(&'static str, Vec<(&'static str, &'static str)>)> {
                 ("Slide Master", "view.slideMaster"),
                 ("Handout Master", "view.handoutMaster"),
                 ("Notes Master", "view.notesMaster"),
+                ("-", ""),
+                ("Show/Hide Side Panels", "view.panels"),
+                ("Show/Hide Left Panel", "view.leftPanel"),
                 ("-", ""),
                 ("Ruler", "view.ruler"),
                 ("Gridlines", "view.gridlines"),

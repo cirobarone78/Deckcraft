@@ -48,7 +48,7 @@ fn the_layout_choice_is_kept_with_the_ui_state() {
 fn the_canvas_shell_replaces_the_ribbon_with_sidebar_inspector_and_toolbar() {
     let h = harness(Shell::Canvas);
     assert!(h.query_by_label("File").is_none(), "no ribbon tabs");
-    for label in ["Layers", "Design", "Animate", "Export", "Select (V)", "Text box (T)"] {
+    for label in ["Layers", "Sort", "Animate", "Present", "Select (V)", "Text box (T)"] {
         assert!(h.query_all_by_label(label).next().is_some(), "`{label}` is shown");
     }
     assert!(h.state().slide_rect.is_some(), "the slide is on the canvas");
@@ -72,15 +72,21 @@ fn switching_layouts_leaves_the_presentation_alone() {
 }
 
 #[test]
-fn inspector_tabs_switch_between_design_and_animate() {
+fn the_panel_buttons_animate_sort_and_present() {
     let mut h = harness(Shell::Canvas);
     assert_eq!(h.state().ui.inspector_tab, "design");
     h.get_by_label("Animate").click();
     h.run_steps(2);
     assert_eq!(h.state().ui.inspector_tab, "animate");
-    h.get_by_label("Design").click();
+    h.get_by_label("Animate").click();
     h.run_steps(2);
-    assert_eq!(h.state().ui.inspector_tab, "design");
+    assert_eq!(h.state().ui.inspector_tab, "design", "pressed again, back to the design panel");
+    h.get_by_label("Sort").click();
+    h.run_steps(2);
+    assert_eq!(h.state().ui.view, crate::ViewMode::Sorter);
+    h.get_by_label("Sort").click();
+    h.run_steps(2);
+    assert_eq!(h.state().ui.view, crate::ViewMode::Normal);
 }
 
 #[test]
@@ -238,4 +244,28 @@ fn the_sidebar_opens_and_closes_the_slide_masters() {
     h.get_by_label("Close masters").click();
     h.run_steps(3);
     assert_eq!(target(&h), deckcraft_engine::Target::Slides);
+}
+
+#[test]
+fn command_period_hides_the_side_panels_and_buttons_bring_them_back() {
+    let mut h = harness(Shell::Canvas);
+    let key = |h: &mut Harness<'static, SlideApp>, alt: bool| {
+        let modifiers = egui::Modifiers { mac_cmd: true, command: true, alt, ..Default::default() };
+        h.event(egui::Event::Key { key: egui::Key::Period, physical_key: None, pressed: true, repeat: false, modifiers });
+        h.event(egui::Event::Key { key: egui::Key::Period, physical_key: None, pressed: false, repeat: false, modifiers });
+        h.run_steps(3);
+    };
+    key(&mut h, false);
+    assert!(h.state().ui.hide_left && h.state().ui.hide_right, "⌘. hides both");
+    assert!(h.query_by_label("Layers").is_none());
+    key(&mut h, false);
+    assert!(!h.state().ui.hide_left && !h.state().ui.hide_right, "and shows them again");
+    key(&mut h, true);
+    assert!(h.state().ui.hide_left && !h.state().ui.hide_right, "⌥⌘. hides the left one");
+    h.get_by_label("Show the left panel (⌥⌘.)").click();
+    h.run_steps(3);
+    assert!(!h.state().ui.hide_left);
+    h.get_by_label("Hide the left panel (⌥⌘.)").click();
+    h.run_steps(3);
+    assert!(h.state().ui.hide_left, "the sidebar's own button hides it");
 }

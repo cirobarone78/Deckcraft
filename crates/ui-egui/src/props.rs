@@ -40,27 +40,59 @@ pub fn show(app: &mut SlideApp, ui: &mut Ui) {
     let texty = editing.is_some() || shapes.iter().any(|s| s.text.is_some() || matches!(s.kind, ShapeKind::Shape));
     let picture = matches!(sh.kind, ShapeKind::Picture { .. });
 
+    // Layers with text get Text and Shape tabs (Keynote's Format tabs); others show the shape's.
+    let text_tab = texty && !picture && text_tab(ui, &sh);
     header_row(app, ui, &sh, multi, shapes.len());
-    position(app, ui, &x, &boxes);
-    layout(app, ui, &sh, &x, &boxes, texty && !multi);
-    appearance(app, ui, &shapes, &boxes);
-    if texty {
+    if text_tab {
         typography(app, ui, &sh);
+        text_box(app, ui, &sh, multi);
+        return;
     }
-    if !picture {
+    position(app, ui, &x, &boxes);
+    layout(app, ui, &sh, &x, &boxes);
+    appearance(app, ui, &shapes, &boxes);
+    if picture {
+        image(app, ui, &sh);
+    } else {
         fill(app, ui, &sh);
         stroke(app, ui, &sh);
     }
     effects(app, ui, &sh);
-    export(app, ui);
-    if ui.ctx().data(|d| d.get_temp::<bool>(more_id())).unwrap_or(false) {
-        section(ui, "More options", false, &[]);
-        crate::panes::format_shape(app, ui);
+    if !multi {
+        alt_text(app, ui, &sh);
     }
+    export(app, ui);
 }
 
-fn more_id() -> egui::Id {
-    egui::Id::new("props-more-options")
+/// Text | Shape across the top of the panel. Each kind of layer remembers its tab: text boxes
+/// and placeholders open on Text, shapes on Shape. True for the Text tab.
+fn text_tab(ui: &mut Ui, sh: &Shape) -> bool {
+    let t = Tokens::get(ui.ctx());
+    let text_first = sh.text_box || sh.ph.is_some();
+    let id = egui::Id::new(("props-text-tab", text_first));
+    let mut on = ui.ctx().data(|d| d.get_temp::<bool>(id)).unwrap_or(text_first);
+    let w = ui.available_width();
+    let (r, _) = ui.allocate_exact_size(vec2(w, 32.0), Sense::hover());
+    ui.painter().rect_filled(r, CornerRadius::same(7), t.field);
+    for (k, label) in ["Text", "Shape"].into_iter().enumerate() {
+        let cell = Rect::from_min_size(pos2(r.min.x + k as f32 * w / 2.0, r.min.y), vec2(w / 2.0, r.height()));
+        let resp = ui.interact(cell, ui.id().with(("props-tab", label)), Sense::click());
+        let sel = (k == 0) == on;
+        if sel {
+            ui.painter().rect(cell.shrink(2.0), CornerRadius::same(6), t.card, Stroke::new(1.0, t.card_border), egui::StrokeKind::Inside);
+        } else if resp.hovered() {
+            ui.painter().rect_filled(cell.shrink(2.0), CornerRadius::same(6), t.hover);
+        }
+        let font = if sel { theme::bold(13.0) } else { theme::font(13.0) };
+        ui.painter().text(cell.center(), Align2::CENTER_CENTER, label, font, if sel { t.text } else { t.text_dim });
+        resp.widget_info(|| egui::WidgetInfo::selected(egui::WidgetType::SelectableLabel, true, sel, format!("{label} tab")));
+        if resp.clicked() {
+            on = k == 0;
+        }
+    }
+    ui.ctx().data_mut(|d| d.insert_temp(id, on));
+    ui.add_space(4.0);
+    on
 }
 
 // ----- Building blocks ----------------------------------------------------------------------
@@ -351,10 +383,6 @@ fn header_row(app: &mut SlideApp, ui: &mut Ui, sh: &Shape, multi: bool, n: usize
         ui.set_min_height(30.0);
         ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
             ui.spacing_mut().item_spacing.x = 4.0;
-            let more_on = ui.ctx().data(|d| d.get_temp::<bool>(more_id())).unwrap_or(false);
-            if icon_button(ui, Icon::More, if more_on { "Hide more options" } else { "More options: effects, size, text box" }, true).clicked() {
-                ui.ctx().data_mut(|d| d.insert_temp(more_id(), !more_on));
-            }
             if multi {
                 let r = icon_button(ui, Icon::MergeShapes, "Merge shapes", enabled(app, "shape.merge"));
                 egui::Popup::menu(&r).show(|ui| {
@@ -720,30 +748,15 @@ pub fn resizing_of(sh: &Shape) -> Resizing {
     }
 }
 
-fn layout(app: &mut SlideApp, ui: &mut Ui, sh: &Shape, x: &Xfrm, boxes: &[(ShapeId, Xfrm)], texty: bool) {
+fn layout(app: &mut SlideApp, ui: &mut Ui, sh: &Shape, x: &Xfrm, boxes: &[(ShapeId, Xfrm)]) {
     section(ui, "Layout", false, &[]);
     let c = cols(ui);
-    if texty && sh.text.is_some() {
-        caption(ui, "Resizing");
-        let cur = resizing_of(sh);
-        let items = [
-            (Icon::DistributeH, "Auto width", cur == Resizing::AutoWidth),
-            (Icon::DistributeV, "Auto height", cur == Resizing::AutoHeight),
-            (Icon::TextBox, "Fixed size", cur == Resizing::Fixed),
-        ];
-        match seg_group(ui, &items, c * 2.0 + GAP, enabled(app, "format.autofit")) {
-            Some(0) => app.run_as_one("Auto Width", vec![("format.wrap", json!({"on": false})), ("format.autofit", json!({"mode": "resize"}))]),
-            Some(1) => app.run_as_one("Auto Height", vec![("format.wrap", json!({"on": true})), ("format.autofit", json!({"mode": "resize"}))]),
-            Some(2) => run(app, "format.autofit", json!({"mode": "none"})),
-            _ => {}
-        }
-    }
     caption(ui, "Dimensions");
     let u = units::length(app);
     let en = enabled(app, "shape.resize");
-    // Pictures keep their proportions unless asked not to (as their corner handles do); other
-    // layers don't. Each kind remembers its own setting.
-    let picture = matches!(sh.kind, ShapeKind::Picture { .. }) && boxes.len() < 2;
+    // Pictures and groups keep their proportions unless asked not to (as their handles do);
+    // other layers don't. Each kind remembers its own setting.
+    let picture = matches!(sh.kind, ShapeKind::Picture { .. } | ShapeKind::Group { .. }) && boxes.len() < 2;
     let lock_id = egui::Id::new(("props-constrain", picture));
     let lock = ui.ctx().data(|d| d.get_temp::<bool>(lock_id)).unwrap_or(picture);
     ui.horizontal(|ui| {
@@ -765,9 +778,6 @@ fn layout(app: &mut SlideApp, ui: &mut Ui, sh: &Shape, x: &Xfrm, boxes: &[(Shape
             ui.ctx().data_mut(|d| d.insert_temp(lock_id, !lock));
         }
     });
-    if texty && sh.text.is_some() {
-        padding(app, ui, sh);
-    }
     if boxes.len() > 1 {
         caption(ui, "Spacing");
         let en = enabled(app, "shape.move");
@@ -1043,14 +1053,12 @@ fn typography(app: &mut SlideApp, ui: &mut Ui, sh: &Shape) {
         ui.add_space(6.0);
         crate::inspector::type_extras(app, ui, &st, en, false);
     }
-    // A text box's colour is its Fill; a shape's text has its own row here.
-    if !text_color_is_fill(sh) {
-        caption(ui, "Color");
-        let c = text_color(app, sh);
-        let (picked, _) = color_row(app, ui, "Text", Some(c), None, None, cols(ui) * 2.0 + GAP);
-        if let Some(col) = picked {
-            crate::textstyles::run_on_text(app, "Font Color", vec![("format.color", json!({"color": col}))]);
-        }
+    // The text's colour (the Shape tab's Fill is the box's own).
+    caption(ui, "Color");
+    let c = text_color(app, sh);
+    let (picked, _) = color_row(app, ui, "Text", Some(c), None, None, cols(ui) * 2.0 + GAP);
+    if let Some(col) = picked {
+        crate::textstyles::run_on_text(app, "Font Color", vec![("format.color", json!({"color": col}))]);
     }
 }
 
@@ -1156,13 +1164,6 @@ fn style_chip(app: &mut SlideApp, ui: &mut Ui, st: &Value, en: bool, current: &s
 
 // ----- Fill -----------------------------------------------------------------------------------
 
-/// Text boxes and placeholders: their Fill is the text's colour, as in canvas editors.
-fn text_color_is_fill(sh: &Shape) -> bool {
-    matches!(sh.kind, ShapeKind::Shape)
-        && (sh.text_box || sh.ph.is_some())
-        && !matches!(sh.fill, Some(Fill::Solid { .. } | Fill::Gradient(_) | Fill::Picture(_)))
-}
-
 /// The colour of a shape's first run of text: its own, else its text style's, else black.
 fn text_color(app: &SlideApp, sh: &Shape) -> deckcraft_color::Rgba {
     let sc = scheme(app);
@@ -1256,16 +1257,6 @@ pub(crate) fn color_row(
 
 fn fill(app: &mut SlideApp, ui: &mut Ui, sh: &Shape) {
     let sc = scheme(app);
-    let width = cols(ui) * 2.0 + GAP;
-    if text_color_is_fill(sh) {
-        section(ui, "Fill", false, &[]);
-        let c = text_color(app, sh);
-        let (picked, _) = color_row(app, ui, "Fill", Some(c), None, None, width);
-        if let Some(col) = picked {
-            crate::textstyles::run_on_text(app, "Font Color", vec![("format.color", json!({"color": col}))]);
-        }
-        return;
-    }
     let none = matches!(sh.fill, Some(Fill::None));
     let mut actions: Vec<(Icon, &str)> = vec![];
     if none {
@@ -1372,6 +1363,121 @@ fn stroke(app: &mut SlideApp, ui: &mut Ui, sh: &Shape) {
         run(app, "shape.line", json!({"width": u.to_pt(v).max(0.0)}));
     }
     r.response.on_hover_text("Stroke weight");
+    ui.add_space(GAP);
+    let dash = match line.and_then(|l| l.dash.as_ref()) {
+        Some(deckcraft_model::style::Dash::Preset { name }) => name.clone(),
+        Some(deckcraft_model::style::Dash::Custom { .. }) => "custom".into(),
+        None => "solid".into(),
+    };
+    let dashes = [("solid", "Solid"), ("sysDot", "Dotted"), ("dash", "Dashed"), ("dashDot", "Dash dot"), ("lgDash", "Long dash")];
+    let label = dashes.iter().find(|d| d.0 == dash).map(|d| d.1).unwrap_or("Custom");
+    pick(ui, "Dash", label, c, true, |ui| {
+        for (k, l) in dashes {
+            if ui.selectable_label(k == dash, l).clicked() {
+                run(app, "shape.line", json!({"dash": k}));
+                ui.close();
+            }
+        }
+    });
+}
+
+// ----- Text box (Text tab) ---------------------------------------------------------------------
+
+/// How the box holds its text: resizing, padding, wrapping, shrinking and columns.
+fn text_box(app: &mut SlideApp, ui: &mut Ui, sh: &Shape, multi: bool) {
+    if multi || sh.text.is_none() && !matches!(sh.kind, ShapeKind::Shape) {
+        return;
+    }
+    section(ui, "Text box", false, &[]);
+    let c = cols(ui);
+    let en = enabled(app, "format.autofit");
+    caption(ui, "Resizing");
+    let cur = resizing_of(sh);
+    let items = [
+        (Icon::DistributeH, "Auto width", cur == Resizing::AutoWidth),
+        (Icon::DistributeV, "Auto height", cur == Resizing::AutoHeight),
+        (Icon::TextBox, "Fixed size", cur == Resizing::Fixed),
+    ];
+    match seg_group(ui, &items, c * 2.0 + GAP, en) {
+        Some(0) => app.run_as_one("Auto Width", vec![("format.wrap", json!({"on": false})), ("format.autofit", json!({"mode": "resize"}))]),
+        Some(1) => app.run_as_one("Auto Height", vec![("format.wrap", json!({"on": true})), ("format.autofit", json!({"mode": "resize"}))]),
+        Some(2) => run(app, "format.autofit", json!({"mode": "none"})),
+        _ => {}
+    }
+    padding(app, ui, sh);
+    let body = sh.text.as_ref().map(|t| t.body.clone()).unwrap_or_default();
+    ui.add_space(4.0);
+    let mut shrink = matches!(body.autofit, Some(deckcraft_model::text::AutoFit::Shrink { .. }));
+    if ui.checkbox(&mut shrink, "Shrink text to fit").on_hover_text("Text that doesn't fit gets smaller, as PowerPoint does").changed() {
+        run(app, "format.autofit", json!({"mode": if shrink { "shrink" } else { "none" }}));
+    }
+    let mut wrap = body.wrap.unwrap_or(true);
+    if ui.checkbox(&mut wrap, "Wrap text").changed() {
+        run(app, "format.wrap", json!({"on": wrap}));
+    }
+    caption(ui, "Columns");
+    let cols_now = body.columns.unwrap_or(1) as f64;
+    if let Some(v) = number(ui, "text-columns", Prefix::Icon(Icon::DistributeH), cols_now, "", c, 0.05, (1.0, 16.0), en) {
+        run(app, "format.columns", json!({"count": v.round().clamp(1.0, 16.0) as u32, "spacing": 18}));
+    }
+}
+
+// ----- Image ------------------------------------------------------------------------------------
+
+/// A picture's adjustments: brightness, contrast, saturation, and reset.
+fn image(app: &mut SlideApp, ui: &mut Ui, sh: &Shape) {
+    let ShapeKind::Picture { fill } = &sh.kind else { return };
+    let adj = fill.adjust.clone();
+    let reset = section(ui, "Image", false, &[(Icon::Revert, "Reset picture adjustments")]) == Some(0);
+    if reset {
+        run(app, "picture.reset", json!({}));
+        return;
+    }
+    let c = cols(ui);
+    ui.horizontal(|ui| {
+        ui.spacing_mut().item_spacing.x = GAP;
+        for (id, label, v, key) in [("img-b", "Brightness", adj.brightness, "brightness"), ("img-c", "Contrast", adj.contrast, "contrast")] {
+            ui.vertical(|ui| {
+                ui.set_width(c);
+                caption(ui, label);
+                if let Some(nv) = number(ui, id, Prefix::None, (v * 100.0).round(), "%", c, 1.0, (-100.0, 100.0), true) {
+                    run(app, "picture.adjust", json!({key: nv / 100.0}));
+                }
+            });
+        }
+    });
+    caption(ui, "Saturation");
+    let sat = (adj.saturation.unwrap_or(1.0) * 100.0).round();
+    if let Some(nv) = number(ui, "img-s", Prefix::None, sat, "%", c, 1.0, (0.0, 400.0), true) {
+        run(app, "picture.adjust", json!({"saturation": nv / 100.0}));
+    }
+}
+
+/// Alt text for screen readers.
+fn alt_text(app: &mut SlideApp, ui: &mut Ui, sh: &Shape) {
+    let t = Tokens::get(ui.ctx());
+    section(ui, "Alt text", sh.descr.is_empty(), &[]);
+    let key = ui.id().with(("props-alt", sh.id.0));
+    let mut text: String = ui.data_mut(|d| d.get_temp(key)).unwrap_or_else(|| sh.descr.clone());
+    let w = cols(ui) * 2.0 + GAP;
+    let r = egui::Frame::NONE.fill(t.field).corner_radius(CornerRadius::same(6)).inner_margin(egui::Margin::symmetric(8, 6)).show(ui, |ui| {
+        ui.add(
+            egui::TextEdit::multiline(&mut text)
+                .frame(egui::Frame::NONE)
+                .font(theme::font(12.5))
+                .desired_rows(2)
+                .desired_width(w - 16.0)
+                .hint_text("Describe this for people who can't see it"),
+        )
+    });
+    if r.inner.has_focus() {
+        ui.data_mut(|d| d.insert_temp(key, text.clone()));
+    } else {
+        ui.data_mut(|d| d.remove::<String>(key));
+    }
+    if r.inner.lost_focus() && text != sh.descr {
+        run(app, "shape.altText", json!({"text": text}));
+    }
 }
 
 // ----- Effects --------------------------------------------------------------------------------
