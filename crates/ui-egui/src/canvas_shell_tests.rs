@@ -211,9 +211,10 @@ fn the_inspector_shows_a_title_size_in_pixels() {
     app.session.execute("selection.select", &json!({"ids": [title]})).unwrap();
     app.ui.zoom = Some(0.9);
     h.run_steps(4);
-    h.get_by_label("Type details: font, weight, size, spacing").click();
+    // Detached from its style, the title shows its type controls, keeping its size: the title
+    // slide's title is 60 pt, 120 px.
+    h.get_by_label("Detach style").click();
     h.run_steps(3);
-    // The title slide's title is 60 pt: 120 px.
     assert!(h.query_all_by_value("120 px").next().is_some(), "the size field reads 120 px");
     assert!(h.query_by_label("45%").is_some(), "the zoom reads 45%");
 }

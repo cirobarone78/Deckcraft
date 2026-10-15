@@ -141,11 +141,43 @@ pub fn links(app: &SlideApp, style: &TextStyle) -> bool {
     selected_text(app).is_some_and(|(sh, _)| group_of(&sh) == Some(style.group))
 }
 
+/// Run text formatting from the panel as one undo step. While editing with a bare caret it
+/// formats the whole box, as a canvas editor's panel does (the command alone formats only the
+/// word at the caret, or nothing between words), and the caret stays where it was.
+pub fn run_on_text(app: &mut SlideApp, label: &str, cmds: Vec<(&str, Value)>) {
+    let caret = app.session.active().and_then(|d| d.selection.text.as_ref()).filter(|t| !t.notes && !t.is_range()).map(|t| t.caret);
+    let Some((p, c)) = caret else {
+        app.run_as_one(label, cmds);
+        return;
+    };
+    let mut all = vec![("text.selectAll", json!({}))];
+    all.extend(cmds);
+    all.push(("text.select", json!({"anchor": [p, c], "caret": [p, c]})));
+    app.run_as_one(label, all);
+}
+
+/// The colour the selected text was given itself (its first run's), which a style keeps: text
+/// styles set the type, not the colour, as in canvas editors.
+fn own_color(app: &SlideApp) -> Option<Value> {
+    let (sh, _) = selected_text(app)?;
+    let fill = sh.text.as_ref()?.paragraphs.iter().flat_map(|p| p.runs.iter()).find_map(|r| r.props.fill.clone());
+    match fill {
+        Some(Fill::Solid { color }) => Some(crate::ribbon::cref_param(&color)),
+        _ => None,
+    }
+}
+
 /// Give the selected text `style`, as one undo step: linked when its box inherits the style,
-/// otherwise a copy of the style's values.
+/// otherwise a copy of the style's values. The text keeps its own colour.
 pub fn apply(app: &mut SlideApp, style: &TextStyle) {
+    if let Some((sh, _)) = selected_text(app) {
+        app.detached.remove(&sh.id);
+    }
+    let keep = own_color(app).map(|c| ("format.color", json!({"color": c})));
     if !links(app, style) {
-        app.run_as_one(&format!("Text Style: {} (copy)", style.name), commands(style));
+        let mut cmds = commands(style);
+        cmds.extend(keep);
+        run_on_text(app, &format!("Text Style: {} (copy)", style.name), cmds);
         return;
     }
     let mut cmds = vec![];
@@ -156,7 +188,88 @@ pub fn apply(app: &mut SlideApp, style: &TextStyle) {
         cmds.extend((0..n).map(|_| (id, json!({}))));
     }
     cmds.push(("format.clear", json!({})));
-    app.run_as_one(&format!("Text Style: {}", style.name), cmds);
+    cmds.extend(keep);
+    run_on_text(app, &format!("Text Style: {}", style.name), cmds);
+}
+
+/// Update `style` to the selected text's type (font, weight, size, italic, line height), as the
+/// style editor would, then let the text follow it: one undo step. Colour stays the text's own.
+pub fn update_from_selection(app: &mut SlideApp, style: &TextStyle) {
+    let st = crate::ribbon::fmt_state(app);
+    let mut edits = vec![];
+    if let Some(f) = st.get("font").and_then(Value::as_str).filter(|f| !f.is_empty()) {
+        edits.push(Edit::Font(f.to_string()));
+    }
+    if let Some(size) = st.get("size").and_then(Value::as_f64) {
+        edits.push(Edit::Size(size));
+    }
+    edits.push(Edit::Bold(st.get("bold").and_then(Value::as_bool).unwrap_or(false)));
+    edits.push(Edit::Italic(st.get("italic").and_then(Value::as_bool).unwrap_or(false)));
+    if let Some(v) =
+        st.get("lineSpacing").filter(|v| v.get("kind").and_then(Value::as_str) == Some("pct")).and_then(|v| v.get("v")).and_then(Value::as_f64)
+    {
+        edits.push(Edit::LineSpacing(v));
+    }
+    let before = app.session.active().map(|d| d.history.undo.len()).unwrap_or(0);
+    let mut cmds = vec![];
+    for e in &edits {
+        cmds.extend(edit_commands(app, style, e));
+    }
+    app.run_as_one("Update Text Style", cmds);
+    // The style changed: look it up again before applying it.
+    let fresh = app.session.active().map(|d| d.doc.clone()).and_then(|doc| styles(&doc).into_iter().find(|s| s.name == style.name));
+    apply(app, fresh.as_ref().unwrap_or(style));
+    if let Some(st) = app.session.active_mut() {
+        let undo = &mut st.history.undo;
+        if undo.len() > before + 1 {
+            undo.truncate(before + 1);
+        }
+        if undo.len() > before
+            && let Some(e) = undo.last_mut()
+        {
+            e.label = format!("Update Text Style: {}", style.name);
+        }
+    }
+}
+
+/// Detach the selected text from `style`: text that follows it by inheritance gets the style's
+/// values of its own (keeping its colour), so editing the style no longer changes it; copied
+/// values stay as they are. Either way the panel then shows every type control for it.
+pub fn detach(app: &mut SlideApp, style: &TextStyle) {
+    let Some((sh, _)) = selected_text(app) else { return };
+    if links(app, style) {
+        // What the text shows (a layout may enlarge its placeholder), not the style's own values.
+        let st = crate::ribbon::fmt_state(app);
+        let mut cmds = vec![];
+        if let Some(f) = st.get("fontRef").or_else(|| st.get("font")).and_then(Value::as_str).filter(|f| !f.is_empty()) {
+            cmds.push(("format.font", json!({"family": f})));
+        }
+        if let Some(size) = st.get("size").and_then(Value::as_f64) {
+            cmds.push(("format.size", json!({"size": size})));
+        }
+        cmds.push(("format.bold", json!({"on": st.get("bold").and_then(Value::as_bool).unwrap_or(false)})));
+        cmds.push(("format.italic", json!({"on": st.get("italic").and_then(Value::as_bool).unwrap_or(false)})));
+        run_on_text(app, &format!("Detach Style: {}", style.name), cmds);
+    }
+    app.detached.insert(sh.id);
+}
+
+/// The style the selected text shows in the panel: the one it follows or copies, or None when
+/// it has none or was detached.
+pub fn shown(app: &SlideApp, styles: &[TextStyle], state: &Value) -> Option<String> {
+    let (sh, _) = selected_text(app)?;
+    if app.detached.contains(&sh.id) {
+        return None;
+    }
+    current(app, styles, state)
+}
+
+/// Whether any of a shape's text sets its own font, size, weight or italic.
+fn overrides_type(sh: &Shape) -> bool {
+    let own = |r: &RunProps| r.font.is_some() || r.size.is_some() || r.bold.is_some() || r.italic.is_some();
+    sh.text.as_ref().is_some_and(|t| {
+        t.list_style.levels.iter().flatten().any(|l| own(&l.run)) || t.paragraphs.iter().any(|p| p.runs.iter().any(|r| own(&r.props)))
+    })
 }
 
 /// What the style menu shows for the selection: the style it follows ("Title"), a style its
@@ -169,10 +282,9 @@ pub fn current(app: &SlideApp, styles: &[TextStyle], state: &Value) -> Option<St
     if let Some((sh, level)) = selected_text(app)
         && let Some(group) = group_of(&sh)
         && let Some(s) = styles.iter().find(|s| s.group == group && (group != "body" || s.level == level.min(2)))
-        // A layout may enlarge its placeholder (a title slide's title): the font and weight say
-        // whether the text still follows the style.
-        && same_font(s)
-        && s.bold() == bold
+        // Text follows the style while none of it sets its own type (a layout may still enlarge
+        // its placeholder, as a title slide's title; its own colour doesn't count).
+        && !overrides_type(&sh)
     {
         return Some(s.name.to_string());
     }
@@ -257,7 +369,8 @@ pub fn edit_commands(app: &SlideApp, style: &TextStyle, edit: &Edit) -> Vec<(&'s
         Edit::Color(c) => ("format.color", json!({"color": crate::ribbon::cref_param(c)})),
         Edit::LineSpacing(l) => ("format.lineSpacing", json!({"lines": l})),
     };
-    let copies = copies(doc, style);
+    // Detached text keeps its values when the style changes.
+    let copies: Vec<_> = copies(doc, style).into_iter().filter(|(_, id)| !app.detached.contains(id)).collect();
     // A theme font copy keeps its reference, which already follows the theme.
     let font_ref_only = matches!(edit, Edit::Font(_)) && style.theme_font().is_some();
     if !copies.is_empty() && !font_ref_only {

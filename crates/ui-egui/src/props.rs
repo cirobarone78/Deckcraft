@@ -3,7 +3,7 @@
 //! Effects and Export. Numbers sit in grey fields with a prefix (drag the prefix to scrub) and
 //! are shown in pixels without a unit. Every control runs an existing command.
 
-use deckcraft_model::{Fill, Geom, Shape, ShapeKind};
+use deckcraft_model::{Fill, Geom, Shape, ShapeId, ShapeKind, Xfrm};
 use egui::{Align2, CornerRadius, Rect, Sense, Stroke, Ui, pos2, vec2};
 use serde_json::{Value, json};
 
@@ -33,14 +33,17 @@ pub fn show(app: &mut SlideApp, ui: &mut Ui) {
         None => return,
     };
     let x = deckcraft_engine::cmd::xfrm_of(&st.doc, &st.selection, &sh);
+    // Every selected layer's box, for values shown as Mixed and spacing.
+    let boxes: Vec<(deckcraft_model::ShapeId, deckcraft_model::Xfrm)> =
+        shapes.iter().map(|s| (s.id, deckcraft_engine::cmd::xfrm_of(&st.doc, &st.selection, s))).collect();
     let multi = shapes.len() > 1;
     let texty = editing.is_some() || shapes.iter().any(|s| s.text.is_some() || matches!(s.kind, ShapeKind::Shape));
     let picture = matches!(sh.kind, ShapeKind::Picture { .. });
 
     header_row(app, ui, &sh, multi, shapes.len());
-    position(app, ui, &x);
-    layout(app, ui, &sh, &x, texty && !multi);
-    appearance(app, ui, &sh, &x, multi);
+    position(app, ui, &x, &boxes);
+    layout(app, ui, &sh, &x, &boxes, texty && !multi);
+    appearance(app, ui, &shapes, &boxes);
     if texty {
         typography(app, ui, &sh);
     }
@@ -64,23 +67,27 @@ fn more_id() -> egui::Id {
 
 /// A section: hairline above, title, buttons at the right. Returns the button clicked.
 fn section(ui: &mut Ui, title: &str, empty: bool, actions: &[(Icon, &str)]) -> Option<usize> {
+    section_buttons(ui, title, empty, actions).iter().position(|r| r.clicked())
+}
+
+/// `section`, returning the buttons (for a menu one of them opens).
+fn section_buttons(ui: &mut Ui, title: &str, empty: bool, actions: &[(Icon, &str)]) -> Vec<egui::Response> {
     let t = Tokens::get(ui.ctx());
     ui.add_space(6.0);
     ui.painter().hline(ui.max_rect().x_range().expand(12.0), ui.cursor().min.y, Stroke::new(1.0, t.separator));
     ui.add_space(8.0);
-    let mut out = None;
+    let mut out = vec![];
     ui.horizontal(|ui| {
         ui.set_min_height(26.0);
         ui.label(egui::RichText::new(title).font(theme::bold(13.5)).color(if empty { t.text_dim } else { t.text }));
         ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
             ui.spacing_mut().item_spacing.x = 4.0;
-            for (k, (icon, tip)) in actions.iter().enumerate().rev() {
-                if icon_button(ui, *icon, tip, true).clicked() {
-                    out = Some(k);
-                }
+            for (icon, tip) in actions.iter().rev() {
+                out.push(icon_button(ui, *icon, tip, true));
             }
         });
     });
+    out.reverse();
     ui.add_space(2.0);
     out
 }
@@ -140,13 +147,54 @@ enum Prefix {
 /// A grey number field. Dragging the prefix scrubs the value (`step` per point dragged); typing
 /// a number and pressing Enter or leaving the field sets it. Returns the new value when one is set.
 #[allow(clippy::too_many_arguments)]
-fn number(ui: &mut Ui, id: &str, prefix: Prefix, value: f64, suffix: &str, width: f32, step: f64, en: bool) -> Option<f64> {
+fn number(ui: &mut Ui, id: &str, prefix: Prefix, value: f64, suffix: &str, width: f32, step: f64, range: Range, en: bool) -> Option<f64> {
+    number_or_mixed(ui, id, prefix, Some(value), suffix, width, step, range, en)
+}
+
+/// The values a field takes (dragging, arrow keys and typing all stay inside): `(min, max)`.
+type Range = (f64, f64);
+const ANY: Range = (-1e6, 1e6);
+const NOT_NEGATIVE: Range = (0.0, 1e6);
+const PERCENT: Range = (0.0, 100.0);
+/// Width and height: at least one unit.
+const SIZE: Range = (1.0, 1e6);
+
+/// The value the selected layers share, or None (shown as Mixed) when they differ.
+fn common(values: impl IntoIterator<Item = f64>) -> Option<f64> {
+    let mut it = values.into_iter();
+    let first = it.next()?;
+    it.all(|v| (v - first).abs() < 0.005).then_some(first)
+}
+
+/// A value as a field shows it: to two decimals (whole numbers from dragging stay whole; a
+/// typed 10.5 stays 10.5).
+fn two(v: f64) -> f64 {
+    (v * 100.0).round() / 100.0
+}
+
+/// `number` for a value the selected layers may not share (`None`: shown as Mixed, and typing a
+/// number sets it for all of them; scrubbing needs a value to start from).
+#[allow(clippy::too_many_arguments)]
+fn number_or_mixed(
+    ui: &mut Ui,
+    id: &str,
+    prefix: Prefix,
+    value: Option<f64>,
+    suffix: &str,
+    width: f32,
+    step: f64,
+    (lo, hi): Range,
+    en: bool,
+) -> Option<f64> {
+    let clamp = |v: f64| v.clamp(lo, hi.max(lo));
+    let mixed = value.is_none();
+    let value = value.unwrap_or(0.0);
     let t = Tokens::get(ui.ctx());
     let (r, _) = ui.allocate_exact_size(vec2(width, ROW_H), Sense::hover());
     ui.painter().rect_filled(r, CornerRadius::same(6), t.hover);
     let pre = Rect::from_min_size(r.min, vec2(28.0, r.height()));
-    let scrub = ui.interact(pre, ui.id().with((id, "scrub")), if en { Sense::drag() } else { Sense::hover() });
-    if en && (scrub.hovered() || scrub.dragged()) {
+    let scrub = ui.interact(pre, ui.id().with((id, "scrub")), if en && !mixed { Sense::drag() } else { Sense::hover() });
+    if en && !mixed && (scrub.hovered() || scrub.dragged()) {
         ui.ctx().set_cursor_icon(egui::CursorIcon::ResizeHorizontal);
     }
     let skey = ui.id().with((id, "scrubbing"));
@@ -155,10 +203,11 @@ fn number(ui: &mut Ui, id: &str, prefix: Prefix, value: f64, suffix: &str, width
     if scrub.dragged() {
         let acc = ui.data_mut(|d| d.get_temp::<f64>(skey)).unwrap_or(value) + scrub.drag_delta().x as f64 * step;
         ui.data_mut(|d| d.insert_temp(skey, acc));
-        shown = acc;
+        // Scrubbing lands on whole numbers; a typed value may have decimals.
+        shown = clamp(acc.round());
     }
     if scrub.drag_stopped() {
-        out = ui.data_mut(|d| d.remove_temp::<f64>(skey));
+        out = ui.data_mut(|d| d.remove_temp::<f64>(skey)).map(|v| clamp(v.round()));
         if let Some(v) = out {
             shown = v;
         }
@@ -171,26 +220,42 @@ fn number(ui: &mut Ui, id: &str, prefix: Prefix, value: f64, suffix: &str, width
         Prefix::Icon(i) => icons::paint(ui.painter(), Rect::from_center_size(pre.center(), vec2(14.0, 14.0)), i, ink, !en),
     }
     let tkey = ui.id().with((id, "typing"));
-    let mut text: String = ui.data_mut(|d| d.get_temp(tkey)).unwrap_or_else(|| format!("{}{suffix}", widgets::fmt_num(shown, "")));
+    let edit_id = ui.id().with((id, "edit"));
+    let mut text: String =
+        ui.data_mut(|d| d.get_temp(tkey)).unwrap_or_else(|| if mixed { String::new() } else { format!("{}{suffix}", widgets::fmt_num(shown, "")) });
+    // ↑ / ↓ (⇧: by ten) while typing: applied at once, and the field keeps the keyboard. A Mixed
+    // field steps from a number typed into it.
+    if en
+        && let Some(d) = widgets::arrow_step(ui, edit_id, step)
+        && let Some(base) = widgets::parse_num(&text).or((!mixed).then_some(value))
+    {
+        let v = clamp(base + d);
+        text = format!("{}{suffix}", widgets::fmt_num(v, ""));
+        out = Some(v);
+    }
     let er = Rect::from_min_max(pos2(pre.max.x, r.min.y), r.max).shrink2(vec2(2.0, 6.0));
     // In a child area, so the field doesn't move the row's cursor.
     let mut child = ui.new_child(egui::UiBuilder::new().max_rect(er).layout(egui::Layout::left_to_right(egui::Align::Center)));
     let te = child.add_sized(
         er.size(),
-        egui::TextEdit::singleline(&mut text).frame(egui::Frame::NONE).font(theme::font(13.0)).interactive(en).id(ui.id().with((id, "edit"))),
+        egui::TextEdit::singleline(&mut text)
+            .frame(egui::Frame::NONE)
+            .font(theme::font(13.0))
+            .hint_text(if mixed { "Mixed" } else { "" })
+            .interactive(en)
+            .id(edit_id),
     );
     if te.has_focus() {
         ui.data_mut(|d| d.insert_temp(tkey, text.clone()));
     } else {
         ui.data_mut(|d| d.remove::<String>(tkey));
     }
-    if te.lost_focus() {
-        let num: String = text.chars().filter(|c| c.is_ascii_digit() || *c == '.' || *c == '-').collect();
-        if let Ok(v) = num.parse::<f64>()
-            && (v - value).abs() > 1e-9
-        {
-            out = Some(v);
-        }
+    if te.lost_focus()
+        && out.is_none()
+        && let Some(v) = widgets::parse_num(&text).map(clamp)
+        && (mixed || (v - value).abs() > 1e-9)
+    {
+        out = Some(v);
     }
     out
 }
@@ -241,7 +306,7 @@ pub fn kind_label(sh: &Shape) -> String {
 
 fn header_row(app: &mut SlideApp, ui: &mut Ui, sh: &Shape, multi: bool, n: usize) {
     let t = Tokens::get(ui.ctx());
-    let title = if multi { format!("{n} layers") } else { kind_label(sh) };
+    let title = if multi { format!("{n} selected") } else { kind_label(sh) };
     ui.horizontal(|ui| {
         ui.set_min_height(30.0);
         ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
@@ -250,8 +315,25 @@ fn header_row(app: &mut SlideApp, ui: &mut Ui, sh: &Shape, multi: bool, n: usize
             if icon_button(ui, Icon::More, if more_on { "Hide more options" } else { "More options: effects, size, text box" }, true).clicked() {
                 ui.ctx().data_mut(|d| d.insert_temp(more_id(), !more_on));
             }
-            let r = icon_button(ui, Icon::Link, "Link", enabled(app, "insert.hyperlink"));
-            egui::Popup::menu(&r).width(260.0).close_behavior(egui::PopupCloseBehavior::CloseOnClickOutside).show(|ui| link_field(app, ui));
+            if multi {
+                let r = icon_button(ui, Icon::MergeShapes, "Merge shapes", enabled(app, "shape.merge"));
+                egui::Popup::menu(&r).show(|ui| {
+                    for (op, label) in MERGE_OPS {
+                        if ui.button(label).clicked() {
+                            run(app, "shape.merge", json!({"op": op}));
+                        }
+                    }
+                });
+                if icon_button(ui, Icon::Group, "Group (⌘G)", enabled(app, "arrange.group")).clicked() {
+                    run(app, "arrange.group", json!({}));
+                }
+            } else {
+                if matches!(sh.kind, ShapeKind::Group { .. }) && icon_button(ui, Icon::Ungroup, "Ungroup (⇧⌘G)", true).clicked() {
+                    run(app, "arrange.ungroup", json!({}));
+                }
+                let r = icon_button(ui, Icon::Link, "Link", enabled(app, "insert.hyperlink"));
+                egui::Popup::menu(&r).width(260.0).close_behavior(egui::PopupCloseBehavior::CloseOnClickOutside).show(|ui| link_field(app, ui));
+            }
             // The name takes the rest of the row, cut short with … when it's long.
             ui.with_layout(egui::Layout::left_to_right(egui::Align::Center), |ui| {
                 ui.add(egui::Label::new(egui::RichText::new(&title).font(theme::bold(15.0)).color(t.text)).truncate());
@@ -259,6 +341,10 @@ fn header_row(app: &mut SlideApp, ui: &mut Ui, sh: &Shape, multi: bool, n: usize
         });
     });
 }
+
+/// `shape.merge` operations, as the Merge shapes menu lists them.
+const MERGE_OPS: [(&str, &str); 5] =
+    [("union", "Union"), ("combine", "Combine"), ("fragment", "Fragment"), ("intersect", "Intersect"), ("subtract", "Subtract")];
 
 /// A URL or slide number, or a slide from the list.
 fn link_field(app: &mut SlideApp, ui: &mut Ui) {
@@ -289,7 +375,7 @@ fn link_field(app: &mut SlideApp, ui: &mut Ui) {
 
 // ----- Position -------------------------------------------------------------------------------
 
-fn position(app: &mut SlideApp, ui: &mut Ui, x: &deckcraft_model::Xfrm) {
+fn position(app: &mut SlideApp, ui: &mut Ui, x: &Xfrm, boxes: &[(ShapeId, Xfrm)]) {
     section(ui, "Position", false, &[]);
     let en = enabled(app, "arrange.align");
     let c = cols(ui);
@@ -314,13 +400,13 @@ fn position(app: &mut SlideApp, ui: &mut Ui, x: &deckcraft_model::Xfrm) {
             let edge = ["top", "middle", "bottom"].get(k).copied().unwrap_or("top");
             run(app, "arrange.align", json!({"edge": edge}));
         }
-        let r = icon_button(ui, Icon::More, "Distribute", en);
+        let r = icon_button(ui, Icon::Grid, "Distribute", en && boxes.len() > 2);
         egui::Popup::menu(&r).show(|ui| {
-            if ui.button("Distribute horizontally").clicked() {
-                run(app, "arrange.distribute", json!({"dir": "horizontal"}));
+            if ui.button("Distribute horizontal spacing").clicked() {
+                run(app, "arrange.distribute", json!({"dir": "horizontal", "to": "selection"}));
             }
-            if ui.button("Distribute vertically").clicked() {
-                run(app, "arrange.distribute", json!({"dir": "vertical"}));
+            if ui.button("Distribute vertical spacing").clicked() {
+                run(app, "arrange.distribute", json!({"dir": "vertical", "to": "selection"}));
             }
         });
     });
@@ -329,17 +415,20 @@ fn position(app: &mut SlideApp, ui: &mut Ui, x: &deckcraft_model::Xfrm) {
     caption(ui, "Position");
     ui.horizontal(|ui| {
         ui.spacing_mut().item_spacing.x = GAP;
-        if let Some(v) = number(ui, "x", Prefix::Text("X"), u.show(x.x).round(), "", c, 1.0, en) {
+        let cx = common(boxes.iter().map(|b| two(u.show(b.1.x))));
+        if let Some(v) = number_or_mixed(ui, "x", Prefix::Text("X"), cx, "", c, 1.0, ANY, en) {
             run(app, "shape.move", json!({"x": u.to_pt(v)}));
         }
-        if let Some(v) = number(ui, "y", Prefix::Text("Y"), u.show(x.y).round(), "", c, 1.0, en) {
+        let cy = common(boxes.iter().map(|b| two(u.show(b.1.y))));
+        if let Some(v) = number_or_mixed(ui, "y", Prefix::Text("Y"), cy, "", c, 1.0, ANY, en) {
             run(app, "shape.move", json!({"y": u.to_pt(v)}));
         }
     });
     caption(ui, "Rotation");
     ui.horizontal(|ui| {
         ui.spacing_mut().item_spacing.x = GAP;
-        if let Some(v) = number(ui, "rot", Prefix::Icon(Icon::Rotate), (x.rot * 10.0).round() / 10.0, "°", c, 1.0, enabled(app, "shape.rotate")) {
+        let rot = common(boxes.iter().map(|b| (b.1.rot * 10.0).round() / 10.0));
+        if let Some(v) = number_or_mixed(ui, "rot", Prefix::Icon(Icon::Rotate), rot, "°", c, 1.0, (-360.0, 360.0), enabled(app, "shape.rotate")) {
             run(app, "shape.rotate", json!({"deg": v.rem_euclid(360.0)}));
         }
         let items =
@@ -351,6 +440,122 @@ fn position(app: &mut SlideApp, ui: &mut Ui, x: &deckcraft_model::Xfrm) {
             _ => {}
         }
     });
+}
+
+/// A text box's insets in points (left, top, right, bottom), inherited and defaulted as drawn.
+pub fn insets(app: &SlideApp, sh: &Shape) -> [f64; 4] {
+    use deckcraft_model::resolve::Ctx;
+    let b = app
+        .session
+        .active()
+        .and_then(|st| {
+            let doc = &st.doc;
+            let ctx = match st.selection.target {
+                deckcraft_engine::Target::Slides => doc.slides.get(st.selection.slide).and_then(|s| Ctx::for_slide(doc, s)),
+                deckcraft_engine::Target::Master { master } => doc.masters.get(master).map(|m| Ctx::for_master(doc, m)),
+                deckcraft_engine::Target::Layout { master, layout } => {
+                    doc.masters.get(master).and_then(|m| m.layouts.get(layout).map(|l| Ctx::for_layout(doc, m, l)))
+                }
+                // Notes-size master pages: the default insets.
+                deckcraft_engine::Target::Handout | deckcraft_engine::Target::NotesMaster => None,
+            }?;
+            Some(deckcraft_model::resolve::body(&ctx, sh))
+        })
+        .unwrap_or_default();
+    [b.inset_l.unwrap_or(7.2), b.inset_t.unwrap_or(3.6), b.inset_r.unwrap_or(7.2), b.inset_b.unwrap_or(3.6)]
+}
+
+/// Padding: horizontal (left and right) and vertical (top and bottom), or each side.
+fn padding(app: &mut SlideApp, ui: &mut Ui, sh: &Shape) {
+    let u = units::small(app);
+    let [l, t, r, b] = insets(app, sh).map(|v| two(u.show(v)));
+    let c = cols(ui);
+    let en = enabled(app, "format.margins");
+    let sides_id = egui::Id::new("props-padding-sides");
+    // Each side when asked for, or when the sides already differ.
+    let sides = ui.ctx().data(|d| d.get_temp::<bool>(sides_id)).unwrap_or(l != r || t != b);
+    caption(ui, "Padding");
+    let set = |app: &mut SlideApp, keys: &[&str], v: f64| {
+        let mut p = serde_json::Map::new();
+        for k in keys {
+            p.insert((*k).to_string(), json!(u.to_pt(v).max(0.0)));
+        }
+        run(app, "format.margins", Value::Object(p));
+    };
+    let toggle = |ui: &mut Ui| {
+        let tk = Tokens::get(ui.ctx());
+        let resp = icon_button(ui, Icon::PadSides, if sides { "Horizontal and vertical padding" } else { "Padding for each side" }, en);
+        if sides {
+            ui.painter().rect_stroke(resp.rect, CornerRadius::same(5), Stroke::new(1.0, tk.border), egui::StrokeKind::Inside);
+        }
+        if resp.clicked() {
+            ui.ctx().data_mut(|d| d.insert_temp(sides_id, !sides));
+        }
+    };
+    if !sides {
+        ui.horizontal(|ui| {
+            ui.spacing_mut().item_spacing.x = GAP;
+            if let Some(v) = number_or_mixed(ui, "pad-h", Prefix::Icon(Icon::PadH), common([l, r]), "", c, 1.0, NOT_NEGATIVE, en) {
+                set(app, &["left", "right"], v);
+            }
+            if let Some(v) = number_or_mixed(ui, "pad-v", Prefix::Icon(Icon::PadV), common([t, b]), "", c, 1.0, NOT_NEGATIVE, en) {
+                set(app, &["top", "bottom"], v);
+            }
+            toggle(ui);
+        });
+        return;
+    }
+    for (row, pair) in
+        [[("pad-l", "L", "left", l), ("pad-t", "T", "top", t)], [("pad-r", "R", "right", r), ("pad-b", "B", "bottom", b)]].into_iter().enumerate()
+    {
+        ui.horizontal(|ui| {
+            ui.spacing_mut().item_spacing.x = GAP;
+            for (id, label, key, v) in pair {
+                if let Some(nv) = number(ui, id, Prefix::Text(label), v, "", c, 1.0, NOT_NEGATIVE, en) {
+                    set(app, &[key], nv);
+                }
+            }
+            if row == 0 {
+                toggle(ui);
+            }
+        });
+    }
+}
+
+/// The gaps between neighbouring layers left to right (`horizontal`) or top to bottom, in points.
+pub fn gaps(boxes: &[(ShapeId, Xfrm)], horizontal: bool) -> Vec<f64> {
+    let sorted = sorted_boxes(boxes, horizontal);
+    sorted
+        .windows(2)
+        .filter_map(|w| match w {
+            [a, b] if horizontal => Some(b.1.x - (a.1.x + a.1.w)),
+            [a, b] => Some(b.1.y - (a.1.y + a.1.h)),
+            _ => None,
+        })
+        .collect()
+}
+
+fn sorted_boxes(boxes: &[(ShapeId, Xfrm)], horizontal: bool) -> Vec<(ShapeId, Xfrm)> {
+    let mut v = boxes.to_vec();
+    let key = |b: &(ShapeId, Xfrm)| if horizontal { b.1.x } else { b.1.y };
+    v.sort_by(|a, b| key(a).total_cmp(&key(b)));
+    v
+}
+
+/// Where each layer after the first goes for `gap` points between neighbours: `(id, x or y)`.
+pub fn spaced(boxes: &[(ShapeId, Xfrm)], horizontal: bool, gap: f64) -> Vec<(ShapeId, f64)> {
+    let sorted = sorted_boxes(boxes, horizontal);
+    let Some(first) = sorted.first() else { return vec![] };
+    let mut edge = if horizontal { first.1.x + first.1.w } else { first.1.y + first.1.h };
+    sorted
+        .iter()
+        .skip(1)
+        .map(|(id, x)| {
+            let at = edge + gap;
+            edge = at + if horizontal { x.w } else { x.h };
+            (*id, at)
+        })
+        .collect()
 }
 
 // ----- Layout ---------------------------------------------------------------------------------
@@ -377,7 +582,7 @@ pub fn resizing_of(sh: &Shape) -> Resizing {
     }
 }
 
-fn layout(app: &mut SlideApp, ui: &mut Ui, sh: &Shape, x: &deckcraft_model::Xfrm, texty: bool) {
+fn layout(app: &mut SlideApp, ui: &mut Ui, sh: &Shape, x: &Xfrm, boxes: &[(ShapeId, Xfrm)], texty: bool) {
     section(ui, "Layout", false, &[]);
     let c = cols(ui);
     if texty && sh.text.is_some() {
@@ -398,14 +603,19 @@ fn layout(app: &mut SlideApp, ui: &mut Ui, sh: &Shape, x: &deckcraft_model::Xfrm
     caption(ui, "Dimensions");
     let u = units::length(app);
     let en = enabled(app, "shape.resize");
-    let lock_id = egui::Id::new("props-constrain");
-    let lock = ui.ctx().data(|d| d.get_temp::<bool>(lock_id)).unwrap_or(false);
+    // Pictures keep their proportions unless asked not to (as their corner handles do); other
+    // layers don't. Each kind remembers its own setting.
+    let picture = matches!(sh.kind, ShapeKind::Picture { .. }) && boxes.len() < 2;
+    let lock_id = egui::Id::new(("props-constrain", picture));
+    let lock = ui.ctx().data(|d| d.get_temp::<bool>(lock_id)).unwrap_or(picture);
     ui.horizontal(|ui| {
         ui.spacing_mut().item_spacing.x = GAP;
-        if let Some(v) = number(ui, "w", Prefix::Text("W"), u.show(x.w).round(), "", c, 1.0, en) {
+        let w = if boxes.len() > 1 { common(boxes.iter().map(|b| two(u.show(b.1.w)))) } else { Some(two(u.show(x.w))) };
+        if let Some(v) = number_or_mixed(ui, "w", Prefix::Text("W"), w, "", c, 1.0, SIZE, en) {
             run(app, "shape.resize", json!({"w": u.to_pt(v).max(1.0), "lockAspect": lock}));
         }
-        if let Some(v) = number(ui, "h", Prefix::Text("H"), u.show(x.h).round(), "", c, 1.0, en) {
+        let h = if boxes.len() > 1 { common(boxes.iter().map(|b| two(u.show(b.1.h)))) } else { Some(two(u.show(x.h))) };
+        if let Some(v) = number_or_mixed(ui, "h", Prefix::Text("H"), h, "", c, 1.0, SIZE, en) {
             run(app, "shape.resize", json!({"h": u.to_pt(v).max(1.0), "lockAspect": lock}));
         }
         let t = Tokens::get(ui.ctx());
@@ -417,6 +627,26 @@ fn layout(app: &mut SlideApp, ui: &mut Ui, sh: &Shape, x: &deckcraft_model::Xfrm
             ui.ctx().data_mut(|d| d.insert_temp(lock_id, !lock));
         }
     });
+    if texty && sh.text.is_some() {
+        padding(app, ui, sh);
+    }
+    if boxes.len() > 1 {
+        caption(ui, "Spacing");
+        let en = enabled(app, "shape.move");
+        ui.horizontal(|ui| {
+            ui.spacing_mut().item_spacing.x = GAP;
+            for (horizontal, id, icon, label) in
+                [(true, "gap-x", Icon::DistributeH, "Horizontal Spacing"), (false, "gap-y", Icon::DistributeV, "Vertical Spacing")]
+            {
+                let cur = common(gaps(boxes, horizontal).into_iter().map(|g| two(u.show(g))));
+                if let Some(v) = number_or_mixed(ui, id, Prefix::Icon(icon), cur, "", c, 1.0, ANY, en) {
+                    let key = if horizontal { "x" } else { "y" };
+                    let moves = spaced(boxes, horizontal, u.to_pt(v));
+                    app.run_as_one(label, moves.into_iter().map(|(id, at)| ("shape.move", json!({"ids": [id], key: at}))).collect());
+                }
+            }
+        });
+    }
 }
 
 // ----- Appearance -----------------------------------------------------------------------------
@@ -431,13 +661,77 @@ pub fn opacity_of(sh: &Shape, sc: &deckcraft_color::ColorScheme) -> f64 {
 }
 
 /// The corner radius of a rounded rectangle in points (None for other shapes).
-pub fn corner_radius(sh: &Shape, x: &deckcraft_model::Xfrm) -> Option<f64> {
+pub fn corner_radius(sh: &Shape, x: &Xfrm) -> Option<f64> {
     let Geom::Preset { name, adj } = &sh.geom else { return None };
     (name == "roundRect").then(|| adj.first().copied().unwrap_or(16667.0) / 100_000.0 * x.w.min(x.h))
 }
 
-fn appearance(app: &mut SlideApp, ui: &mut Ui, sh: &Shape, x: &deckcraft_model::Xfrm, multi: bool) {
-    let visible = !sh.hidden;
+/// A rectangle's corner radii in points, clockwise from the top left, when PPTX can round it:
+/// a rectangle (square corners) or one of the rounded rectangles (`roundRect`, `round1Rect`,
+/// `round2SameRect`, `round2DiagRect`). Text boxes and placeholders have none.
+pub fn corners(sh: &Shape, x: &Xfrm) -> Option<[f64; 4]> {
+    if !matches!(sh.kind, ShapeKind::Shape) || sh.text_box || sh.ph.is_some() {
+        return None;
+    }
+    let Geom::Preset { name, adj } = &sh.geom else { return None };
+    let min = x.w.min(x.h);
+    let a = |i: usize, default: f64| adj.get(i).copied().unwrap_or(default).clamp(0.0, 50_000.0) / 100_000.0 * min;
+    Some(match name.as_str() {
+        "rect" => [0.0; 4],
+        "roundRect" => [a(0, 16_667.0); 4],
+        "round1Rect" => [0.0, a(0, 16_667.0), 0.0, 0.0],
+        "round2SameRect" => {
+            let (top, bottom) = (a(0, 16_667.0), a(1, 0.0));
+            [top, top, bottom, bottom]
+        }
+        "round2DiagRect" => {
+            let (p, q) = (a(0, 16_667.0), a(1, 0.0));
+            [p, q, p, q]
+        }
+        _ => return None,
+    })
+}
+
+/// The preset and adjustments (file units) that round a rectangle's corners as `r` (points,
+/// clockwise from the top left) when its shorter side is `min`, if PPTX has one: all four equal,
+/// the top pair and the bottom pair, the diagonals, or the top-right corner alone.
+pub fn corner_preset(r: [f64; 4], min: f64) -> Option<(&'static str, Vec<f64>)> {
+    let adj = |v: f64| if min > 0.0 { (v / min * 100_000.0).clamp(0.0, 50_000.0).round() } else { 0.0 };
+    let eq = |a: f64, b: f64| (a - b).abs() < 0.01;
+    let [tl, tr, br, bl] = r;
+    if r.iter().all(|v| eq(*v, 0.0)) {
+        Some(("rect", vec![]))
+    } else if eq(tl, tr) && eq(tr, br) && eq(br, bl) {
+        Some(("roundRect", vec![adj(tl)]))
+    } else if eq(tl, tr) && eq(br, bl) {
+        Some(("round2SameRect", vec![adj(tl), adj(br)]))
+    } else if eq(tl, br) && eq(tr, bl) {
+        Some(("round2DiagRect", vec![adj(tl), adj(tr)]))
+    } else if eq(tl, 0.0) && eq(br, 0.0) && eq(bl, 0.0) {
+        Some(("round1Rect", vec![adj(tr)]))
+    } else {
+        None
+    }
+}
+
+/// The commands that round shape `id` (preset `now`) as `r`, or why PPTX can't.
+fn corner_commands(id: ShapeId, now: &str, r: [f64; 4], min: f64) -> Result<Vec<(&'static str, Value)>, String> {
+    let (preset, adj) = corner_preset(r, min).ok_or_else(|| {
+        "PowerPoint can't round those corners: make all four equal, the top and bottom pairs, the diagonal pairs, or only the top right".to_string()
+    })?;
+    let mut cmds = vec![];
+    if preset != now {
+        cmds.push(("shape.change", json!({"preset": preset, "ids": [id]})));
+    }
+    for (i, v) in adj.into_iter().enumerate() {
+        cmds.push(("shape.adjust", json!({"index": i, "value": v, "ids": [id]})));
+    }
+    Ok(cmds)
+}
+
+fn appearance(app: &mut SlideApp, ui: &mut Ui, shapes: &[Shape], boxes: &[(ShapeId, Xfrm)]) {
+    // Any shown layer: the eye hides them all.
+    let visible = shapes.iter().any(|s| !s.hidden);
     let clicked =
         section(ui, "Appearance", false, &[(if visible { Icon::Eye } else { Icon::EyeOff }, if visible { "Hide layer" } else { "Show layer" })]);
     if clicked == Some(0) {
@@ -445,48 +739,133 @@ fn appearance(app: &mut SlideApp, ui: &mut Ui, sh: &Shape, x: &deckcraft_model::
     }
     let c = cols(ui);
     let sc = scheme(app);
-    let picture = matches!(sh.kind, ShapeKind::Picture { .. });
-    let has_fill = matches!(sh.fill, Some(Fill::Solid { .. } | Fill::Gradient(_) | Fill::Picture(_)));
-    let radius = if multi { None } else { corner_radius(sh, x) };
+    let picture = |sh: &Shape| matches!(sh.kind, ShapeKind::Picture { .. });
+    let has_opacity = |sh: &Shape| picture(sh) || matches!(sh.fill, Some(Fill::Solid { .. } | Fill::Gradient(_) | Fill::Picture(_)));
+    let pictures: Vec<ShapeId> = shapes.iter().filter(|s| picture(s)).map(|s| s.id).collect();
+    let filled: Vec<ShapeId> = shapes.iter().filter(|s| !picture(s) && has_opacity(s)).map(|s| s.id).collect();
+    // Rectangles, with their preset, corner radii in points and shorter side.
+    let radii: Vec<(ShapeId, String, [f64; 4], f64)> = shapes
+        .iter()
+        .zip(boxes)
+        .filter_map(|(sh, (_, x))| {
+            let name = match &sh.geom {
+                Geom::Preset { name, .. } => name.clone(),
+                Geom::Custom { .. } => return None,
+            };
+            corners(sh, x).map(|r| (sh.id, name, r, x.w.min(x.h)))
+        })
+        .collect();
+    let u = units::small(app);
+    // The largest radius that fits: half the shorter side (of the smallest, for several).
+    let max_radius = radii.iter().map(|r| two(u.show(r.3 / 2.0))).fold(f64::INFINITY, f64::min).min(1e6);
+    let each_id = egui::Id::new("props-corners-each");
+    // Each corner on its own when asked for, or when one shape's corners already differ.
+    let uneven = radii.len() == 1 && radii.first().is_some_and(|r| common(r.2).is_none());
+    let each = ui.ctx().data(|d| d.get_temp::<bool>(each_id)).unwrap_or(uneven) && radii.len() == 1;
     ui.horizontal(|ui| {
         ui.spacing_mut().item_spacing.x = GAP;
         ui.vertical(|ui| {
             ui.set_width(c);
             caption(ui, "Opacity");
-            let en = picture || has_fill;
-            let cur = (opacity_of(sh, &sc) * 100.0).round();
-            if let Some(v) = number(ui, "opacity", Prefix::Icon(Icon::Transparency), cur, "%", c, 1.0, en) {
+            let cur = common(shapes.iter().filter(|s| has_opacity(s)).map(|s| (opacity_of(s, &sc) * 100.0).round()));
+            let en = !pictures.is_empty() || !filled.is_empty();
+            if let Some(v) =
+                number_or_mixed(ui, "opacity", Prefix::Icon(Icon::Transparency), if en { cur } else { Some(100.0) }, "%", c, 1.0, PERCENT, en)
+            {
                 let tr = 1.0 - v.clamp(0.0, 100.0) / 100.0;
-                if picture {
-                    run(app, "picture.adjust", json!({"transparency": tr}));
-                } else {
-                    run(app, "shape.fill", json!({"transparency": tr}));
+                let mut cmds = vec![];
+                if !pictures.is_empty() {
+                    cmds.push(("picture.adjust", json!({"transparency": tr, "ids": pictures})));
                 }
+                if !filled.is_empty() {
+                    cmds.push(("shape.fill", json!({"transparency": tr, "ids": filled})));
+                }
+                app.run_as_one("Opacity", cmds);
             }
         });
         ui.vertical(|ui| {
             caption(ui, "Corner radius");
-            let u = units::small(app);
-            let shown = radius.map(|r| u.show(r).round()).unwrap_or(0.0);
-            if let Some(v) = number(ui, "radius", Prefix::Icon(Icon::FitSmall), shown, "", c, 1.0, radius.is_some())
-                && let Some(min) = Some(x.w.min(x.h)).filter(|m| *m > 0.0)
+            let shown = if radii.is_empty() { Some(0.0) } else { common(radii.iter().flat_map(|r| r.2).map(|v| two(u.show(v)))) };
+            if let Some(v) =
+                number_or_mixed(ui, "radius", Prefix::Icon(Icon::FitSmall), shown, "", c, 1.0, (0.0, max_radius), !radii.is_empty() && !each)
             {
-                let adj = (u.to_pt(v).max(0.0) / min * 100_000.0).clamp(0.0, 50_000.0);
-                run(app, "shape.adjust", json!({"index": 0, "value": adj.round()}));
+                let r = u.to_pt(v).max(0.0);
+                let mut cmds = vec![];
+                for (id, now, _, min) in &radii {
+                    cmds.extend(corner_commands(*id, now, [r; 4], *min).unwrap_or_default());
+                }
+                app.run_as_one("Corner Radius", cmds);
             }
         });
+        if radii.len() == 1 {
+            let tk = Tokens::get(ui.ctx());
+            let resp = icon_button(ui, Icon::Corners, if each { "One radius for every corner" } else { "Each corner on its own" }, true);
+            if each {
+                ui.painter().rect_stroke(resp.rect, CornerRadius::same(5), Stroke::new(1.0, tk.border), egui::StrokeKind::Inside);
+            }
+            if resp.clicked() {
+                ui.ctx().data_mut(|d| d.insert_temp(each_id, !each));
+            }
+        }
     });
+    // Each corner: top left, top right / bottom left, bottom right, as in canvas editors.
+    if let (true, Some((id, now, r, min))) = (each, radii.first()) {
+        let mut set = None;
+        for row in [
+            [(0, Icon::CornerTl, "Top left"), (1, Icon::CornerTr, "Top right")],
+            [(3, Icon::CornerBl, "Bottom left"), (2, Icon::CornerBr, "Bottom right")],
+        ] {
+            ui.horizontal(|ui| {
+                ui.spacing_mut().item_spacing.x = GAP;
+                for (k, icon, label) in row {
+                    let v = r.get(k).copied().unwrap_or(0.0);
+                    if let Some(nv) =
+                        number(ui, &format!("corner-{k}"), Prefix::Icon(icon), two(u.show(v)), "", c, 1.0, (0.0, two(u.show(min / 2.0))), true)
+                    {
+                        let mut nr = *r;
+                        if let Some(slot) = nr.get_mut(k) {
+                            *slot = u.to_pt(nv).max(0.0);
+                        }
+                        set = Some((nr, label));
+                    }
+                }
+            });
+        }
+        if let Some((nr, _)) = set {
+            match corner_commands(*id, now, nr, *min) {
+                Ok(cmds) => app.run_as_one("Corner Radius", cmds),
+                Err(e) => app.set_status(e),
+            }
+        }
+    }
 }
 
 // ----- Typography -----------------------------------------------------------------------------
 
 fn typography(app: &mut SlideApp, ui: &mut Ui, sh: &Shape) {
-    let details_id = egui::Id::new("props-type-details");
-    let details = ui.ctx().data(|d| d.get_temp::<bool>(details_id)).unwrap_or(false);
-    section(ui, "Typography", false, &[]);
     let st = fmt_state(app);
     let en = enabled(app, "format.bold");
-    style_chip(app, ui, &st, en);
+    let Some(doc) = app.session.active().map(|d| d.doc.clone()) else { return };
+    let styles = crate::textstyles::styles(&doc);
+    // Text with a style shows the style; text without one, the type controls and a styles button.
+    let shown = crate::textstyles::shown(app, &styles, &st);
+    let actions: &[(Icon, &str)] = if shown.is_none() { &[(Icon::Grid, "Text styles")] } else { &[] };
+    let buttons = section_buttons(ui, "Typography", false, actions);
+    if let Some(b) = buttons.first() {
+        crate::inspector::style_menu(app, b, "", 240.0);
+    }
+    match &shown {
+        Some(name) => style_chip(app, ui, &st, en, name, &styles),
+        None => {
+            let w = cols(ui) * 2.0 + GAP;
+            ui.scope(|ui| {
+                ui.set_max_width(w);
+                crate::inspector::type_basics(app, ui, &st, en);
+            });
+        }
+    }
+    let extras_id = egui::Id::new("props-type-extras");
+    let extras = ui.ctx().data(|d| d.get_temp::<bool>(extras_id)).unwrap_or(false);
     caption(ui, "Alignment");
     let c = cols(ui);
     let al = st.get("align").and_then(Value::as_str).unwrap_or("l").to_string();
@@ -501,7 +880,7 @@ fn typography(app: &mut SlideApp, ui: &mut Ui, sh: &Shape) {
         ];
         if let Some(k) = seg_group(ui, &h, c, en) {
             let id = ["format.alignLeft", "format.alignCenter", "format.alignRight"].get(k).copied().unwrap_or("format.alignLeft");
-            run(app, id, json!({}));
+            crate::textstyles::run_on_text(app, id, vec![(id, json!({}))]);
         }
         let v = [
             (Icon::AlignObjTop, "Text at top", anchor.starts_with('t')),
@@ -513,41 +892,68 @@ fn typography(app: &mut SlideApp, ui: &mut Ui, sh: &Shape) {
             run(app, "format.anchor", json!({"anchor": anchor}));
         }
         let t = Tokens::get(ui.ctx());
-        let r = icon_button(ui, Icon::Settings, if details { "Hide type details" } else { "Type details: font, weight, size, spacing" }, true);
-        if details {
+        let tip = if extras { "Hide type details" } else { "Type details: bold, italic, underline, lists" };
+        let r = icon_button(ui, Icon::Settings, tip, true);
+        if extras {
             ui.painter().rect_stroke(r.rect, CornerRadius::same(5), Stroke::new(1.0, t.border), egui::StrokeKind::Inside);
         }
         if r.clicked() {
-            ui.ctx().data_mut(|d| d.insert_temp(details_id, !details));
+            ui.ctx().data_mut(|d| d.insert_temp(extras_id, !extras));
         }
     });
-    if details {
+    if extras {
         ui.add_space(6.0);
-        crate::inspector::text_details(app, ui, &st, en, !text_color_is_fill(sh));
+        crate::inspector::type_extras(app, ui, &st, en, false);
+    }
+    // A text box's colour is its Fill; a shape's text has its own row here.
+    if !text_color_is_fill(sh) {
+        caption(ui, "Color");
+        let c = text_color(app, sh);
+        let (picked, _) = color_row(app, ui, "Text", Some(c), None, None, cols(ui) * 2.0 + GAP);
+        if let Some(col) = picked {
+            crate::textstyles::run_on_text(app, "Font Color", vec![("format.color", json!({"color": col}))]);
+        }
     }
 }
 
-/// The text style chip: "Ag Title · 120/108", which opens the style menu.
-fn style_chip(app: &mut SlideApp, ui: &mut Ui, st: &Value, en: bool) {
+/// The text style chip: "Ag Title · 120/108", which opens the style menu, with a button at its
+/// right end that detaches the text from the style.
+fn style_chip(app: &mut SlideApp, ui: &mut Ui, st: &Value, en: bool, current: &str, styles: &[crate::textstyles::TextStyle]) {
     let t = Tokens::get(ui.ctx());
-    let Some(doc) = app.session.active().map(|d| d.doc.clone()) else { return };
-    let styles = crate::textstyles::styles(&doc);
-    let current = crate::textstyles::current(app, &styles, st).unwrap_or_else(|| "Custom".into());
     let u = units::small(app);
     let size = st.get("size").and_then(Value::as_f64).unwrap_or(18.0);
     let lines = match st.get("lineSpacing") {
         Some(v) if v.get("kind").and_then(Value::as_str) == Some("pct") => v.get("v").and_then(Value::as_f64).unwrap_or(1.0),
         _ => 1.2,
     };
-    let metrics = format!("{}/{}", widgets::fmt_num(u.show(size).round(), ""), widgets::fmt_num((u.show(size) * lines).round(), ""));
+    let metrics = format!("{}/{}", widgets::fmt_num(two(u.show(size)), ""), widgets::fmt_num((u.show(size) * lines).round(), ""));
     let w = cols(ui) * 2.0 + GAP;
-    let (r, resp) = ui.allocate_exact_size(vec2(w, 34.0), if en { Sense::click() } else { Sense::hover() });
+    let (r, _) = ui.allocate_exact_size(vec2(w, 34.0), Sense::hover());
+    let detach_r = Rect::from_center_size(pos2(r.max.x - 18.0, r.center().y), vec2(24.0, 24.0));
+    let body = Rect::from_min_max(r.min, pos2(detach_r.min.x - 2.0, r.max.y));
+    let resp = ui.interact(body, ui.id().with("style-chip"), if en { Sense::click() } else { Sense::hover() });
+    let hovered = resp.hovered() || ui.rect_contains_pointer(r);
     ui.painter().rect(r, CornerRadius::same(6), if resp.hovered() { t.hover } else { t.card }, Stroke::new(1.0, t.border), egui::StrokeKind::Inside);
     let ag = ui.painter().text(pos2(r.min.x + 8.0, r.center().y), Align2::LEFT_CENTER, "Ag", theme::font(17.0), t.text);
-    let name = ui.painter().text(pos2(ag.max.x + 6.0, r.center().y), Align2::LEFT_CENTER, &current, theme::font(13.0), t.text);
+    let name = ui.painter().text(pos2(ag.max.x + 6.0, r.center().y), Align2::LEFT_CENTER, current, theme::font(13.0), t.text);
     ui.painter().text(pos2(name.max.x + 4.0, r.center().y), Align2::LEFT_CENTER, format!("· {metrics}"), theme::font(13.0), t.text_dim);
     resp.widget_info(|| egui::WidgetInfo::labeled(egui::WidgetType::ComboBox, en, format!("Text style: {current}")));
-    crate::inspector::style_menu(app, &resp, &current, w.max(220.0));
+    crate::inspector::style_menu(app, &resp, current, w.max(220.0));
+    // Detach: shown while the pointer is over the chip, as in canvas editors.
+    let dresp = ui.interact(detach_r, ui.id().with("style-detach"), if en { Sense::click() } else { Sense::hover() });
+    dresp.widget_info(|| egui::WidgetInfo::labeled(egui::WidgetType::Button, en, "Detach style"));
+    if hovered || dresp.hovered() {
+        if dresp.hovered() {
+            ui.painter().rect_filled(detach_r, CornerRadius::same(5), t.pressed);
+        }
+        icons::paint(ui.painter(), detach_r.shrink(4.0), Icon::Detach, t.text, !en);
+    }
+    let base = current.strip_suffix(" (copy)").unwrap_or(current);
+    if dresp.on_hover_text("Detach style").clicked()
+        && let Some(style) = styles.iter().find(|s| s.name == base)
+    {
+        crate::textstyles::detach(app, style);
+    }
 }
 
 // ----- Fill -----------------------------------------------------------------------------------
@@ -641,7 +1047,7 @@ fn color_row(
         let orect = Rect::from_min_max(pos2(r.max.x - op_w, r.min.y), r.max);
         ui.painter().vline(orect.min.x, orect.y_range().shrink(6.0), Stroke::new(1.0, t.card));
         let mut child = ui.new_child(egui::UiBuilder::new().max_rect(orect).layout(egui::Layout::left_to_right(egui::Align::Center)));
-        new_op = number(&mut child, &format!("{id}-op"), Prefix::Text(""), op.round(), "%", orect.width(), 1.0, true);
+        new_op = number(&mut child, &format!("{id}-op"), Prefix::Text(""), op.round(), "%", orect.width(), 1.0, PERCENT, true);
     }
     (picked, new_op)
 }
@@ -654,7 +1060,7 @@ fn fill(app: &mut SlideApp, ui: &mut Ui, sh: &Shape) {
         let c = text_color(app, sh);
         let (picked, _) = color_row(app, ui, "Fill", Some(c), None, None, width);
         if let Some(col) = picked {
-            run(app, "format.color", json!({"color": col}));
+            crate::textstyles::run_on_text(app, "Font Color", vec![("format.color", json!({"color": col}))]);
         }
         return;
     }
@@ -756,7 +1162,7 @@ fn stroke(app: &mut SlideApp, ui: &mut Ui, sh: &Shape) {
         }
         let u = units::small(app);
         let w = line.and_then(|l| l.width).unwrap_or(0.75);
-        if let Some(v) = number(ui, "stroke-w", Prefix::Icon(Icon::LineSpacing), (u.show(w) * 4.0).round() / 4.0, "", c, 0.25, true) {
+        if let Some(v) = number(ui, "stroke-w", Prefix::Icon(Icon::LineSpacing), two(u.show(w)), "", c, 0.25, (0.0, u.show(1584.0)), true) {
             run(app, "shape.line", json!({"width": u.to_pt(v).max(0.0)}));
         }
     });

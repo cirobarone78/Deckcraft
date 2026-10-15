@@ -433,6 +433,7 @@ pub const UI_COMMANDS: &[(&str, &str, Option<&str>, &str)] = &[
     ),
     ("app.about", "About DeckCraft", None, "{}"),
     ("app.palette", "Command Palette", Some("Cmd+Shift+P"), "{}"),
+    ("edit.pasteToReplace", "Paste to Replace", Some("Cmd+Shift+R"), "{}"),
     ("app.preferences", "Preferences…", Some("Cmd+,"), "{}"),
     ("app.openDialog", "Open…", None, "{purpose?}"),
     ("app.insertPictureDialog", "Picture from File…", None, "{}"),
@@ -523,6 +524,17 @@ pub struct SlideApp {
     styled: bool,
     restyle: bool,
     fonts_ready: bool,
+    /// Text detached from its style in the canvas panel this session: shown with every type control
+    /// and left alone when the style is edited, though its values still match the style.
+    pub detached: std::collections::HashSet<deckcraft_model::ShapeId>,
+    /// The slide list has the keyboard (a thumbnail was clicked last): ⌘D, Delete, ⇧⌘H, ⌘↑ / ⌘↓
+    /// and ⇧↑ / ⇧↓ act on slides (see `thumbs::slide_key`). A click anywhere else gives it back.
+    pub slides_focus: bool,
+    /// Where the slide list was drawn last frame, so a click there keeps its focus.
+    pub thumbs_rect: Option<egui::Rect>,
+    /// The slide a ⇧-extended range starts from, and the one it reaches.
+    pub slide_anchor: Option<usize>,
+    pub slide_cursor: Option<usize>,
     last_time: f64,
     /// When AutoRecover data was last written (seconds, egui time).
     pub last_recovery: f64,
@@ -604,6 +616,11 @@ impl SlideApp {
             styled: false,
             restyle: true,
             fonts_ready: false,
+            detached: Default::default(),
+            slides_focus: false,
+            thumbs_rect: None,
+            slide_anchor: None,
+            slide_cursor: None,
             last_time: 0.0,
             last_recovery: 0.0,
             quit_confirmed: false,
@@ -1018,6 +1035,7 @@ impl SlideApp {
             }
             "view.grayscale" => self.ui.grayscale = self.flag(p, self.ui.grayscale),
             "view.newWindow" => return doc_window::command(self, p),
+            "edit.pasteToReplace" => return self.paste_to_replace(),
             "show.start" => {
                 if let Some(name) = p.get("custom").and_then(Value::as_str).filter(|s| !s.is_empty()) {
                     self.start_custom_show(name, false);
@@ -1731,9 +1749,14 @@ impl SlideApp {
                 _ => {}
             }
         }
+        self.track_slides_focus(ctx);
         if ctx.memory(|m| m.focused().is_some()) || self.dialog.as_ref().is_some_and(|d| d.modal()) || self.palette.is_some() {
             return;
         }
+        let slides_keys = self.slides_focus || self.ui.view == ViewMode::Sorter;
+        // Nothing selected on the slide: Delete and Cut have nothing to act on (the engine would
+        // take the slide), as in PowerPoint.
+        let nothing = self.session.active().is_some_and(|d| d.selection.shapes.is_empty() && d.selection.text.is_none());
         if self.backstage.is_some() {
             // The File tab: its own keys (Esc goes back, arrows walk the side menu) and app
             // shortcuts (New, Open, Command Palette…); typing, pasting or deleting would edit the
@@ -1756,12 +1779,9 @@ impl SlideApp {
             self.drain_requests();
             return;
         }
-        let img = if image_paste { self.services.clipboard_image.as_mut().and_then(|f| f()) } else { None };
-        if let Some(png) = img {
-            let data = deckcraft_engine::cmd::base64_encode(&png);
-            if let Err(e) = self.session.execute("insert.picture", &json!({"name": "Pasted image.png", "data": data})) {
-                self.set_status(e.to_string());
-            }
+        // That paste: an image on the clipboard, else what was copied here (shapes, slides).
+        if image_paste {
+            self.paste("");
         }
         for e in events {
             match e {
@@ -1776,29 +1796,18 @@ impl SlideApp {
                     }
                 }
                 egui::Event::Ime(ime) => self.ime_event(&ime),
-                egui::Event::Copy => self.publish_clipboard(ctx, false),
-                egui::Event::Cut => self.publish_clipboard(ctx, true),
+                egui::Event::Copy => self.publish_clipboard(ctx, false, slides_keys),
+                egui::Event::Cut if nothing && !slides_keys => {}
+                egui::Event::Cut => self.publish_clipboard(ctx, true, slides_keys),
+                // ⇧⌘V (and ⌥⇧⌘V, the Mac's Paste and Match Style) pastes the text alone.
                 egui::Event::Paste(text) => {
-                    // Our own marker for objects without text: paste what the session copied.
-                    let text = if text == OBJECTS_MARKER { String::new() } else { text };
-                    // A picture (TIFF from Keynote, a screenshot) lands when the paste has no text.
-                    // Text keeps its HTML (bold, italic, underline) when the host can read it.
-                    let html = self.services.clipboard_html.as_mut().and_then(|f| f()).filter(|h| !h.is_empty());
-                    let img = if text.is_empty() { self.services.clipboard_image.as_mut().and_then(|f| f()) } else { None };
-                    let r = match img {
-                        Some(png) => self
-                            .session
-                            .execute("insert.picture", &json!({"name": "Pasted image.png", "data": deckcraft_engine::cmd::base64_encode(&png)})),
-                        None => {
-                            let mut params = json!({"text": text});
-                            if let Some(h) = html {
-                                params["html"] = Value::String(h);
-                            }
-                            self.session.execute("edit.paste", &params)
+                    if ctx.input(|i| i.modifiers.shift) {
+                        let text = if text == OBJECTS_MARKER { String::new() } else { text };
+                        if let Err(e) = self.session.execute("edit.pasteText", &json!({"text": text})) {
+                            self.set_status(e.to_string());
                         }
-                    };
-                    if let Err(e) = r {
-                        self.set_status(e.to_string());
+                    } else {
+                        self.paste(&text);
                     }
                 }
                 egui::Event::Key { key, pressed: true, modifiers, .. } => {
@@ -1813,7 +1822,16 @@ impl SlideApp {
                         continue;
                     }
                     let mods = Mods { shift: modifiers.shift, alt: modifiers.alt, cmd: modifiers.command || modifiers.ctrl };
+                    if slides_keys && thumbs::slide_key(self, key, mods) {
+                        continue;
+                    }
+                    if nothing && !slides_keys && matches!(key, egui::Key::Delete | egui::Key::Backspace) {
+                        continue;
+                    }
                     if self.ui.shell == Shell::Canvas && canvas_shell::tool_key(self, key, mods) {
+                        continue;
+                    }
+                    if menus::mac_shortcut(self, key, mods) {
                         continue;
                     }
                     if !self.session.tool.drawing_freeform() && menus::ui_shortcut(self, key, mods) {
@@ -1831,15 +1849,114 @@ impl SlideApp {
         self.drain_requests();
     }
 
-    /// Offer the copy or cut on the system clipboard.
+    /// The slide list keeps the keyboard until a click lands elsewhere, or a shape or text is
+    /// selected (from the Layers list, say).
+    fn track_slides_focus(&mut self, ctx: &egui::Context) {
+        let elsewhere =
+            ctx.input(|i| i.pointer.primary_pressed() && i.pointer.interact_pos().is_some_and(|p| !self.thumbs_rect.is_some_and(|r| r.contains(p))));
+        let editing = self.session.active().is_none_or(|d| !d.selection.shapes.is_empty() || d.selection.text.is_some());
+        if elsewhere || editing {
+            self.slides_focus = false;
+        }
+    }
+
+    /// Paste to Replace (⇧⌘R), as in canvas editors: what's on the clipboard (an image, else what
+    /// was copied here) takes each selected object's place: centred on it, at its place in the
+    /// stack, and the object removed. One undo step.
+    pub fn paste_to_replace(&mut self) -> Result<Value, String> {
+        let Some(st) = self.session.active() else { return Err("no presentation".into()) };
+        let top: Vec<deckcraft_model::ShapeId> = st.shapes().iter().map(|s| s.id).collect();
+        let targets: Vec<(deckcraft_model::ShapeId, deckcraft_model::Xfrm)> = st
+            .selection
+            .shapes
+            .iter()
+            .filter(|id| top.contains(id))
+            .filter_map(|id| st.shape(*id).map(|s| (*id, deckcraft_engine::cmd::xfrm_of(&st.doc, &st.selection, s))))
+            .collect();
+        if targets.is_empty() {
+            return Err("Select the objects to replace".into());
+        }
+        let image = self.services.clipboard_image.as_mut().and_then(|f| f());
+        if image.is_none() && self.session.clipboard.shapes.is_empty() {
+            return Err("Copy something to paste in their place".into());
+        }
+        let before = self.session.active().map(|d| d.history.undo.len()).unwrap_or(0);
+        let mut pasted = vec![];
+        for (target, x) in targets {
+            let r = match &image {
+                Some(png) => self.run("insert.picture", json!({"name": "Pasted image.png", "data": deckcraft_engine::cmd::base64_encode(png)})),
+                None => self.run("edit.paste", json!({})),
+            };
+            r?;
+            let Some(st) = self.session.active() else { break };
+            let ids = st.selection.shapes.clone();
+            let boxes: Vec<deckcraft_model::Xfrm> =
+                ids.iter().filter_map(|id| st.shape(*id).map(|s| deckcraft_engine::cmd::xfrm_of(&st.doc, &st.selection, s))).collect();
+            let Some(first) = boxes.first() else { continue };
+            let (mut x0, mut y0, mut x1, mut y1) = (first.x, first.y, first.x + first.w, first.y + first.h);
+            for b in &boxes {
+                (x0, y0, x1, y1) = (x0.min(b.x), y0.min(b.y), x1.max(b.x + b.w), y1.max(b.y + b.h));
+            }
+            let (dx, dy) = (x.x + x.w / 2.0 - (x0 + x1) / 2.0, x.y + x.h / 2.0 - (y0 + y1) / 2.0);
+            self.run("shape.move", json!({"ids": ids, "dx": dx, "dy": dy}))?;
+            // Into the target's place in the stack (it moves up as they go in below it).
+            let at = self.session.active().and_then(|d| d.shapes().iter().position(|s| s.id == target)).unwrap_or(0);
+            for (k, id) in ids.iter().enumerate() {
+                self.run("arrange.reorder", json!({"id": id, "index": at + k}))?;
+            }
+            self.run("edit.delete", json!({"ids": [target]}))?;
+            pasted.extend(ids);
+        }
+        let _ = self.run("selection.select", json!({"ids": pasted}));
+        if let Some(st) = self.session.active_mut() {
+            let undo = &mut st.history.undo;
+            if undo.len() > before + 1 {
+                undo.truncate(before + 1);
+            }
+            if undo.len() > before
+                && let Some(e) = undo.last_mut()
+            {
+                e.label = "Paste to Replace".into();
+            }
+        }
+        Ok(json!({"ids": pasted}))
+    }
+
+    /// Paste from the system clipboard. Our own marker for objects without text pastes what the
+    /// session copied; a picture (TIFF from Keynote, a screenshot) lands when the paste has no
+    /// text; text keeps its HTML (bold, italic, underline) when the host can read it.
+    fn paste(&mut self, text: &str) {
+        let text = if text == OBJECTS_MARKER { "" } else { text };
+        let html = self.services.clipboard_html.as_mut().and_then(|f| f()).filter(|h| !h.is_empty());
+        let img = if text.is_empty() { self.services.clipboard_image.as_mut().and_then(|f| f()) } else { None };
+        let r = match img {
+            Some(png) => {
+                self.session.execute("insert.picture", &json!({"name": "Pasted image.png", "data": deckcraft_engine::cmd::base64_encode(&png)}))
+            }
+            None => {
+                let mut params = json!({"text": text});
+                if let Some(h) = html {
+                    params["html"] = Value::String(h);
+                }
+                self.session.execute("edit.paste", &params)
+            }
+        };
+        if let Err(e) = r {
+            self.set_status(e.to_string());
+        }
+    }
+
+    /// Offer the copy or cut on the system clipboard (`slides`: the slide list has the keyboard,
+    /// so the selected slides).
     ///
     /// Slides go out as plain text. Text goes out as HTML plus the same plain words, so a paste
     /// back into DeckCraft still uses the internal clipboard. A textless shape leaves the
     /// invisible [`OBJECTS_MARKER`] rather than a picture: with only an image on the clipboard
     /// egui-winit drops Ctrl+V, and the shortcut could no longer paste the shape here (#182).
-    fn publish_clipboard(&mut self, ctx: &egui::Context, cut: bool) {
+    fn publish_clipboard(&mut self, ctx: &egui::Context, cut: bool, slides: bool) {
         let cmd = if cut { "edit.cut" } else { "edit.copy" };
-        let Ok(v) = self.session.execute(cmd, &json!({})) else { return };
+        let p = if slides { json!({"scope": "slides"}) } else { json!({}) };
+        let Ok(v) = self.session.execute(cmd, &p) else { return };
         let text = v.get("text").and_then(Value::as_str).unwrap_or("").to_string();
         let html = v.get("html").and_then(Value::as_str).unwrap_or("").to_string();
         if self.session.clipboard.slides.is_empty() && !html.is_empty() && self.services.clipboard_set_html.as_mut().is_some_and(|f| f(&html, &text))
@@ -1870,6 +1987,8 @@ impl SlideApp {
         }
         self.sync_backstage();
         self.keyboard(&ctx);
+        // Drawn again below when the slide list is shown.
+        self.thumbs_rect = None;
         self.sync_backstage();
         self.sync_shell_prefs();
         ribbon::title_bar(self, ui);
@@ -2127,6 +2246,12 @@ mod datetime_tests;
 
 #[cfg(test)]
 mod inbox_tests;
+
+#[cfg(test)]
+mod paste_tests;
+
+#[cfg(test)]
+mod shortcut_tests;
 
 #[cfg(test)]
 mod tests {

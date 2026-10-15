@@ -19,6 +19,11 @@ use crate::{SlideApp, widgets};
 const SPACING: [(&str, f64); 5] = [("Very tight", -3.0), ("Tight", -1.5), ("Normal", 0.0), ("Loose", 3.0), ("Very loose", 6.0)];
 
 fn run(app: &mut SlideApp, id: &str, p: Value) {
+    if id.starts_with("format.") {
+        // While typing with a bare caret, the panel formats the whole box.
+        crate::textstyles::run_on_text(app, id, vec![(id, p)]);
+        return;
+    }
     let _ = app.run(id, p);
 }
 
@@ -155,9 +160,8 @@ pub fn weight_commands(base: &str, style: &str) -> Vec<(&'static str, Value)> {
     }
 }
 
-/// Type details: font, weight, size, line height, letter spacing, bold / italic / underline /
-/// strikethrough, lists and (when `color`) the text colour.
-pub(crate) fn text_details(app: &mut SlideApp, ui: &mut Ui, st: &Value, en: bool, color: bool) {
+/// Font, weight, size, line height and letter spacing.
+pub(crate) fn type_basics(app: &mut SlideApp, ui: &mut Ui, st: &Value, en: bool) {
     let font = st.get("font").and_then(Value::as_str).unwrap_or("").to_string();
     let bold = st.get("bold").and_then(Value::as_bool).unwrap_or(false);
     let (base, styles, current) = weights(&font, bold);
@@ -222,7 +226,10 @@ pub(crate) fn text_details(app: &mut SlideApp, ui: &mut Ui, st: &Value, en: bool
             });
         });
     });
-    ui.add_space(6.0);
+}
+
+/// Bold, italic, underline, strikethrough, lists and (when `color`) the text colour.
+pub(crate) fn type_extras(app: &mut SlideApp, ui: &mut Ui, st: &Value, en: bool, color: bool) {
     let flag = |k: &str| st.get(k).and_then(Value::as_bool).unwrap_or(false);
     ui.horizontal(|ui| {
         ui.spacing_mut().item_spacing.x = 1.0;
@@ -272,10 +279,19 @@ pub(crate) fn style_menu(app: &mut SlideApp, button: &egui::Response, current: &
                 "This box can't follow the style in PPTX: its values are copied"
             };
             let on = current == s.name || current.strip_suffix(" (copy)") == Some(s.name);
-            if ui.add(egui::Button::selectable(on, label).min_size(vec2(w - 12.0, 0.0))).on_hover_text(tip).clicked() {
-                crate::textstyles::apply(app, s);
-                ui.close();
-            }
+            ui.horizontal(|ui| {
+                let update_w = 64.0;
+                if ui.add(egui::Button::selectable(on, label).min_size(vec2(w - 20.0 - update_w, 0.0))).on_hover_text(tip).clicked() {
+                    crate::textstyles::apply(app, s);
+                    ui.close();
+                }
+                // Make the style match the selected text, which then follows it.
+                let r = ui.add_sized(vec2(update_w, 22.0), egui::Button::new(egui::RichText::new("Update").font(theme::font(12.0))));
+                if r.on_hover_text(format!("Update {} to match the selected text", s.name)).clicked() {
+                    crate::textstyles::update_from_selection(app, s);
+                    ui.close();
+                }
+            });
         }
     });
 }
