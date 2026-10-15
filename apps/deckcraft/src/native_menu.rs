@@ -118,6 +118,13 @@ impl NativeMenu {
         }
         for entry in &mut self.entries {
             let state = app.menu_state(ctx, entry.id, entry.label, self.target);
+            // AppKit toggles check items before dispatch, even if the command was rejected
+            // or selected an already active view. The document remains the source of truth.
+            if let Item::Check(item) = &entry.item
+                && item.is_checked() != state.checked.unwrap_or(false)
+            {
+                item.set_checked(state.checked.unwrap_or(false));
+            }
             if state == entry.state {
                 continue;
             }
@@ -129,7 +136,6 @@ impl NativeMenu {
                 Item::Check(item) => {
                     item.set_text(&state.label);
                     item.set_enabled(state.enabled);
-                    item.set_checked(state.checked.unwrap_or(false));
                 }
             }
             entry.state = state;
