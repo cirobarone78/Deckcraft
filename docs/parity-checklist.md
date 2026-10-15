@@ -1,15 +1,15 @@
 # PowerPoint feature checklist
 
-> **Generated:** 2026-10-14 (bullets/numbering remain D after empty-line marker review; summary by `cargo xtask parity`; rows re-scored by the 2026-10-14 community PR wave, duplicate Thesaurus, AutoCorrect, Artistic effects and Corrections rows folded; Preview in editor re-scored 2026-10-13; earlier rows re-scored 2026-10-10 against PowerPoint for Mac 16.113.4; video/animated GIF row re-scored 2026-10-11, #171) · **Target:** Microsoft PowerPoint for Mac 16.113 (Microsoft 365)
+> **Generated:** 2026-10-15 (chart rows re-scored for the chart types, data and formatting work; bullets/numbering remain D after empty-line marker review; summary by `cargo xtask parity`; rows re-scored by the 2026-10-14 community PR wave, duplicate Thesaurus, AutoCorrect, Artistic effects and Corrections rows folded; Preview in editor re-scored 2026-10-13; earlier rows re-scored 2026-10-10 against PowerPoint for Mac 16.113.4; video/animated GIF row re-scored 2026-10-11, #171) · **Target:** Microsoft PowerPoint for Mac 16.113 (Microsoft 365)
 
 The summary between `<!-- SUMMARY -->
-**Weighted breadth parity: 84%** over 191 features.
+**Weighted breadth parity: 85%** over 193 features.
 
 | Priority | Features | Done | Partial | Missing | Parity |
 |---|---|---|---|---|---|
-| P0 | 72 | 61 | 11 | 0 | 92% |
-| P1 | 65 | 45 | 16 | 4 | 82% |
-| P2 | 54 | 17 | 25 | 12 | 55% |
+| P0 | 72 | 62 | 10 | 0 | 93% |
+| P1 | 67 | 48 | 15 | 4 | 83% |
+| P2 | 54 | 18 | 24 | 12 | 56% |
 
 | Area | Parity |
 |---|---|
@@ -23,7 +23,7 @@ The summary between `<!-- SUMMARY -->
 | Arrange | 100% |
 | Text | 83% |
 | Tables | 97% |
-| Charts | 65% |
+| Charts | 96% |
 | SmartArt | 50% |
 | Pictures | 60% |
 | Media | 67% |
@@ -36,7 +36,7 @@ The summary between `<!-- SUMMARY -->
 | Automation (✱) | 100% |
 | Platforms (✱) | 67% |
 
-Open P0 items: Contextual tabs (Shape Format, Picture Format, Table Design/Layout, Chart Design), Export to PDF (slides, notes pages, handouts; text layer, links, bookmarks; vector artwork pending), Format Shape pane, Font, size, bold, italic, underline, strikethrough (only Regular/Bold/Italic faces, #69), Edit chart data, Crop (and crop to shape, aspect ratio), Paste image from clipboard (fails on Windows and Linux, #53), Audio/video playback in the show (WMA/WMV not decodable yet), Animation pane (reorder, timing), Presenter view (notes, next slide, timer), macOS, Windows, Linux builds.
+Open P0 items: Contextual tabs (Shape Format, Picture Format, Table Design/Layout, Chart Design), Export to PDF (slides, notes pages, handouts; text layer, links, bookmarks; vector artwork pending), Format Shape pane, Font, size, bold, italic, underline, strikethrough (only Regular/Bold/Italic faces, #69), Crop (and crop to shape, aspect ratio), Paste image from clipboard (fails on Windows and Linux, #53), Audio/video playback in the show (WMA/WMV not decodable yet), Animation pane (reorder, timing), Presenter view (notes, next slide, timer), macOS, Windows, Linux builds.
 
 ## Rows
 
@@ -172,10 +172,12 @@ Open P0 items: Contextual tabs (Shape Format, Picture Format, Table Design/Layou
 | Tables | Cell fill, borders, margins, alignment | P1 | D |
 | Tables | Keyboard navigation between cells | P0 | D |
 | Charts | Insert chart (column, bar, line, area, pie, doughnut, scatter) | P0 | D |
+| Charts | Chart type variants (stacked and 100%, markers or points only, smooth and stepped lines, exploded and of-pie, 3-D read/write) | P1 | D |
 | Charts | Other chart types (radar, stock, combo, waterfall, funnel, treemap, sunburst, histogram, box) | P2 | P |
-| Charts | Edit chart data | P0 | P |
-| Charts | Chart elements (title, legend, labels, axes, gridlines) | P1 | P |
-| Charts | Chart styles and colours | P2 | P |
+| Charts | Edit chart data | P0 | D |
+| Charts | Chart elements (title, legend, labels, axes, gridlines) | P1 | D |
+| Charts | Format chart elements (fonts, fills, borders, axis scale and labels, number formats, data label parts, series and point looks) | P1 | D |
+| Charts | Chart styles and colours | P2 | D |
 | SmartArt | Insert SmartArt (lists, processes, cycles, hierarchy) | P1 | P |
 | SmartArt | Text pane and layout switching | P2 | P |
 | Pictures | Insert picture (PNG, JPEG, GIF, WebP, BMP, TIFF) | P0 | D |

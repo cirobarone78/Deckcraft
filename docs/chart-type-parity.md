@@ -1,14 +1,15 @@
 # Chart type parity
 
-> **Last reviewed:** 2026-10-13 · **Last updated:** 2026-10-13 · **Change:** minor (built on upstream's chart legend, combo, axis format and text size work; previous: minor, data editing and formatting per type; before that: major, created; every LibreOffice Impress chart type and variant audited, then filled in) · **Target:** the chart types of LibreOffice Impress 26 and their PowerPoint counterparts
+> **Last reviewed:** 2026-10-15 · **Last updated:** 2026-10-15 · **Change:** minor (rebased on main 9859da3: main's Office 2016 types in the gallery, its kept chart parts, stock up/down bars, trendlines, error bars, log axes, minor gridlines, reversed categories and axis limits used instead of copies; previous: minor, built on upstream's chart legend, combo, axis format and text size work; previous: minor, data editing and formatting per type; before that: major, created; every LibreOffice Impress chart type and variant audited, then filled in) · **Target:** the chart types of LibreOffice Impress 26 and their PowerPoint counterparts
 
 Every chart type and variant LibreOffice Impress offers in its chart type dialog, with
 PowerPoint's name where it has one, and what DeckCraft does with it: model, drawing, PPTX read,
 PPTX write, gallery. The PowerPoint-only `chartex` types (waterfall, funnel, treemap, sunburst,
-histogram, box and whisker) are tracked in [file-format-parity.md](file-format-parity.md) and
-[gaps.md](gaps.md).
+histogram, Pareto, box and whisker, region map) are main's work, tracked in
+[file-format-parity.md](file-format-parity.md) and [gaps.md](gaps.md); they are in the gallery too.
 
-The gallery is `ChartPreset::GALLERY` (`crates/model/src/chart.rs`): 61 entries in ten families,
+The gallery is `ChartPreset::GALLERY` (`crates/model/src/chart.rs`): 68 entries in 16 families
+(the ten LibreOffice families, then Treemap, Sunburst, Histogram, Box & Whisker, Waterfall, Funnel),
 listed by Insert ▸ Chart and Chart Design ▸ Change Chart Type, and taken by `insert.chart {type}`
 and `chart.type {type}` as preset ids (`column3d`, `lineSmooth`, `stockOhlc`,
 `columnLineSecondary`…). A type is `Chart.kind` (`ChartType`); what makes a variant beyond it
@@ -81,6 +82,17 @@ writer set and write those fields:
 - Chart text sizes from the file (#358): `Chart::text_size` and `Chart::title_size`; the legend,
   axes and data labels have their own sizes on top (`ChartFormat`), and a chart's own `c:txPr`
   size is its text size when it sets one.
+- Kept chart parts (#355): an unchanged chart goes back with its workbook and other parts; the
+  workbook DeckCraft writes for edited and new charts (#241) is that kept part, updated in place.
+- Office 2016 types (#537, #591, #594, #598): waterfalls, histograms, Pareto and box charts are
+  drawn on the category frame, funnels, treemaps, sunbursts and region maps by main's layouts.
+- Stock high-low lines and up/down bars (#602): `Chart::up_down_bars`, which the open-high-low-close
+  presets set; trendlines (#603) and error bars (#673), drawn on every category and scatter chart.
+- Bar widths, point fills, smoothed lines (#638), single series coloured by point (#151), reversed
+  categories (#640), the scatter value X axis (#662), minor gridlines (#666), log axes (#669) and
+  Office's automatic axis limits (#157): `Chart::cat_reversed`, `minor_gridlines`, `y_log_base`
+  and `deckcraft_model::chart::axis_scale`, set by `chart.format.axis` and the Format pane, with no
+  copy in `ChartFormat`.
 
 ## Data and formatting per type
 
@@ -123,7 +135,10 @@ series explosion is the exploded type's explosion.
   radar, scatter, of-pie, exploded doughnut, 3-D column, combo with a secondary axis and bubble
   charts, with their type and variant; `crates/pptx/tests/chart_workbook.rs`: the workbook follows
   added and removed series and points on seven types.
-- By hand (2026-10-12): the gallery deck (`deckcraft-cli run … insert.chart`) rendered with
+- By hand (2026-10-15): the gallery deck and a deck of formatted charts, rendered from the
+  `.deckcraft` and again from the exported PPTX (the same pictures), and converted with LibreOffice
+  26, which opens every LibreOffice type as the same type and variant (it shows a placeholder for
+  the Office 2016 types). Earlier (2026-10-12): the gallery deck (`deckcraft-cli run … insert.chart`) rendered with
   `deckcraft-cli render` and converted to PDF with LibreOffice 26: LibreOffice opens every chart as
   the same type and variant, 3-D ones in 3-D. The deck saved again as PPTX by LibreOffice reads back
   as the same types, except pie of pie and bar of pie (LibreOffice writes them as plain pies) and
@@ -144,7 +159,10 @@ series explosion is the exploded type's explosion.
 - LibreOffice's "stack series" for radar charts and "sort by X values" for scatter charts are not
   modelled.
 - Not formatted yet: the secondary value axis' line, tick marks, font and title (its bounds,
-  unit, number format and visibility are), the high-low lines and up-down bars of stock charts, bubble scale, the pie of pie's connector lines, 3-D walls and floor.
+  unit, number format and visibility are), the high-low lines and up-down bars of stock charts,
+  bubble scale, the pie of pie's connector lines, 3-D walls and floor. Funnels, treemaps and
+  sunbursts keep main's layouts, without the chart formatting.
+- 3-D bar groups have no overlap in OOXML: a 3-D column chart reads back with none.
 - Markers are on or off per type: a line chart where only some series show markers reads back
   without markers.
 
@@ -152,6 +170,7 @@ series explosion is the exploded type's explosion.
 
 | Date | Change | Summary |
 |---|---|---|
+| 2026-10-15 | minor | Rebased on main 9859da3: main's Office 2016 types join the gallery; kept chart parts, stock up/down bars, trendlines, error bars, log axes, minor gridlines, reversed categories, scatter X axes, bar widths and axis limits are main's fields and code |
 | 2026-10-13 | minor | Rebased on upstream main: legend overlay (#262), combo charts and the secondary axis (5c82c08), axis number formats, units and hidden axes (ce1c7b7), text sizes (#358) are upstream's; the secondary axis' bounds, unit, number format and visibility are formatted and written |
 | 2026-10-12 | minor | Data table and formatting per type; verification and limits after the data and formatting work |
 | 2026-10-12 | major | Created: audit of the LibreOffice Impress chart types and variants, all filled in (model, drawing, PPTX read and write, gallery) |
