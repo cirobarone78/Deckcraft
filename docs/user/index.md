@@ -1,7 +1,7 @@
 ---
 title: DeckCraft
 description: DeckCraft is a free, open-source presentation app that opens and saves PowerPoint files, built as an alternative to Microsoft PowerPoint.
-verified: 0.6.1
+verified: 0.7.0
 ---
 
 DeckCraft is a presentation app for building slide decks and presenting them. It is a free, open-source alternative to Microsoft PowerPoint, written from scratch in Rust, and it opens and saves PowerPoint `.pptx` files.

@@ -2,7 +2,7 @@
 title: Present your deck
 description: Play a deck full screen, use presenter view with notes, and move through the show with the keyboard.
 order: 40
-verified: 0.6.1
+verified: 0.7.0
 ---
 
 Press F5 to play from the first slide. Press Esc to stop.

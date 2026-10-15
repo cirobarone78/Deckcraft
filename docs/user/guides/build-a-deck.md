@@ -2,15 +2,15 @@
 title: Build a deck
 description: Start a deck from a theme, add slides with layouts, and change the theme later.
 order: 10
-verified: 0.6.1
+verified: 0.7.0
 ---
 
 Pick a theme on the start screen, add slides from the **Home** tab with **New Slide**, and change the look any time from the **Design** tab.
 
 ## Start a deck
 
-1. Open the start screen. If a deck is already open, click the **Home** icon at the left of the title bar. A **← Back to** button returns you to your deck, and so does Esc.
-2. Under **New presentation**, click a theme tile.
+1. Open the start screen. If a deck is already open, click the **Home** icon at the left of the title bar. The back arrow at the top left returns you to your deck, and so does Esc.
+2. Under **New**, click **Blank Presentation** or a theme tile. **More themes** lists every theme.
 
 ## Add slides
 

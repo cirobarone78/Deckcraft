@@ -2,7 +2,7 @@
 title: Export a deck to PDF
 description: Save a deck as a PDF with full-page slides, notes pages or handouts, or export slides as PNG or JPEG images.
 order: 50
-verified: 0.6.1
+verified: 0.7.0
 ---
 
 Open the command palette with Ctrl+Shift+P, run **Export…**, keep **PDF document (.pdf)** selected and click **Export**. On macOS, use Cmd in place of Ctrl.
@@ -24,7 +24,7 @@ Open the command palette with Ctrl+Shift+P, run **Export…**, keep **PDF docume
 
 ## Copied text
 
-The PDF includes a text layer by default. Text copied from an exported PDF can come out garbled ([issue 164](https://github.com/storytold/deckcraft/issues/164)). Check copied text if you rely on it.
+The PDF includes a text layer by default. Text copied from an exported PDF can come out garbled ([issue 164](https://github.com/storytold/deckcraft/issues/164)). A fix is merged but is not in 0.7.0. Check copied text if you rely on it.
 
 ## Related
 

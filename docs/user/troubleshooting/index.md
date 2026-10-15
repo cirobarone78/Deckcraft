@@ -2,7 +2,7 @@
 title: Troubleshooting
 description: Fixes for problems people run into with DeckCraft.
 order: 40
-verified: 0.6.1
+verified: 0.7.0
 ---
 
 - [DeckCraft closes right after it starts](app-closes-at-startup.md): the window flashes and disappears on Windows 11.

@@ -2,10 +2,10 @@
 title: Install DeckCraft
 description: Download DeckCraft for Windows 11 or macOS from GitHub or install it with ArtCraft Launcher, and find out which file fits your PC.
 order: 10
-verified: 0.6.1
+verified: 0.7.0
 ---
 
-Download the file for your system from the [latest release](https://github.com/storytold/deckcraft/releases/latest) and install it, or install DeckCraft from ArtCraft Launcher. In file names, `<version>` stands for the version number, for example `0.6.1`.
+Download the file for your system from the [latest release](https://github.com/storytold/deckcraft/releases/latest) and install it, or install DeckCraft from ArtCraft Launcher. In file names, `<version>` stands for the version number, for example `0.7.0`.
 
 ## Windows 11
 

@@ -2,7 +2,7 @@
 title: Report a problem
 description: What to include when you report a DeckCraft bug, and where to post it.
 order: 30
-verified: 0.6.1
+verified: 0.7.0
 ---
 
 Post bugs in the [issue tracker](https://github.com/storytold/deckcraft/issues) or ask in [Discord](https://discord.gg/artcraft). Include the version, your system, the steps and the log file.
