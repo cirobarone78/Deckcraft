@@ -3,7 +3,7 @@
 use std::collections::HashSet;
 
 use deckcraft_model::{Presentation, SlideId};
-use egui::{Align2, Color32, CornerRadius, Rect, Sense, Stroke, Ui, WidgetInfo, WidgetType, pos2, vec2};
+use egui::{Align2, Color32, CornerRadius, Pos2, Rect, Sense, Stroke, Ui, WidgetInfo, WidgetType, pos2, vec2};
 use serde_json::json;
 
 use crate::SlideApp;
@@ -225,6 +225,9 @@ fn place_slides(app: &mut SlideApp, ui: &mut Ui, g: &Grid<'_>, budget: &mut u32,
                     p.text(pos2(img.max.x, img.max.y + 12.0), Align2::RIGHT_CENTER, format!("★ {}", tr.kind), theme::font(10.5), t.text_faint);
                 }
                 if resp.clicked() {
+                    // Where ⇧↑ / ⇧↓ extend the selection from.
+                    app.slide_anchor = Some(i);
+                    app.slide_cursor = Some(i);
                     let add = ui.input(|inp| inp.modifiers.command);
                     if add {
                         if let Some(id) = id {
@@ -240,6 +243,7 @@ fn place_slides(app: &mut SlideApp, ui: &mut Ui, g: &Grid<'_>, budget: &mut u32,
                 }
                 if resp.drag_started() && app.sorter.drag.is_none() {
                     app.thumb_drag = Some((i, i));
+                    app.thumb_drag_in_grid = true;
                 }
                 resp.context_menu(|ui| crate::thumbs::slide_menu(app, ui, i));
             }
@@ -325,16 +329,14 @@ pub fn show(app: &mut SlideApp, ui: &mut Ui) {
             }
         }
         if app.sorter.drag.is_none()
+            && app.thumb_drag_in_grid
             && let Some((from, _)) = app.thumb_drag
         {
-            if let Some(pp) = ui.input(|i| i.pointer.interact_pos()) {
-                let to =
-                    rects.iter().find(|(_, r)| r.contains(pp)).map(|(i, r)| if pp.x > r.center().x { i + 1 } else { *i }).unwrap_or(doc.slides.len());
+            if let Some(pp) = ui.input(|i| i.pointer.interact_pos())
+                && let Some((to, x, band)) = drop_slot_at(&rects, pp)
+            {
                 app.thumb_drag = Some((from, to));
-                if let Some((_, r)) = rects.iter().find(|(i, _)| *i == to).or(rects.last()) {
-                    let x = if to >= doc.slides.len() { r.max.x - 6.0 } else { r.min.x + 6.0 };
-                    ui.painter().line_segment([pos2(x, r.min.y + 6.0), pos2(x, r.max.y - 20.0)], Stroke::new(3.0, t.accent));
-                }
+                ui.painter().line_segment([pos2(x, band.min.y + 6.0), pos2(x, band.max.y - 20.0)], Stroke::new(3.0, t.accent));
             }
             if ui.input(|i| i.pointer.any_released()) {
                 if let Some((from, to)) = app.thumb_drag.take()
@@ -352,6 +354,21 @@ pub fn show(app: &mut SlideApp, ui: &mut Ui) {
             app.ui.sorter_zoom = (zoom * zd).clamp(0.5, 3.0);
         }
     });
+}
+
+/// Where a slide dragged in the sorter would go, for the pointer at `p`: the row of cells nearest
+/// it (the gaps between rows and cells count too), then the place in that row before the first
+/// cell whose middle is right of the pointer, else after the row's last cell. Returns the slide
+/// index it goes before, the x of the insertion line and the row's band.
+pub(crate) fn drop_slot_at(rects: &[(usize, Rect)], p: Pos2) -> Option<(usize, f32, Rect)> {
+    let off = |r: &Rect| if p.y < r.min.y { r.min.y - p.y } else { (p.y - r.max.y).max(0.0) };
+    let near = rects.iter().min_by(|a, b| off(&a.1).total_cmp(&off(&b.1)))?;
+    let row: Vec<&(usize, Rect)> = rects.iter().filter(|(_, r)| (r.min.y - near.1.min.y).abs() < 1.0).collect();
+    let band = row.iter().fold(near.1, |acc, (_, r)| acc.union(*r));
+    match row.iter().find(|(_, r)| p.x < r.center().x) {
+        Some((i, r)) => Some((*i, r.min.x + 6.0, band)),
+        None => row.last().map(|(i, r)| (i + 1, r.max.x - 6.0, band)),
+    }
 }
 
 /// Notes Page: the slide on top and its notes underneath, on a page.

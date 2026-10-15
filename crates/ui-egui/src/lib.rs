@@ -9,19 +9,28 @@
 pub mod animtimeline;
 pub mod backstage;
 pub mod canvas;
+pub mod canvas_shell;
+pub mod colorpick;
 pub mod control;
 pub mod credits;
 pub mod dialogs;
 pub mod doc_window;
 pub mod eyedropper;
+pub mod field_math;
 pub mod fillui;
+pub mod find;
+pub mod form;
 pub mod icons;
+pub mod inspector;
+pub mod measure_overlay;
 pub mod media;
 pub mod menus;
+pub mod native_menu;
 pub mod notes;
 pub mod opening;
 pub mod panes;
 mod preview;
+pub mod props;
 pub mod qat;
 pub mod ribbon;
 pub mod selpane;
@@ -29,12 +38,15 @@ pub mod settings;
 pub mod show;
 pub mod sorter;
 pub mod squiggles;
+pub mod states;
 pub mod status;
+pub mod textstyles;
 pub mod textures;
 pub mod theme;
 pub mod thumbs;
 pub mod toast;
 pub mod uifonts;
+pub mod units;
 pub mod widgets;
 
 use std::collections::HashMap;
@@ -233,11 +245,43 @@ pub enum ViewMode {
     Reading,
 }
 
+/// The window layout around the slide.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub enum Shell {
+    /// PowerPoint-style: ribbon, thumbnails, status bar.
+    #[default]
+    Classic,
+    /// Canvas-first: a slides-and-layers sidebar, an inspector on the right, no ribbon.
+    Canvas,
+}
+
+impl Shell {
+    pub fn id(self) -> &'static str {
+        match self {
+            Shell::Classic => "classic",
+            Shell::Canvas => "canvas",
+        }
+    }
+    pub fn parse(s: &str) -> Option<Shell> {
+        match s {
+            "classic" => Some(Shell::Classic),
+            "canvas" => Some(Shell::Canvas),
+            _ => None,
+        }
+    }
+}
+
 /// Persisted UI state.
 #[derive(Clone, Debug, Serialize, Deserialize)]
 #[serde(default, rename_all = "camelCase")]
 pub struct UiState {
     pub brightness: theme::Brightness,
+    pub shell: Shell,
+    /// Canvas shell inspector tab: `design` or `animate`. Not saved: the app always opens on
+    /// Design.
+    #[serde(skip)]
+    pub inspector_tab: String,
     pub tab: String,
     pub ribbon_collapsed: bool,
     pub view: ViewMode,
@@ -274,12 +318,17 @@ pub struct UiState {
     pub comment_focus: Option<(usize, usize)>,
     /// Quick Access Toolbar buttons, left to right.
     pub qat: Vec<qat::QatItem>,
+    /// Canvas shell: the left panel (slides and layers) and the right panel (design) are hidden.
+    pub hide_left: bool,
+    pub hide_right: bool,
 }
 
 impl Default for UiState {
     fn default() -> Self {
         UiState {
             brightness: theme::Brightness::Light,
+            shell: Shell::Classic,
+            inspector_tab: "design".into(),
             tab: "Home".into(),
             ribbon_collapsed: false,
             view: ViewMode::Normal,
@@ -302,6 +351,8 @@ impl Default for UiState {
             smartart_row: 0,
             smartart_focus: None,
             smartart_drafts: (0, vec![]),
+            hide_left: false,
+            hide_right: false,
             grayscale: false,
             comment_focus: None,
             qat: qat::defaults(),
@@ -364,6 +415,9 @@ pub const UI_COMMANDS: &[(&str, &str, Option<&str>, &str)] = &[
     ("view.reading", "Reading View", None, "{}"),
     ("view.notes", "Notes", None, "{on?: bool}"),
     ("view.ruler", "Ruler", None, "{on?: bool}"),
+    ("view.panels", "Show/Hide Side Panels", Some("Cmd+."), "{on?: bool} (canvas layout: both side panels)"),
+    ("view.leftPanel", "Show/Hide Left Panel", Some("Alt+Cmd+."), "{on?: bool} (canvas layout: slides and layers)"),
+    ("view.collapseLayers", "Collapse Layers", Some("Alt+L"), "{} (fold every group in the Layers list)"),
     ("view.gridlines", "Gridlines", Some("Shift+F9"), "{on?: bool}"),
     ("view.guides", "Guides", Some("Alt+F9"), "{on?: bool}"),
     ("view.gridOptions", "Grid Options…", None, "{spacing?: pt, snap?: bool, smartGuides?: bool, gridlines?: bool, guides?: bool}"),
@@ -377,6 +431,7 @@ pub const UI_COMMANDS: &[(&str, &str, Option<&str>, &str)] = &[
     ("view.tab", "Ribbon Tab", None, "{tab}"),
     ("view.collapseRibbon", "Collapse the Ribbon", Some("Cmd+F1"), "{}"),
     ("view.dark", "Dark Mode", None, "{on?: bool}"),
+    ("view.shell", "Interface Layout", None, "{shell?: classic|canvas}"),
     ("view.grayscale", "Grayscale", None, "{on?: bool}"),
     ("view.newWindow", "New Window", None, "{on?: bool, slide?: index, delta?: int}"),
     ("show.start", "Slide Show", Some("F5"), "{from?: index, custom?: name}"),
@@ -394,6 +449,7 @@ pub const UI_COMMANDS: &[(&str, &str, Option<&str>, &str)] = &[
     ),
     ("app.about", "About DeckCraft", None, "{}"),
     ("app.palette", "Command Palette", Some("Cmd+Shift+P"), "{}"),
+    ("edit.pasteToReplace", "Paste to Replace", Some("Cmd+Shift+R"), "{}"),
     ("app.preferences", "Preferences…", Some("Cmd+,"), "{}"),
     ("app.openDialog", "Open…", None, "{purpose?}"),
     ("app.insertPictureDialog", "Picture from File…", None, "{}"),
@@ -454,7 +510,12 @@ pub struct SlideApp {
     /// A presentation being read in the background, with its progress window ([`opening`]).
     pub opening: Option<opening::Opening>,
     /// A brief notice over the bottom of the window (missing fonts on opening a file).
-    pub toast: Option<toast::Toast>,
+    /// Notices showing (see `toast.rs`).
+    pub toasts: Vec<toast::Toast>,
+    /// The find bar, while it's open (⌘F).
+    pub find: Option<find::FindBar>,
+    /// The macOS menu bar, when the desktop app installed one (else the menus are in the window).
+    pub native_menu: Option<native_menu::NativeMenu>,
     /// Documents (by uid) whose missing fonts have been mentioned.
     fonts_noted: std::collections::HashSet<u64>,
     pub perf: Perf,
@@ -484,6 +545,23 @@ pub struct SlideApp {
     styled: bool,
     restyle: bool,
     fonts_ready: bool,
+    /// Text detached from its style in the canvas panel this session: shown with every type control
+    /// and left alone when the style is edited, though its values still match the style.
+    pub detached: std::collections::HashSet<deckcraft_model::ShapeId>,
+    /// The slide list has the keyboard (a thumbnail was clicked last): ⌘D, Delete, ⇧⌘H, ⌘↑ / ⌘↓
+    /// and ⇧↑ / ⇧↓ act on slides (see `thumbs::slide_key`). A click anywhere else gives it back.
+    pub slides_focus: bool,
+    /// Where the slide list was drawn last frame, so a click there keeps its focus.
+    pub thumbs_rect: Option<egui::Rect>,
+    /// The states strip has the keyboard (a state was clicked last): ← / → walk the states,
+    /// ⌘← / ⌘→ move one, ⌘D adds one after it, Delete removes it (see `states::strip_key`). A click
+    /// anywhere else, or Esc, gives it back.
+    pub states_focus: bool,
+    /// Where the states strip was drawn last frame, so a click there keeps its focus.
+    pub strip_rect: Option<egui::Rect>,
+    /// The slide a ⇧-extended range starts from, and the one it reaches.
+    pub slide_anchor: Option<usize>,
+    pub slide_cursor: Option<usize>,
     last_time: f64,
     /// When AutoRecover data was last written (seconds, egui time).
     pub last_recovery: f64,
@@ -494,6 +572,10 @@ pub struct SlideApp {
     pub ui_fonts: uifonts::UiFonts,
     /// Thumbnail pane drag (slide index, current drop index).
     pub(crate) thumb_drag: Option<(usize, usize)>,
+    /// The drag in `thumb_drag` started in the sorter's grid (else in the slide list). Only the
+    /// view it started in places it: in the canvas layout's grid the slide list is on screen too,
+    /// and it used to move the slide to where the pointer's height fell in the list.
+    pub(crate) thumb_drag_in_grid: bool,
     /// Selection pane: folded groups, renaming, drag and drop.
     pub selpane: selpane::State,
     /// View › New Window: a second window on one presentation. `None` when it is closed.
@@ -545,7 +627,9 @@ impl SlideApp {
             media: media::MediaHost::new(audio_out),
             status: None,
             opening: None,
-            toast: None,
+            toasts: Vec::new(),
+            native_menu: None,
+            find: None,
             fonts_noted: Default::default(),
             perf: Perf { frame_ms: 0.0, render_ms: 0.0, fps: 0.0 },
             synthetic: vec![],
@@ -565,12 +649,20 @@ impl SlideApp {
             styled: false,
             restyle: true,
             fonts_ready: false,
+            detached: Default::default(),
+            slides_focus: false,
+            thumbs_rect: None,
+            states_focus: false,
+            strip_rect: None,
+            slide_anchor: None,
+            slide_cursor: None,
             last_time: 0.0,
             last_recovery: 0.0,
             quit_confirmed: false,
             notes_buf: (0, usize::MAX, notes::Draft::default()),
             ui_fonts: uifonts::UiFonts::default(),
             thumb_drag: None,
+            thumb_drag_in_grid: false,
             selpane: selpane::State::default(),
             doc_window: None,
             sorter: sorter::State::default(),
@@ -588,14 +680,46 @@ impl SlideApp {
         self
     }
 
+    /// Engine behaviour that follows the layout: in the canvas shell clicks pass through locked
+    /// layers (select them in the Layers list); the ribbon keeps PowerPoint's lock.
+    fn sync_shell_prefs(&mut self) {
+        self.session.prefs.locked_click_through = self.ui.shell == Shell::Canvas;
+        self.session.prefs.cmd_deep_select = self.ui.shell == Shell::Canvas;
+        self.session.prefs.group_keeps_aspect = self.ui.shell == Shell::Canvas;
+    }
+
+    /// Run `cmds` as one undo step named `label` (each command would make its own).
+    pub fn run_as_one(&mut self, label: &str, cmds: Vec<(&str, Value)>) {
+        let before = self.session.active().map(|d| d.history.undo.len()).unwrap_or(0);
+        for (id, p) in cmds {
+            if let Err(e) = self.run(id, p) {
+                self.set_status(e);
+            }
+        }
+        let Some(st) = self.session.active_mut() else { return };
+        let undo = &mut st.history.undo;
+        if undo.len() > before + 1 {
+            // Keep the first step (the document before them all), drop the ones after it.
+            undo.truncate(before + 1);
+            if let Some(e) = undo.last_mut() {
+                e.label = label.to_string();
+            }
+        }
+    }
+
     pub fn set_status(&mut self, msg: impl Into<String>) {
-        self.status = Some((msg.into(), now_ms()));
+        let msg = msg.into();
+        // The canvas layout has no status bar: the message is a notice there.
+        if self.ui.shell == Shell::Canvas && !msg.is_empty() {
+            toast::post(self, "DeckCraft", msg.clone(), false);
+        }
+        self.status = Some((msg, now_ms()));
     }
 
     /// A message that must be seen wherever the user is: a toast, which also shows over the start
     /// screen and the File tab, where there is no status bar.
     pub fn notify(&mut self, msg: impl Into<String>) {
-        self.toast = Some(toast::Toast { text: msg.into(), at: now_ms() });
+        toast::post(self, "DeckCraft", msg.into(), false);
     }
 
     /// The transient status message while it is fresh; clears it once stale. Both the status bar
@@ -840,6 +964,19 @@ impl SlideApp {
             "view.reading" => self.start_show(self.session.active().map(|d| d.selection.slide).unwrap_or(0), true),
             "view.notes" => self.ui.notes = self.flag(p, self.ui.notes),
             "view.ruler" => self.ui.ruler = self.flag(p, self.ui.ruler),
+            "view.panels" => {
+                // Hide both while either shows; show both when both are hidden.
+                // `on`: the panels shown.
+                let shown = self.flag(p, !self.ui.hide_left || !self.ui.hide_right);
+                self.ui.hide_left = !shown;
+                self.ui.hide_right = !shown;
+            }
+            "view.leftPanel" => self.ui.hide_left = !self.flag(p, !self.ui.hide_left),
+            "view.collapseLayers" => {
+                if let Some(d) = self.session.active() {
+                    self.selpane.collapsed.extend(selpane::all_groups(d.shapes()));
+                }
+            }
             "view.gridlines" => self.ui.gridlines = self.flag(p, self.ui.gridlines),
             "view.guides" => {
                 self.ui.guides = self.flag(p, self.ui.guides);
@@ -943,8 +1080,18 @@ impl SlideApp {
                 self.ui.brightness = if on { theme::Brightness::Dark } else { theme::Brightness::Light };
                 self.restyle = true;
             }
+            "view.shell" => {
+                self.ui.shell = match p.get("shell").and_then(Value::as_str) {
+                    Some(id) => Shell::parse(id).ok_or_else(|| format!("unknown layout `{id}` (classic or canvas)"))?,
+                    None if self.ui.shell == Shell::Classic => Shell::Canvas,
+                    None => Shell::Classic,
+                };
+                self.sync_shell_prefs();
+                return Ok(json!({"shell": self.ui.shell.id()}));
+            }
             "view.grayscale" => self.ui.grayscale = self.flag(p, self.ui.grayscale),
             "view.newWindow" => return doc_window::command(self, p),
+            "edit.pasteToReplace" => return self.paste_to_replace(),
             "show.start" => {
                 if let Some(name) = p.get("custom").and_then(Value::as_str).filter(|s| !s.is_empty()) {
                     self.start_custom_show(name, false);
@@ -1066,6 +1213,25 @@ impl SlideApp {
     /// First slide Play from Start should open: the custom show or range, skipping hidden slides.
     pub fn show_start_index(&self) -> usize {
         self.session.active().and_then(|d| deckcraft_anim::show_order(&d.doc).first().copied()).unwrap_or(0)
+    }
+
+    /// Preview slides `from..=to` in the editor's canvas (not full screen): their animations and
+    /// transitions play by themselves, then editing carries on. Esc or a click stops it early.
+    pub fn preview_inline(&mut self, from: usize, to: usize) {
+        self.media.stop_owned(media::Owner::Editor);
+        if let Some(d) = self.session.active() {
+            let mut s = show::Show::new(&d.doc, from, false, false);
+            s.inline = true;
+            s.preview_only = true;
+            s.autoplay = true;
+            s.stop_after = Some(to.max(from));
+            self.show = Some(s);
+        }
+    }
+
+    /// Is a preview playing in the canvas?
+    pub fn previewing(&self) -> bool {
+        self.show.as_ref().is_some_and(|s| s.inline)
     }
 
     pub fn start_show(&mut self, from: usize, reading: bool) {
@@ -1514,6 +1680,7 @@ impl SlideApp {
 
     /// Per-frame logic before layout: styles, control requests, screenshots, shortcuts.
     pub fn logic(&mut self, ctx: &egui::Context) {
+        native_menu::run(self, ctx);
         let scale = self.ui.ui_scale.clamp(0.5, 3.0);
         if (ctx.zoom_factor() - scale).abs() > 1e-3 {
             ctx.set_zoom_factor(scale);
@@ -1626,6 +1793,9 @@ impl SlideApp {
 
     /// Inject synthetic events (one pointer event per frame).
     pub fn raw_input_hook(&mut self, raw: &mut egui::RawInput) {
+        if let Some(menu) = self.native_menu.as_mut() {
+            menu.raw_input(raw);
+        }
         if self.synthetic.is_empty() {
             return;
         }
@@ -1658,9 +1828,22 @@ impl SlideApp {
                 _ => {}
             }
         }
-        if ctx.memory(|m| m.focused().is_some()) || self.dialog.as_ref().is_some_and(|d| d.modal()) || self.palette.is_some() {
+        self.track_slides_focus(ctx);
+        // The preview playing in the canvas has the keys (→, Esc).
+        if self.show.is_some() {
             return;
         }
+        // A Layers row with the keyboard keeps its own keys (↑ / ↓, Home / End, F2, Esc) and takes
+        // no typing, but shortcuts (⌘G, ⇧⌘G, ⌘C, Delete…) act on the layers selected there.
+        let focused = ctx.memory(|m| m.focused());
+        let layer_row = focused.is_some_and(|f| selpane::is_row(self, f));
+        if (focused.is_some() && !layer_row) || self.dialog.as_ref().is_some_and(|d| d.modal()) || self.palette.is_some() {
+            return;
+        }
+        let slides_keys = self.slides_focus || self.ui.view == ViewMode::Sorter;
+        // Nothing selected on the slide: Delete and Cut have nothing to act on (the engine would
+        // take the slide), as in PowerPoint.
+        let nothing = self.session.active().is_some_and(|d| d.selection.shapes.is_empty() && d.selection.text.is_none());
         if self.backstage.is_some() {
             // The File tab: its own keys (Esc goes back, arrows walk the side menu) and app
             // shortcuts (New, Open, Command Palette…); typing, pasting or deleting would edit the
@@ -1683,49 +1866,54 @@ impl SlideApp {
             self.drain_requests();
             return;
         }
-        let img = if image_paste { self.services.clipboard_image.as_mut().and_then(|f| f()) } else { None };
-        if let Some(png) = img {
-            let data = deckcraft_engine::cmd::base64_encode(&png);
-            if let Err(e) = self.session.execute("insert.picture", &json!({"name": "Pasted image.png", "data": data})) {
-                self.set_status(e.to_string());
-            }
+        // That paste: an image on the clipboard, else what was copied here (shapes, slides).
+        if image_paste {
+            self.paste("");
         }
         for e in events {
             match e {
+                egui::Event::Text(_) if layer_row => {}
                 egui::Event::Text(t) => {
-                    if self.session.active().is_some_and(|d| d.selection.text.is_some() || d.selection.shapes.len() == 1)
+                    // In the canvas shell letters pick tools unless text is being edited (Enter
+                    // edits a selected shape's text); the ribbon types over a selected shape.
+                    let types_over = self.ui.shell == Shell::Classic;
+                    if self.session.active().is_some_and(|d| d.selection.text.is_some() || (types_over && d.selection.shapes.len() == 1))
                         && let Err(e) = self.session.type_text(&t)
                     {
                         self.set_status(e.to_string());
                     }
                 }
-                egui::Event::Ime(ime) => self.ime_event(&ime),
-                egui::Event::Copy => self.publish_clipboard(ctx, false),
-                egui::Event::Cut => self.publish_clipboard(ctx, true),
+                egui::Event::Ime(ime) if !layer_row => self.ime_event(&ime),
+                // The slide list copies and cuts whole slides, a slide with its states.
+                egui::Event::Copy => {
+                    if slides_keys {
+                        thumbs::select_runs(self);
+                    }
+                    self.publish_clipboard(ctx, false, slides_keys);
+                }
+                egui::Event::Cut if nothing && !slides_keys => {}
+                egui::Event::Cut => {
+                    if slides_keys {
+                        thumbs::select_runs(self);
+                    }
+                    self.publish_clipboard(ctx, true, slides_keys);
+                }
+                // ⇧⌘V (and ⌥⇧⌘V, the Mac's Paste and Match Style) pastes the text alone.
                 egui::Event::Paste(text) => {
-                    // Our own marker for objects without text: paste what the session copied.
-                    let text = if text == OBJECTS_MARKER { String::new() } else { text };
-                    // A picture (TIFF from Keynote, a screenshot) lands when the paste has no text.
-                    // Text keeps its HTML (bold, italic, underline) when the host can read it.
-                    let html = self.services.clipboard_html.as_mut().and_then(|f| f()).filter(|h| !h.is_empty());
-                    let img = if text.is_empty() { self.services.clipboard_image.as_mut().and_then(|f| f()) } else { None };
-                    let r = match img {
-                        Some(png) => self
-                            .session
-                            .execute("insert.picture", &json!({"name": "Pasted image.png", "data": deckcraft_engine::cmd::base64_encode(&png)})),
-                        None => {
-                            let mut params = json!({"text": text});
-                            if let Some(h) = html {
-                                params["html"] = Value::String(h);
-                            }
-                            self.session.execute("edit.paste", &params)
+                    if ctx.input(|i| i.modifiers.shift) {
+                        let text = if text == OBJECTS_MARKER { String::new() } else { text };
+                        if let Err(e) = self.session.execute("edit.pasteText", &json!({"text": text})) {
+                            self.set_status(e.to_string());
                         }
-                    };
-                    if let Err(e) = r {
-                        self.set_status(e.to_string());
+                    } else {
+                        self.paste(&text);
                     }
                 }
                 egui::Event::Key { key, pressed: true, modifiers, .. } => {
+                    use egui::Key::{ArrowDown, ArrowUp, End, Escape, F2, Home, Tab};
+                    if layer_row && !modifiers.command && !modifiers.ctrl && matches!(key, ArrowUp | ArrowDown | Home | End | F2 | Escape | Tab) {
+                        continue;
+                    }
                     if key == egui::Key::Tab {
                         // The slide has the keyboard, so Tab is ours (indent, tab character, next
                         // shape). Left to egui it would also focus the first ribbon widget, and
@@ -1737,6 +1925,21 @@ impl SlideApp {
                         continue;
                     }
                     let mods = Mods { shift: modifiers.shift, alt: modifiers.alt, cmd: modifiers.command || modifiers.ctrl };
+                    if self.states_focus && states::strip_key(self, key, mods) {
+                        continue;
+                    }
+                    if slides_keys && thumbs::slide_key(self, key, mods) {
+                        continue;
+                    }
+                    if nothing && !slides_keys && matches!(key, egui::Key::Delete | egui::Key::Backspace) {
+                        continue;
+                    }
+                    if self.ui.shell == Shell::Canvas && canvas_shell::tool_key(self, key, mods) {
+                        continue;
+                    }
+                    if menus::mac_shortcut(self, key, mods) {
+                        continue;
+                    }
                     if !self.session.tool.drawing_freeform() && menus::ui_shortcut(self, key, mods) {
                         continue;
                     }
@@ -1752,15 +1955,119 @@ impl SlideApp {
         self.drain_requests();
     }
 
-    /// Offer the copy or cut on the system clipboard.
+    /// The slide list keeps the keyboard until a click lands elsewhere, or a shape or text is
+    /// selected (from the Layers list, say).
+    fn track_slides_focus(&mut self, ctx: &egui::Context) {
+        let elsewhere =
+            ctx.input(|i| i.pointer.primary_pressed() && i.pointer.interact_pos().is_some_and(|p| !self.thumbs_rect.is_some_and(|r| r.contains(p))));
+        let editing = self.session.active().is_none_or(|d| !d.selection.shapes.is_empty() || d.selection.text.is_some());
+        if elsewhere || editing {
+            self.slides_focus = false;
+        }
+        let off_strip =
+            ctx.input(|i| i.pointer.primary_pressed() && i.pointer.interact_pos().is_some_and(|p| !self.strip_rect.is_some_and(|r| r.contains(p))));
+        if off_strip || editing || !states::strip_shown(self) {
+            self.states_focus = false;
+        }
+    }
+
+    /// Paste to Replace (⇧⌘R), as in canvas editors: what's on the clipboard (an image, else what
+    /// was copied here) takes each selected object's place: centred on it, at its place in the
+    /// stack, and the object removed. One undo step.
+    pub fn paste_to_replace(&mut self) -> Result<Value, String> {
+        let Some(st) = self.session.active() else { return Err("no presentation".into()) };
+        let top: Vec<deckcraft_model::ShapeId> = st.shapes().iter().map(|s| s.id).collect();
+        let targets: Vec<(deckcraft_model::ShapeId, deckcraft_model::Xfrm)> = st
+            .selection
+            .shapes
+            .iter()
+            .filter(|id| top.contains(id))
+            .filter_map(|id| st.shape(*id).map(|s| (*id, deckcraft_engine::cmd::xfrm_of(&st.doc, &st.selection, s))))
+            .collect();
+        if targets.is_empty() {
+            return Err("Select the objects to replace".into());
+        }
+        let image = self.services.clipboard_image.as_mut().and_then(|f| f());
+        if image.is_none() && self.session.clipboard.shapes.is_empty() {
+            return Err("Copy something to paste in their place".into());
+        }
+        let before = self.session.active().map(|d| d.history.undo.len()).unwrap_or(0);
+        let mut pasted = vec![];
+        for (target, x) in targets {
+            let r = match &image {
+                Some(png) => self.run("insert.picture", json!({"name": "Pasted image.png", "data": deckcraft_engine::cmd::base64_encode(png)})),
+                None => self.run("edit.paste", json!({})),
+            };
+            r?;
+            let Some(st) = self.session.active() else { break };
+            let ids = st.selection.shapes.clone();
+            let boxes: Vec<deckcraft_model::Xfrm> =
+                ids.iter().filter_map(|id| st.shape(*id).map(|s| deckcraft_engine::cmd::xfrm_of(&st.doc, &st.selection, s))).collect();
+            let Some(first) = boxes.first() else { continue };
+            let (mut x0, mut y0, mut x1, mut y1) = (first.x, first.y, first.x + first.w, first.y + first.h);
+            for b in &boxes {
+                (x0, y0, x1, y1) = (x0.min(b.x), y0.min(b.y), x1.max(b.x + b.w), y1.max(b.y + b.h));
+            }
+            let (dx, dy) = (x.x + x.w / 2.0 - (x0 + x1) / 2.0, x.y + x.h / 2.0 - (y0 + y1) / 2.0);
+            self.run("shape.move", json!({"ids": ids, "dx": dx, "dy": dy}))?;
+            // Into the target's place in the stack (it moves up as they go in below it).
+            let at = self.session.active().and_then(|d| d.shapes().iter().position(|s| s.id == target)).unwrap_or(0);
+            for (k, id) in ids.iter().enumerate() {
+                self.run("arrange.reorder", json!({"id": id, "index": at + k}))?;
+            }
+            self.run("edit.delete", json!({"ids": [target]}))?;
+            pasted.extend(ids);
+        }
+        let _ = self.run("selection.select", json!({"ids": pasted}));
+        if let Some(st) = self.session.active_mut() {
+            let undo = &mut st.history.undo;
+            if undo.len() > before + 1 {
+                undo.truncate(before + 1);
+            }
+            if undo.len() > before
+                && let Some(e) = undo.last_mut()
+            {
+                e.label = "Paste to Replace".into();
+            }
+        }
+        Ok(json!({"ids": pasted}))
+    }
+
+    /// Paste from the system clipboard. Our own marker for objects without text pastes what the
+    /// session copied; a picture (TIFF from Keynote, a screenshot) lands when the paste has no
+    /// text; text keeps its HTML (bold, italic, underline) when the host can read it.
+    fn paste(&mut self, text: &str) {
+        let text = if text == OBJECTS_MARKER { "" } else { text };
+        let html = self.services.clipboard_html.as_mut().and_then(|f| f()).filter(|h| !h.is_empty());
+        let img = if text.is_empty() { self.services.clipboard_image.as_mut().and_then(|f| f()) } else { None };
+        let r = match img {
+            Some(png) => {
+                self.session.execute("insert.picture", &json!({"name": "Pasted image.png", "data": deckcraft_engine::cmd::base64_encode(&png)}))
+            }
+            None => {
+                let mut params = json!({"text": text});
+                if let Some(h) = html {
+                    params["html"] = Value::String(h);
+                }
+                self.session.execute("edit.paste", &params)
+            }
+        };
+        if let Err(e) = r {
+            self.set_status(e.to_string());
+        }
+    }
+
+    /// Offer the copy or cut on the system clipboard (`slides`: the slide list has the keyboard,
+    /// so the selected slides).
     ///
     /// Slides go out as plain text. Text goes out as HTML plus the same plain words, so a paste
     /// back into DeckCraft still uses the internal clipboard. A textless shape leaves the
     /// invisible [`OBJECTS_MARKER`] rather than a picture: with only an image on the clipboard
     /// egui-winit drops Ctrl+V, and the shortcut could no longer paste the shape here (#182).
-    fn publish_clipboard(&mut self, ctx: &egui::Context, cut: bool) {
+    fn publish_clipboard(&mut self, ctx: &egui::Context, cut: bool, slides: bool) {
         let cmd = if cut { "edit.cut" } else { "edit.copy" };
-        let Ok(v) = self.session.execute(cmd, &json!({})) else { return };
+        let p = if slides { json!({"scope": "slides"}) } else { json!({}) };
+        let Ok(v) = self.session.execute(cmd, &p) else { return };
         let text = v.get("text").and_then(Value::as_str).unwrap_or("").to_string();
         let html = v.get("html").and_then(Value::as_str).unwrap_or("").to_string();
         if self.session.clipboard.slides.is_empty() && !html.is_empty() && self.services.clipboard_set_html.as_mut().is_some_and(|f| f(&html, &text))
@@ -1784,6 +2091,9 @@ impl SlideApp {
         self.opening_ui(&ctx);
         if self.show.is_some() {
             self.anim_preview = None;
+        }
+        // A full slide show takes the window; an inline preview plays in the canvas.
+        if self.show.as_ref().is_some_and(|s| !s.inline) {
             show::ui(self, ui);
             doc_window::show(self, &ctx);
             self.perf.frame_ms = now_ms() - t0;
@@ -1791,8 +2101,23 @@ impl SlideApp {
         }
         self.sync_backstage();
         self.keyboard(&ctx);
+        // Drawn again below when the slide list (or the states strip) is shown.
+        self.thumbs_rect = None;
+        self.strip_rect = None;
         self.sync_backstage();
+        self.sync_shell_prefs();
         ribbon::title_bar(self, ui);
+        // The menus: in the macOS menu bar when there is one, else under the title bar (canvas
+        // layout; the ribbon has its own tabs).
+        if self.native_menu.is_none() && self.ui.shell == Shell::Canvas && self.backstage.is_none() {
+            native_menu::bar_ui(self, ui);
+        }
+        ribbon::doc_strip(self, ui);
+        if self.ui.shell == Shell::Canvas && self.backstage.is_none() {
+            canvas_shell::show(self, ui);
+            self.finish_frame(&ctx, t0);
+            return;
+        }
         if self.backstage.is_none() && self.session.active().is_some() {
             ribbon::show(self, ui);
             status::status_bar(self, ui);
@@ -1826,15 +2151,25 @@ impl SlideApp {
                         if self.ui.notes {
                             status::notes_pane(self, ui);
                         }
-                        canvas::show(self, ui);
+                        if self.previewing() {
+                            show::ui(self, ui);
+                        } else {
+                            canvas::show(self, ui);
+                        }
                     });
                 }
             }
         });
+        self.finish_frame(&ctx, t0);
+    }
+
+    /// Toasts, dialogs, the palette and queued requests: drawn over whichever shell is in use.
+    fn finish_frame(&mut self, ctx: &egui::Context, t0: f64) {
         toast::note_missing_fonts(self);
-        toast::show(self, &ctx);
-        dialogs::show(self, &ctx);
-        menus::palette(self, &ctx);
+        toast::show(self, ctx);
+        find::show(self, ctx);
+        dialogs::show(self, ctx);
+        menus::palette(self, ctx);
         for url in std::mem::take(&mut self.pending_urls) {
             ctx.open_url(egui::OpenUrl::new_tab(url));
         }
@@ -1842,7 +2177,7 @@ impl SlideApp {
             ctx.copy_text(t);
         }
         self.drain_requests();
-        doc_window::show(self, &ctx);
+        doc_window::show(self, ctx);
         self.perf.frame_ms = now_ms() - t0;
     }
 
@@ -2039,6 +2374,12 @@ mod datetime_tests;
 mod inbox_tests;
 
 #[cfg(test)]
+mod paste_tests;
+
+#[cfg(test)]
+mod shortcut_tests;
+
+#[cfg(test)]
 mod tests {
     #![allow(clippy::unwrap_used, clippy::expect_used)]
 
@@ -2163,18 +2504,18 @@ mod tests {
             SlideApp::new(Session::with_new(), Services::default()),
         );
         harness.run_steps(2);
-        assert!(harness.state().toast.is_none(), "a new presentation has nothing to say");
+        assert!(harness.state().toasts.is_empty(), "a new presentation has nothing to say");
         harness.state_mut().session.execute("file.openBytes", &json!({"name": "a.pptx", "data": data})).unwrap();
         harness.run_steps(2);
-        let text = harness.state().toast.as_ref().map(|t| t.text.clone()).unwrap_or_default();
+        let text = harness.state().toasts.first().map(|t| t.text.clone()).unwrap_or_default();
         assert!(text.starts_with("Qqq Nonexistent Sans isn't installed"), "{text}");
         assert!(harness.query_by_label_contains("Qqq Nonexistent Sans isn't installed").is_some());
         // Closed, it stays closed for that document.
         harness.get_by_label("Close").click();
         harness.run_steps(2);
-        assert!(harness.state().toast.is_none());
+        assert!(harness.state().toasts.is_empty());
         harness.run_steps(2);
-        assert!(harness.state().toast.is_none());
+        assert!(harness.state().toasts.is_empty());
     }
 
     /// #115: Change Picture replaced nothing — it inserted a second picture.
@@ -2887,7 +3228,7 @@ mod tests {
             harness.run_steps(1);
         }
         harness.run_steps(2);
-        assert!(harness.state().toast.is_some(), "the open error was raised");
+        assert!(!harness.state().toasts.is_empty(), "the open error was raised");
         assert!(harness.get_all_by_label_contains("missing.deckcraft").count() >= 2, "the open error is drawn on the page, next to the entry");
     }
 

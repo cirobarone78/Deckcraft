@@ -255,7 +255,7 @@ pub fn show(app: &mut SlideApp, ui: &mut Ui) {
         draw_guides(app, &painter, xf, slide_rect, &t);
     }
     if app.ui.ruler {
-        ruler(&painter, avail, slide_rect, scale, &t);
+        ruler(&painter, avail, slide_rect, scale, &t, crate::units::pixels(app));
         ruler_markers(app, ui, &painter, avail, xf, &t);
     }
     pointer(app, ui, &resp, xf);
@@ -433,11 +433,51 @@ fn master_tex(
     Some((crate::textures::upload_editor(ctx, "master-canvas", crate::textures::to_color_image(&img, false)), region))
 }
 
-fn ruler(p: &egui::Painter, avail: Rect, slide: Rect, scale: f32, t: &Tokens) {
+/// The ruler in pixels (the canvas layout): a label every 100, 200 or 500 px, whichever keeps
+/// them at least 40 points apart on screen, with ticks at tenths of that.
+fn px_ruler(p: &egui::Painter, top: Rect, left: Rect, slide: Rect, scale: f32, t: &Tokens) {
+    let per_px = scale / crate::units::PX_PER_PT as f32;
+    let every = [100.0_f32, 200.0, 500.0, 1000.0].into_iter().find(|e| e * per_px >= 40.0).unwrap_or(1000.0);
+    let tick = every / 10.0;
+    let mut k = 0;
+    loop {
+        let d = k as f32 * tick * per_px;
+        let (x, y) = (slide.min.x + d, slide.min.y + d);
+        if x > slide.max.x && y > slide.max.y {
+            break;
+        }
+        let len = if k % 10 == 0 {
+            8.0
+        } else if k % 5 == 0 {
+            5.0
+        } else {
+            3.0
+        };
+        if x <= slide.max.x {
+            p.line_segment([pos2(x, top.max.y - len), pos2(x, top.max.y)], Stroke::new(1.0, t.text_faint));
+            if k % 10 == 0 {
+                p.text(pos2(x + 2.0, top.min.y + 1.0), Align2::LEFT_TOP, format!("{}", (k as f32 * tick) as u32), theme::font(8.0), t.text_dim);
+            }
+        }
+        if y <= slide.max.y {
+            p.line_segment([pos2(left.max.x - len, y), pos2(left.max.x, y)], Stroke::new(1.0, t.text_faint));
+        }
+        k += 1;
+        if k > 100_000 {
+            break;
+        }
+    }
+}
+
+fn ruler(p: &egui::Painter, avail: Rect, slide: Rect, scale: f32, t: &Tokens, pixels: bool) {
     let top = Rect::from_min_max(avail.min, pos2(avail.max.x, avail.min.y + 16.0));
     let left = Rect::from_min_max(avail.min, pos2(avail.min.x + 16.0, avail.max.y));
     p.rect_filled(top, CornerRadius::ZERO, t.card);
     p.rect_filled(left, CornerRadius::ZERO, t.card);
+    if pixels {
+        px_ruler(p, top, left, slide, scale, t);
+        return;
+    }
     let inch = 72.0 * scale;
     let mut k = 0;
     loop {
@@ -924,6 +964,22 @@ fn overlays(app: &mut SlideApp, ui: &Ui, painter: &egui::Painter, xf: Xf, t: &To
             .map(|q| xf.to_screen(f.affine * q));
         poly(painter, pts, Stroke::new(2.0, t.accent));
     }
+    // ⌥ held over the slide with something selected: distances to what's under the pointer
+    // (⌘⌥: inside groups), or to the slide's edges.
+    let (alt, cmd, hover) = ui.input(|i| (i.modifiers.alt, i.modifiers.command, i.pointer.hover_pos()));
+    if alt
+        && !app.session.tool.dragging()
+        && editing.is_none()
+        && let Some(h) = hover.filter(|h| painter.clip_rect().contains(*h))
+    {
+        let (lines, target) = app.session.measure_hover(xf.to_slide(h), 4.0 / xf.scale.max(0.01) as f64, cmd);
+        crate::measure_overlay::draw(app, painter, xf, t, &lines, target);
+    }
+    // ⌥ while dragging layers: live distances to their nearest neighbours (or the slide's edges).
+    if alt && app.session.tool.moving_ids().is_some() {
+        let lines = app.session.measure_drag();
+        crate::measure_overlay::draw(app, painter, xf, t, &lines, None);
+    }
     // Smart guides, marquee, previews.
     for g in &app.session.tool.guides {
         let (a, b) =
@@ -1296,7 +1352,9 @@ fn context_menu(app: &mut SlideApp, resp: &egui::Response) {
                 }
             });
             if ui.button("Reset Slide").clicked() {
-                let _ = app.run("slide.reset", json!({}));
+                // The canvas layout keeps the slide's layers (no empty placeholders added).
+                let adopt = app.ui.shell == crate::Shell::Canvas;
+                let _ = app.run("slide.reset", json!({"adopt": adopt}));
                 ui.close();
             }
             if ui.button("Format Background…").clicked() {
