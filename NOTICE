@@ -74,9 +74,15 @@ Code dependencies
   FilmCraft (same owner, MIT OR Apache-2.0).
 - The shared Craft interface crates craft-ui and craft-cloud (the share dialog, the account
   badge, the presence row and the cloud Open and Save pages) are built from source, pinned by git
-  revision, from https://github.com/wdunn001/craft-libs under MIT OR Apache-2.0.
+  revision, from https://github.com/storytold/craft-libs under MIT OR Apache-2.0.
 - The CollabCraft client crates craft-cloud-client and collabcraft-share (how the desktop app
   reaches the cloud service) are built from source, pinned by git revision, from
-  https://github.com/wdunn001/collabcraft. That repository ships LICENSE-MIT and LICENSE-APACHE
-  while its Cargo metadata declares AGPL-3.0-or-later. The contradiction is upstream's to
-  settle.
+  https://github.com/wdunn001/collab-craft under MIT OR Apache-2.0.
+
+- Krilla 0.8.2 (https://github.com/LaurenzV/krilla) is used through craft-pdf under
+  MIT OR Apache-2.0. craft-libs vendors that version with page/surface unwind recovery
+  and rejection of serialization after failed cleanup. Its upstream licence files are
+  retained in craft-libs/licenses/pdf-writer. Its bundled Compact ICC Profiles by Clinton Ingram
+  (https://github.com/saucecontrol/Compact-ICC-Profiles) are CC0-1.0; the profile
+  licence is retained in licenses/pdf-writer/LICENSE-ICC.txt and exact files, sources
+  and hashes are in ATTRIBUTION.md.
