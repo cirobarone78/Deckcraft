@@ -3,8 +3,9 @@
 This integration combines the structured math and galleries from
 [PR #192](https://github.com/storytold/deckcraft/pull/192) with the paragraph editing behavior
 from [PR #771](https://github.com/storytold/deckcraft/pull/771), using its subsequent native-OMML
-port (`761790de627651a61d9747e62f919fcbe918fbe4`) as the interaction reference. It starts from
-upstream main `a15d93acdd5fdf3739c616ee40d4b51177fae8ef` and preserves #192's commit ancestry.
+port (`761790de627651a61d9747e62f919fcbe918fbe4`) as the interaction reference. It preserves
+#192's commit ancestry and includes upstream main through
+`9859da39255c0262cd592bb57101d7f2fa961f72`.
 
 ## Using equations
 
@@ -71,11 +72,11 @@ Checked on macOS with Rust 1.95.0 and the font setup above:
 
 | Check | Result |
 |---|---|
-| `cargo test --workspace --locked` | 1,731 passed; 6 ignored; no failures |
+| `cargo test --workspace --locked` | 1,743 passed; 6 ignored; no failures |
 | `cargo test --manifest-path vendor/equashion/Cargo.toml --workspace` | 257 passed; 1 ignored; no failures |
 | `cargo build -p deckcraft --locked` | Desktop executable builds |
 | `cargo xtask wasm` | All 23 checked crates pass |
-| `cargo xtask assets`, `cargo xtask layers` | Pass |
+| `cargo xtask pdf-deps`, `cargo xtask assets`, `cargo xtask layers` | Pass |
 | Formatting, staged diff whitespace, vendored library strict Clippy | Pass |
 
 The UI tests exercise actual Equation ribbon clicks, typing, fraction slots, arrow exit,
