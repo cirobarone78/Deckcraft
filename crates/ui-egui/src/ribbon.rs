@@ -1234,7 +1234,7 @@ fn insert(app: &mut SlideApp, ui: &mut Ui) {
         let r = big_button(ui, Icon::Chart, "Chart", enabled(app, "insert.chart"));
         egui::Popup::menu(&r).show(|ui| {
             if let Some(p) = chart_gallery(ui, None) {
-                run(app, "insert.chart", json!({"type": p.id}));
+                run(app, "insert.chart", json!({"type": p.id, "editData": true}));
             }
         });
     });
@@ -3031,7 +3031,7 @@ fn table_layout(app: &mut SlideApp, ui: &mut Ui) {
 
 /// The chart type gallery: a submenu per family (Column, Bar, Pie…) listing its types and
 /// variants, the current one checked. Returns the one picked.
-fn chart_gallery(ui: &mut Ui, current: Option<&deckcraft_model::Chart>) -> Option<&'static deckcraft_model::chart::ChartPreset> {
+pub(crate) fn chart_gallery(ui: &mut Ui, current: Option<&deckcraft_model::Chart>) -> Option<&'static deckcraft_model::chart::ChartPreset> {
     use deckcraft_model::chart::ChartPreset;
     let mut picked = None;
     for family in ChartPreset::FAMILIES {

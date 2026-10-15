@@ -67,7 +67,7 @@ pub fn specs() -> Vec<CommandSpec> {
             "Chart…",
             ["Insert", "Illustrations"],
             None,
-            "{type?: column|bar|line|pie|doughnut|area|scatter|bubble|radar|stock|columnLine|… (a ChartPreset id: stackedColumn, column3d, explodedPie, pieOfPie, lineSmooth, stockOhlc…), rect?, categories?: [..], series?: [{name, values}]}",
+            "{type?: column|bar|line|pie|doughnut|area|scatter|bubble|radar|stock|columnLine|… (a ChartPreset id: stackedColumn, column3d, explodedPie, pieOfPie, lineSmooth, stockOhlc…), rect?, categories?: [..], series?: [{name, values, xValues?, sizes?}], volume?, open?, high?, low?, close?: [..] (stock), editData?: bool (open the data editor)}",
             has_slide,
             chart
         ),
@@ -109,10 +109,11 @@ pub fn specs() -> Vec<CommandSpec> {
             "Edit Data",
             ["Chart Design", "Data"],
             None,
-            "{categories?: [..], levels?: [[..]] (outer category levels, innermost first), series?: [{name, values}], id?}",
+            "{categories?: [..], levels?: [[..]] (outer category levels, innermost first), series?: [{name, values, xValues?, sizes?}] (numbers, numeric text or null for a gap), xValues?: [..] (every series), volume?, open?, high?, low?, close?: [..] (stock series by role, instead of series), title?: string, id?}",
             has_selection,
             chart_data
         ),
+        cmd!("chart.title", "Chart Title", ["Chart Design", "Chart Layouts"], None, "{title: string|null, id?}", has_selection, chart_title_cmd),
         cmd!(
             "chart.options",
             "Chart Elements",
@@ -1256,16 +1257,10 @@ fn chart(s: &mut Session, p: &Value) -> Result<Value> {
     if let Some(cats) = p.get("categories").and_then(Value::as_array) {
         c.categories = cats.iter().map(|v| v.as_str().map(String::from).unwrap_or_else(|| v.to_string())).collect();
     }
-    if let Some(series) = p.get("series").and_then(Value::as_array) {
-        c.series = series
-            .iter()
-            .map(|sv| deckcraft_model::chart::Series {
-                name: sv.get("name").and_then(Value::as_str).unwrap_or("Series").to_string(),
-                values: sv.get("values").and_then(Value::as_array).map(|a| a.iter().map(Value::as_f64).collect()).unwrap_or_default(),
-                ..Default::default()
-            })
-            .collect();
+    if let Some(series) = super::chartdata::stock_series(p).or_else(|| p.get("series").and_then(Value::as_array).cloned()) {
+        c.series = series.iter().take(deckcraft_model::chart_data::MAX_SERIES).map(|sv| super::chartdata::series_from(sv, None)).collect();
     }
+    c.fit_data();
     if let Some(t) = p.get("title") {
         c.title = t.as_str().map(String::from);
     }
@@ -1273,6 +1268,10 @@ fn chart(s: &mut Session, p: &Value) -> Result<Value> {
     let size = s.doc()?.doc.slide_size;
     let rect = rect_param(p, "rect").unwrap_or(Xfrm::new(size.width * 0.15, size.height * 0.15, size.width * 0.7, size.height * 0.7));
     let id = add_shape(s, "insert.chart", Shape { xfrm: Some(rect), kind: ShapeKind::Chart(Box::new(c)), ..Default::default() }, true)?;
+    // The UI asks for the data editor; programmatic calls never open it.
+    if bool_param(p, "editData") == Some(true) {
+        s.ui_requests.push(crate::UiRequest::Dialog { id: "chartData".into(), params: json!({"id": id}) });
+    }
     Ok(json!({"id": id}))
 }
 
@@ -1734,15 +1733,9 @@ fn chart_data(s: &mut Session, p: &Value) -> Result<Value> {
         .get("categories")
         .and_then(Value::as_array)
         .map(|a| a.iter().map(|v| v.as_str().map(String::from).unwrap_or_else(|| v.to_string())).collect());
-    let series: Option<Vec<deckcraft_model::chart::Series>> = p.get("series").and_then(Value::as_array).map(|a| {
-        a.iter()
-            .map(|sv| deckcraft_model::chart::Series {
-                name: sv.get("name").and_then(Value::as_str).unwrap_or("Series").to_string(),
-                values: sv.get("values").and_then(Value::as_array).map(|v| v.iter().map(Value::as_f64).collect()).unwrap_or_default(),
-                ..Default::default()
-            })
-            .collect()
-    });
+    let series: Option<Vec<Value>> = super::chartdata::stock_series(p)
+        .or_else(|| p.get("series").and_then(Value::as_array).map(|a| a.iter().take(deckcraft_model::chart_data::MAX_SERIES).cloned().collect()));
+    let shared_x = super::chartdata::numbers(p.get("xValues"));
     let levels: Option<Vec<Vec<String>>> = p.get("levels").and_then(Value::as_array).map(|a| {
         a.iter()
             .take(deckcraft_model::chart::MAX_LEVELS)
@@ -1752,6 +1745,9 @@ fn chart_data(s: &mut Session, p: &Value) -> Result<Value> {
             .collect()
     });
     with_chart(s, p, "chart.data", |c| {
+        if let Some(t) = p.get("title").and_then(Value::as_str) {
+            c.title = Some(t.to_string());
+        }
         if let Some(cs) = &cats {
             c.categories = cs.clone();
         }
@@ -1759,19 +1755,16 @@ fn chart_data(s: &mut Session, p: &Value) -> Result<Value> {
             c.category_levels = l.clone();
         }
         if let Some(se) = &series {
-            // Keep series formatting by position.
+            // Keep series formatting (and X values, sizes not given) by position.
             let old = std::mem::take(&mut c.series);
-            c.series = se
-                .iter()
-                .enumerate()
-                .map(|(i, n)| {
-                    let mut x = old.get(i).cloned().unwrap_or_default();
-                    x.name = n.name.clone();
-                    x.values = n.values.clone();
-                    x
-                })
-                .collect();
+            c.series = se.iter().enumerate().map(|(i, n)| super::chartdata::series_from(n, old.get(i).cloned())).collect();
         }
+        if let Some(xs) = &shared_x {
+            for ser in &mut c.series {
+                ser.x_values = xs.clone();
+            }
+        }
+        c.fit_data();
         c.raw = None;
         Ok(())
     })
@@ -1833,6 +1826,14 @@ fn chart_options(s: &mut Session, p: &Value) -> Result<Value> {
         if let Some(v) = str_param(p, "palette") {
             c.palette = v.to_string();
         }
+        c.raw = None;
+        Ok(())
+    })
+}
+
+fn chart_title_cmd(s: &mut Session, p: &Value) -> Result<Value> {
+    with_chart(s, p, "chart.title", |c| {
+        c.title = p.get("title").and_then(Value::as_str).map(String::from);
         c.raw = None;
         Ok(())
     })

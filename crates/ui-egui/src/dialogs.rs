@@ -79,12 +79,14 @@ pub fn show(app: &mut SlideApp, ctx: &egui::Context) {
     let Some(mut d) = app.dialog.take() else { return };
     let mut open = true;
     let mut close = false;
-    let mut window = egui::Window::new(title(&d.id))
-        .id(egui::Id::new(("dialog", d.id.clone())))
-        .collapsible(false)
-        .resizable(false)
-        .anchor(Align2::CENTER_CENTER, vec2(0.0, -40.0))
-        .open(&mut open);
+    let is_chart = d.id == "chartData";
+    let mut window = egui::Window::new(title(&d.id)).id(egui::Id::new(("dialog", d.id.clone()))).collapsible(false).open(&mut open);
+    if is_chart {
+        let (size, min) = crate::chartdata::window_size();
+        window = window.resizable(true).default_size(size).min_size(min);
+    } else {
+        window = window.resizable(false).anchor(Align2::CENTER_CENTER, vec2(0.0, -40.0));
+    }
     // Two columns of colour rows plus Save must fit the first frame (Theme Colors), as must Save
     // in Theme Fonts. A later resize clips the buttons (the window size sticks) and clicks miss them.
     if d.id == "themeColors" {
@@ -96,6 +98,7 @@ pub fn show(app: &mut SlideApp, ctx: &egui::Context) {
         ui.set_min_width(match d.id.as_str() {
             "themeColors" => 700.0,
             "themeFonts" => 400.0,
+            "chartData" => 460.0,
             _ => 340.0,
         });
         if d.id == "themeColors" {
@@ -1966,58 +1969,7 @@ fn body(app: &mut SlideApp, ui: &mut Ui, d: &mut Dialog) -> bool {
             }
             ok || cancel
         }
-        "chartData" => {
-            let ch = app.session.active().and_then(|s| {
-                s.selected_shapes()
-                    .into_iter()
-                    .find_map(|x| if let deckcraft_model::ShapeKind::Chart(c) = &x.kind { Some(((**c).clone(), x.id)) } else { None })
-            });
-            let Some((c, id)) = ch else {
-                ui.label("Select a chart first.");
-                let (ok, cancel) = buttons(ui, "Close");
-                return ok || cancel;
-            };
-            ui.label("Edit the data: first row = series names, first column = categories.");
-            let mut grid: Vec<Vec<String>> = d.params.get("grid").and_then(|g| serde_json::from_value(g.clone()).ok()).unwrap_or_else(|| {
-                let mut g = vec![std::iter::once(String::new()).chain(c.series.iter().map(|s| s.name.clone())).collect::<Vec<_>>()];
-                for (i, cat) in c.categories.iter().enumerate() {
-                    let mut row = vec![cat.clone()];
-                    for s in &c.series {
-                        row.push(s.values.get(i).copied().flatten().map(|v| v.to_string()).unwrap_or_default());
-                    }
-                    g.push(row);
-                }
-                g
-            });
-            egui::Grid::new("chartdata").striped(true).show(ui, |ui| {
-                for row in grid.iter_mut() {
-                    for cell in row.iter_mut() {
-                        ui.add(egui::TextEdit::singleline(cell).desired_width(70.0));
-                    }
-                    ui.end_row();
-                }
-            });
-            ui.horizontal(|ui| {
-                if ui.button("+ Row").clicked() {
-                    let n = grid.first().map(|r| r.len()).unwrap_or(2);
-                    grid.push(vec![String::new(); n]);
-                }
-                if ui.button("+ Series").clicked() {
-                    for r in grid.iter_mut() {
-                        r.push(String::new());
-                    }
-                }
-            });
-            d.params = json!({"grid": grid});
-            let (ok, cancel) = buttons(ui, "OK");
-            if ok {
-                let names: Vec<String> = grid.first().map(|r| r.iter().skip(1).cloned().collect()).unwrap_or_default();
-                let cats: Vec<String> = grid.iter().skip(1).map(|r| r.first().cloned().unwrap_or_default()).collect();
-                let series: Vec<Value> = names.iter().enumerate().map(|(k, n)| json!({"name": n, "values": grid.iter().skip(1).map(|r| r.get(k + 1).and_then(|v| v.trim().parse::<f64>().ok())).collect::<Vec<_>>()})).collect();
-                run(app, "chart.data", json!({"id": id.0, "categories": cats, "series": series}));
-            }
-            ok || cancel
-        }
+        "chartData" => crate::chartdata::body(app, ui, d),
         "trim" => {
             let seed = trim_seed(app.session.active());
             field(ui, d, "Start time (s):", "start", &seed.start);

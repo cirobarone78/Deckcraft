@@ -10,6 +10,7 @@
 pub mod anim;
 pub mod bidi;
 pub mod chart;
+pub mod chart_data;
 pub mod defaults;
 pub mod edit;
 pub mod numfmt;

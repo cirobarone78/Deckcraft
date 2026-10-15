@@ -213,6 +213,9 @@ pub struct DocState {
     pub revision: u64,
     pub saved_doc: Arc<Presentation>,
     pub interaction: Option<Interaction>,
+    /// The `undoGroup` of the command that made the last undo step: a command with the same group
+    /// right after it adds to that step instead of making one (the keystrokes of one cell).
+    pub undo_group: Option<String>,
     pub uid: u64,
     pub title: String,
     /// Fonts the file's text uses that aren't installed, found when it was opened (empty for new
@@ -244,6 +247,7 @@ impl DocState {
             path,
             revision: 1,
             interaction: None,
+            undo_group: None,
             uid: next_uid(),
             title,
             missing_fonts: Vec::new(),
@@ -576,6 +580,10 @@ impl Session {
 
     /// Run command `id`. A panic inside it becomes [`EngineError::Internal`] and leaves the
     /// presentation as it was.
+    ///
+    /// An undoable command makes one undo step, unless its params carry the same `undoGroup` text
+    /// as the command that made the last step: then both undo together (typing in one cell of a
+    /// chart's data, where each keystroke updates the chart).
     pub fn execute(&mut self, id: &str, params: &Value) -> Result<Value> {
         self.guarded(id, |s| s.execute_unguarded(id, params))
     }
@@ -624,7 +632,15 @@ impl Session {
             && spec.undoable
             && outer
         {
-            push_undo(st, HistoryEntry { label: spec.label.to_string(), doc: old, selection: sel });
+            let group = params.get("undoGroup").and_then(Value::as_str).filter(|g| !g.is_empty());
+            let merge = group.is_some()
+                && st.undo_group.as_deref() == group
+                && st.history.redo.is_empty()
+                && st.history.undo.last().is_some_and(|e| e.label == spec.label);
+            if !merge {
+                push_undo(st, HistoryEntry { label: spec.label.to_string(), doc: old, selection: sel });
+            }
+            st.undo_group = group.map(String::from);
         }
         if spec.journal && outer {
             self.journal.push((id.to_string(), params.clone()));
@@ -747,6 +763,7 @@ pub fn undo_cost(doc: &Presentation, newer: &Presentation) -> usize {
 }
 
 pub(crate) fn push_undo(st: &mut DocState, e: HistoryEntry) {
+    st.undo_group = None;
     let h = &mut st.history;
     h.costs.insert(Arc::as_ptr(&e.doc) as usize, undo_cost(&e.doc, &st.doc));
     h.undo.push(e);
