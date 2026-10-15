@@ -220,7 +220,8 @@ Detail in [localization-parity.md](localization-parity.md).
 
 - **Target languages beyond English missing.** English, Ukrainian, Russian, Spanish, French,
   European and Brazilian Portuguese and German now have a UI catalog and system-language selection
-  (#15, #30); the non-Ukrainian catalogs await native review. PowerPoint for Mac ships 26
+  (#15, #30); the non-Ukrainian catalogs await native review, except pt-BR, which its contributor
+  (a native speaker) has checked. PowerPoint for Mac ships 26
   languages. Additional translations need 3–16 h per language plus native review. Beta needs at
   least Simplified Chinese, Spanish, French, German and Japanese (~30–45 h).
 - **No IME composition in text editing** (CJK input). 3–6 h.

@@ -99,7 +99,7 @@ Presentation content and command IDs retain their original values. Detail:
 | Arabic | ar | 0% (slide text: bidi and shaping done) | none | 10–16 |
 | French | fr | 0% | none | 3–5 |
 | Portuguese | pt | 0% | none | 3–5 |
-| Brazilian Portuguese | pt-BR | UI catalog; coverage checked by tests | available; native review pending | — |
+| Brazilian Portuguese | pt-BR | UI catalog; coverage checked by tests | available; English fallback | — |
 | Indonesian | id | 0% | none | 3–5 |
 | Japanese | ja | 0% | none | 4–7 |
 | German | de | 0% | none | 3–5 |
