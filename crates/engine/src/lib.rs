@@ -20,6 +20,7 @@ pub mod inkshape;
 pub mod io;
 pub mod keys;
 pub mod links;
+pub mod measure;
 pub mod media_refs;
 pub mod recovery;
 pub mod sample;
@@ -338,6 +339,15 @@ pub struct Prefs {
     pub undo_limit: usize,
     /// Minutes between AutoRecover saves of unsaved presentations.
     pub recovery_minutes: f64,
+    /// Clicks pass through locked objects (canvas editors' lock: select them from a list). Off,
+    /// a locked object is picked and formatted but doesn't move, as in PowerPoint.
+    pub locked_click_through: bool,
+    /// ⌘-click selects the innermost layer under the pointer, inside groups (canvas editors'
+    /// deep select; ⇧-click adds to the selection). Off, ⌘-click adds or removes, as in PowerPoint.
+    pub cmd_deep_select: bool,
+    /// Dragging a group's handles keeps its proportions; ⇧ frees them (canvas editors). Off,
+    /// ⇧ keeps them, as in PowerPoint.
+    pub group_keeps_aspect: bool,
 }
 
 impl Default for Prefs {
@@ -359,6 +369,9 @@ impl Default for Prefs {
             author: "Presenter".into(),
             undo_limit: 500,
             recovery_minutes: 1.0,
+            locked_click_through: false,
+            cmd_deep_select: false,
+            group_keeps_aspect: false,
         }
     }
 }
