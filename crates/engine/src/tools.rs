@@ -237,6 +237,16 @@ pub struct Guide {
     pub to: f64,
 }
 
+impl ToolState {
+    /// The layers a move drag is carrying.
+    pub fn moving_ids(&self) -> Option<&[ShapeId]> {
+        match &self.drag {
+            Some(Drag::Move { ids, moved: true, .. }) => Some(ids),
+            _ => None,
+        }
+    }
+}
+
 #[derive(Clone, Debug, Default)]
 pub struct ToolState {
     pub kind: ToolKind,
@@ -416,10 +426,23 @@ impl Session {
         {
             return Some(Hit::Frame { id: e.id });
         }
+        // A selected layer inside a group (picked with ⌘-click or from Layers) keeps the click,
+        // so it can be dragged without ⌘ instead of the group being picked again.
+        for id in st.selection.shapes.iter().rev() {
+            if cmd::group_frame(&st.doc, &st.selection, *id).is_none() {
+                continue;
+            }
+            if let Some(sh) = st.shape(*id).filter(|s| !s.hidden)
+                && let Some(h) = hit_shape_at(st, sh, xfrm_of(&st.doc, &st.selection, sh), p, tol)
+            {
+                return Some(h);
+            }
+        }
         // Shapes, topmost first.
         // Locked objects are still picked (to format them or type in them); they just don't move.
+        // With `locked_click_through` clicks pass through them to what's below.
         for sh in st.shapes().iter().rev() {
-            if sh.hidden {
+            if sh.hidden || (sh.locked && self.prefs.locked_click_through) {
                 continue;
             }
             if let Some(h) = hit_shape(st, sh, p, tol) {
@@ -427,6 +450,63 @@ impl Session {
             }
         }
         None
+    }
+
+    /// With layers of a group selected: the layer of that group (or the group inside it holding
+    /// the layer) under `p`.
+    fn in_context_hit(&self, st: &crate::DocState, p: Point, tol: f64) -> Option<Hit> {
+        let list = st.shapes();
+        let first = *st.selection.shapes.first()?;
+        let parent = deckcraft_model::parent_of(list, first).flatten()?;
+        let Hit::Shape { id: leaf, text } = self.deep_hit(st, p, tol)? else { return None };
+        // Walk up from the layer hit to the parent's child that holds it.
+        let mut cur = leaf;
+        for _ in 0..64 {
+            match deckcraft_model::parent_of(list, cur).flatten() {
+                Some(up) if up == parent => return Some(Hit::Shape { id: cur, text: text && cur == leaf }),
+                Some(up) => cur = up,
+                None => return None,
+            }
+        }
+        None
+    }
+
+    /// The innermost layer under `p`, inside groups.
+    pub fn deep_shape_at(&self, p: Point, tol: f64) -> Option<ShapeId> {
+        match self.deep_hit(self.active()?, p, tol)? {
+            Hit::Shape { id, .. } => Some(id),
+            _ => None,
+        }
+    }
+
+    /// The innermost layer under `p`, looking inside groups (topmost first), as a shape hit.
+    fn deep_hit(&self, st: &crate::DocState, p: Point, tol: f64) -> Option<Hit> {
+        fn rec(st: &crate::DocState, shapes: &[Shape], p: Point, tol: f64, depth: usize, through: bool) -> Option<Hit> {
+            if depth > 32 {
+                return None;
+            }
+            for sh in shapes.iter().rev() {
+                if sh.hidden || (sh.locked && through) {
+                    continue;
+                }
+                // Where the layer is on the slide (grouped layers too).
+                let x = xfrm_of(&st.doc, &st.selection, sh);
+                match &sh.kind {
+                    ShapeKind::Group { children, .. } => {
+                        if let Some(h) = rec(st, children, p, tol, depth + 1, through) {
+                            return Some(h);
+                        }
+                    }
+                    _ => {
+                        if let Some(h) = hit_shape_at(st, sh, x, p, tol) {
+                            return Some(h);
+                        }
+                    }
+                }
+            }
+            None
+        }
+        rec(st, st.shapes(), p, tol, 0, self.prefs.locked_click_through)
     }
 
     /// Feed a pointer event to the active tool. Returns what happened (for agents).
@@ -549,7 +629,26 @@ impl Session {
             self.tool.drag = Some(Drag::TextSelect { shape });
             return Ok(json!({"caret": [pos.0, pos.1]}));
         }
-        let hit = self.hit_test(p, tol);
+        let mut hit = self.hit_test(p, tol);
+        let deep = mods.cmd && self.prefs.cmd_deep_select;
+        // Inside a group: with a layer of a group selected, a click on another layer of the same
+        // group picks that layer (canvas editors' selection context); Esc steps back out.
+        if !deep
+            && self.prefs.cmd_deep_select
+            && let Some(Hit::Shape { .. }) = hit
+            && let Some(st) = self.active()
+            && let Some(h) = self.in_context_hit(st, p, tol)
+        {
+            hit = Some(h);
+        }
+        // ⌘-click (canvas editors): the innermost layer under the pointer, inside groups.
+        if deep
+            && matches!(hit, Some(Hit::Shape { .. }) | None)
+            && let Some(st) = self.active()
+            && let Some(h) = self.deep_hit(st, p, tol)
+        {
+            hit = Some(h);
+        }
         // Edit Points: drag a vertex, Ctrl-click one to delete it or the outline to add one;
         // a click anywhere else leaves Edit Points.
         if let Some(eid) = self.doc().ok().and_then(|st| self.tool.editing_points(st)) {
@@ -633,7 +732,7 @@ impl Session {
             }
             Some(Hit::Shape { id, text }) => {
                 let selected = st.selection.shapes.contains(&id);
-                let toggle = mods.shift || mods.cmd;
+                let toggle = mods.shift || (mods.cmd && !deep);
                 let ids: Vec<ShapeId> = if toggle {
                     let mut v = st.selection.shapes.clone();
                     if selected {
@@ -681,7 +780,7 @@ impl Session {
                 }
             }
             None => {
-                let add = mods.shift || mods.cmd;
+                let add = mods.shift || (mods.cmd && !deep);
                 self.select(|_, sel| {
                     sel.text = None;
                     sel.cells = None;
@@ -735,10 +834,11 @@ impl Session {
                 let origs2: Vec<(ShapeId, Xfrm)> =
                     if duplicate { ids_now.iter().copied().zip(origs.iter().map(|o| o.1)).collect() } else { origs.clone() };
                 self.edit(|doc, sel| {
+                    let frames: Vec<Option<(Xfrm, Xfrm)>> = origs2.iter().map(|(id, _)| cmd::group_frame(doc, sel, *id)).collect();
                     let list = crate::shapes_mut(doc, sel).ok_or_else(|| cmd::bad("move", "no slide"))?;
-                    for (id, o) in &origs2 {
+                    for ((id, o), frame) in origs2.iter().zip(frames) {
                         if let Some(sh) = deckcraft_model::find_shape_mut(list, *id) {
-                            sh.xfrm = Some(Xfrm { x: o.x + d.x, y: o.y + d.y, ..*o });
+                            sh.xfrm = Some(cmd::stored_xfrm(frame, Xfrm { x: o.x + d.x, y: o.y + d.y, ..*o }));
                         }
                     }
                     // A connector dragged away from shapes that stay put comes unglued at those ends.
@@ -758,8 +858,9 @@ impl Session {
                     Some(Drag::Move { ids: ids_now, start, origs: origs2, moved: true, duplicate: false, enter_text: enter_text.filter(|_| false) });
             }
             Drag::Resize { id, handle, orig, start } => {
-                let nx = resize_box(&orig, handle, p - start, mods.shift || self.is_picture(id), mods.alt);
-                let nx = self.snap_resize(nx, &orig, handle, id, tol);
+                let keep = if self.prefs.group_keeps_aspect && self.is_group(id) { !mods.shift } else { mods.shift || self.is_picture(id) };
+                let nx = resize_box(&orig, handle, p - start, keep, mods.alt);
+                let nx = self.snap_resize(nx, &orig, handle, id, tol, keep);
                 self.set_xfrm(id, nx)?;
             }
             Drag::LineEnd { id, end, orig } => {
@@ -1304,6 +1405,10 @@ impl Session {
         Ok(())
     }
 
+    fn is_group(&self, id: ShapeId) -> bool {
+        self.active().and_then(|d| d.shape(id)).is_some_and(|s| s.is_group())
+    }
+
     fn is_picture(&self, id: ShapeId) -> bool {
         self.active().and_then(|d| d.shape(id)).is_some_and(|s| matches!(s.kind, ShapeKind::Picture { .. } | ShapeKind::Media(_)))
     }
@@ -1355,9 +1460,10 @@ impl Session {
             _ => None,
         });
         self.edit(|doc, sel| {
+            let frame = cmd::group_frame(doc, sel, id);
             let list = crate::shapes_mut(doc, sel).ok_or_else(|| cmd::bad("tool", "no slide"))?;
             if let Some(sh) = deckcraft_model::find_shape_mut(list, id) {
-                sh.xfrm = Some(x);
+                sh.xfrm = Some(cmd::stored_xfrm(frame, x));
                 if let ShapeKind::Table(t) = &mut sh.kind {
                     // Tables resize their columns and rows proportionally.
                     let heights: Vec<f64> = match &drawn {
@@ -1512,7 +1618,7 @@ impl Session {
         (off, guides)
     }
 
-    fn snap_resize(&mut self, x: Xfrm, _orig: &Xfrm, handle: u8, id: ShapeId, tol: f64) -> Xfrm {
+    fn snap_resize(&mut self, x: Xfrm, orig: &Xfrm, handle: u8, id: ShapeId, tol: f64, keep_aspect: bool) -> Xfrm {
         if x.rot != 0.0 {
             self.tool.guides.clear();
             return x;
@@ -1539,6 +1645,23 @@ impl Session {
         }
         nx.w = nx.w.max(0.0);
         nx.h = nx.h.max(0.0);
+        // Proportions kept: the snapped side leads, the other follows (from the fixed corner).
+        if keep_aspect && orig.h > 0.0 && orig.w > 0.0 && (off.x != 0.0 || off.y != 0.0) {
+            let ratio = orig.w / orig.h;
+            if off.x != 0.0 && (moves_left || moves_right) {
+                let h = nx.w / ratio;
+                if moves_top {
+                    nx.y += nx.h - h;
+                }
+                nx.h = h;
+            } else if moves_top || moves_bottom {
+                let w = nx.h * ratio;
+                if moves_left {
+                    nx.x += nx.w - w;
+                }
+                nx.w = w;
+            }
+        }
         self.tool.guides = guides;
         nx
     }
@@ -1792,7 +1915,11 @@ pub fn resize_box(o: &Xfrm, h: u8, d: Vec2, keep_aspect: bool, from_center: bool
 }
 
 fn hit_shape(st: &crate::DocState, sh: &Shape, p: Point, tol: f64) -> Option<Hit> {
-    let x = xfrm_of(&st.doc, &st.selection, sh);
+    hit_shape_at(st, sh, xfrm_of(&st.doc, &st.selection, sh), p, tol)
+}
+
+/// [`hit_shape`] with the shape's box on the slide given (a grouped layer's).
+fn hit_shape_at(st: &crate::DocState, sh: &Shape, x: Xfrm, p: Point, tol: f64) -> Option<Hit> {
     let inv = x.affine().inverse();
     let local = inv * p;
     // Table borders resize rows and columns.
