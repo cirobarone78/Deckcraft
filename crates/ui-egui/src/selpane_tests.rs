@@ -342,3 +342,46 @@ fn group_and_ungroup_shortcuts_work_after_clicking_layers() {
     assert_eq!(x(&h, "C"), before, "the layer didn't move");
     assert_ne!(selected(&h), ["C"], "↓ went to the next row");
 }
+
+#[test]
+fn every_shortcut_acts_while_a_layer_row_has_the_keyboard() {
+    use egui::Key;
+    let (mut h, _) = harness();
+    let cmd = Modifiers::COMMAND;
+    let pick = |h: &mut Harness<'static, SlideApp>, name: &str| {
+        h.get_by_label(name).click();
+        h.run_steps(2);
+        assert!(h.ctx.memory(|m| m.focused().is_some()), "the {name} row has the keyboard");
+    };
+    let key = |h: &mut Harness<'static, SlideApp>, m: Modifiers, k: Key| {
+        h.key_press_modifiers(m, k);
+        h.run_steps(2);
+    };
+    // Arrange: ⌘] / ⌘[ one step, ⇧⌘] / ⇧⌘[ and ⌥⌘] / ⌥⌘[ all the way.
+    pick(&mut h, "A");
+    key(&mut h, cmd, Key::CloseBracket);
+    assert_eq!(names(&h), "B A C G[D E]", "⌘] brings it forward");
+    key(&mut h, cmd, Key::OpenBracket);
+    assert_eq!(names(&h), "A B C G[D E]", "⌘[ sends it backward");
+    key(&mut h, cmd | Modifiers::SHIFT, Key::CloseBracket);
+    assert_eq!(names(&h), "B C G[D E] A", "⇧⌘] to the front");
+    key(&mut h, cmd | Modifiers::ALT, Key::OpenBracket);
+    assert_eq!(names(&h), "A B C G[D E]", "⌥⌘[ to the back");
+    // Lock, hide, duplicate, delete.
+    key(&mut h, cmd | Modifiers::SHIFT, Key::L);
+    assert!(shape(&h, "A").locked, "⇧⌘L locks");
+    key(&mut h, cmd | Modifiers::SHIFT, Key::L);
+    key(&mut h, cmd | Modifiers::SHIFT, Key::H);
+    assert!(shape(&h, "A").hidden, "⇧⌘H hides");
+    key(&mut h, cmd | Modifiers::SHIFT, Key::H);
+    let n = |h: &Harness<'static, SlideApp>| h.state().session.active().unwrap().shapes().len();
+    let before = n(&h);
+    key(&mut h, cmd, Key::D);
+    assert_eq!(n(&h), before + 1, "⌘D duplicates");
+    pick(&mut h, "C");
+    key(&mut h, Modifiers::NONE, Key::Delete);
+    assert!(!names(&h).contains('C'), "Delete removes it: {}", names(&h));
+    // ⌘Z undoes.
+    key(&mut h, cmd, Key::Z);
+    assert!(names(&h).contains('C'), "⌘Z brings it back");
+}
