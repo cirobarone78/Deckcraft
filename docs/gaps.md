@@ -1,6 +1,6 @@
 # Where DeckCraft falls short of PowerPoint
 
-> **Last reviewed:** 2026-10-14 · **Last updated:** 2026-10-14 · **Change:** major (community PR wave 2026-10-14: soak tests, PPTX corpus, comment threads (#70), embedded fonts, SmartArt Text Pane, Animation Pane timeline, Hunspell spelling, thesaurus, AutoCorrect, 14 new dialogs, pen pressure and trackpad gestures; duplicated entries and headers folded; previous: minor, 3-D bevel, camera and face lighting rendered) · **Target:** Microsoft PowerPoint for Mac 16.113 (Microsoft 365)
+> **Last reviewed:** 2026-10-14 · **Last updated:** 2026-10-14 · **Change:** minor (Contextual Equation tab, active-field shading and arrow-key exit; structured equation layout remains partial) · **Target:** Microsoft PowerPoint for Mac 16.113 (Microsoft 365)
 
 Every known shortfall, one entry each, ranked by how much it stops someone who presents with
 PowerPoint from switching. This is the work list: pick from the top. Numbers are summarized in
@@ -263,7 +263,7 @@ of the effect gallery. Detail in [animation-parity.md](animation-parity.md). 8�
 - **Estimate:** 1–2 h (bundle openly licensed dictionaries); 2–4 h (AutoFormat as you type).
 
 ### Equations
-- **Evidence:** checklist row missing; PR #55 (OMML editor, +10.5k lines) is open.
+- **Evidence:** partial: direct insertion, inline editing and Space-triggered symbols/scripts work, with an empty contextual Equation tab, active-field shading and Right Arrow exit to ordinary text. See [equation input](equations.md). Equation ribbon controls, structured fractions, radicals, matrices, full LaTeX parsing and native OMML authoring remain open; PR #55 concerns a fuller OMML editor.
 - **Estimate:** 3–6 h to review, land and round-trip.
 
 ### Smaller missing rows
@@ -355,6 +355,7 @@ Detail in [localization-parity.md](localization-parity.md).
 
 | Date | Change | Summary |
 |---|---|---|
+| 2026-10-14 | minor | Contextual Equation tab, active-field shading and arrow-key exit; structured equation layout remains partial |
 | 2026-10-14 | minor | Community PR wave folded: one entry each for the soak tests (engine and UI), the PPTX corpus (seven owned corpus files), edit points / text warp / 3-D, proofing (Hunspell spelling, thesaurus, AutoCorrect), the smaller missing rows, dialogs (41 vs ~60; Print and Insert Object left) and pen/trackpad input; ranked rows 3, 4 and 10 de-duplicated (comment threads #70 and the pane timeline are done); the fixed command-palette entry (#79) removed |
 | 2026-10-13 | minor | EMF/WMF rectangle clip regions (`INTERSECTCLIPRECT`, `EXCLUDECLIPRECT`, `EXTSELECTCLIPRGN`) limit later drawing. EMF+ records remain |
 | 2026-10-13 | minor | Embedded fonts are read, written and drawn (TrueType, OpenType, Embedded OpenType). The gap is now MicroType Express subsets, which are kept but not drawn |

@@ -723,7 +723,7 @@ fn shape_para(ctx: &Ctx, shape: &Shape, body: &TextBody, pi: usize, scale: f64, 
         let rp = resolve::run(ctx, shape, para, &run.props);
         let st = make_style(ctx, &rp, scale, opts.prompt_color);
         let t: String = match &run.kind {
-            RunKind::Text => run.text.clone(),
+            RunKind::Text | RunKind::Equation { .. } => run.text.clone(),
             RunKind::Break => "\u{b}".into(),
             RunKind::Field { field } => opts.fields.field_in(field, rp.lang.as_deref()).unwrap_or_else(|| run.text.clone()),
             RunKind::Math { .. } => run.text.clone(),

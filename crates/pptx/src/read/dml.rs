@@ -578,6 +578,13 @@ pub fn paragraph(imp: &mut Imp, part: &Part, p: &El) -> Paragraph {
             }
             "r" => {
                 let props = e.child("rPr").map(|r| rpr(imp, part, r)).unwrap_or_default();
+                let kind = e
+                    .child("rPr")
+                    .and_then(|r| r.child("extLst"))
+                    .and_then(|list| list.children_named("ext").find(|ext| ext.attr("uri") == Some("urn:deckcraft:equation:v1")))
+                    .and_then(|ext| ext.child("equation"))
+                    .map(|eq| RunKind::Equation { placeholder: eq.bool("placeholder").unwrap_or(false) })
+                    .unwrap_or(RunKind::Text);
                 let text: String = e.child("t").map(|t| t.text()).unwrap_or_default();
                 // A vertical tab or line feed inside text is a line break, as it lays out and as export writes it.
                 for (i, piece) in text.split(['\u{b}', '\n']).enumerate() {
@@ -585,7 +592,7 @@ pub fn paragraph(imp: &mut Imp, part: &Part, p: &El) -> Paragraph {
                         para.runs.push(Run { text: String::new(), props: props.clone(), kind: RunKind::Break });
                     }
                     if !piece.is_empty() {
-                        para.runs.push(Run { text: piece.to_string(), props: props.clone(), kind: RunKind::Text });
+                        para.runs.push(Run { text: piece.to_string(), props: props.clone(), kind: kind.clone() });
                     }
                 }
             }

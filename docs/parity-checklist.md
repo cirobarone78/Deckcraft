@@ -1,6 +1,6 @@
 # PowerPoint feature checklist
 
-> **Generated:** 2026-10-14 (summary by `cargo xtask parity`; rows re-scored by the 2026-10-14 community PR wave, duplicate Thesaurus, AutoCorrect, Artistic effects and Corrections rows folded; Preview in editor re-scored 2026-10-13; earlier rows re-scored 2026-10-10 against PowerPoint for Mac 16.113.4; video/animated GIF row re-scored 2026-10-11, #171) · **Target:** Microsoft PowerPoint for Mac 16.113 (Microsoft 365)
+> **Generated:** 2026-10-14 (equations re-scored partial for live linear input; summary by `cargo xtask parity`; rows re-scored by the 2026-10-14 community PR wave, duplicate Thesaurus, AutoCorrect, Artistic effects and Corrections rows folded; Preview in editor re-scored 2026-10-13; earlier rows re-scored 2026-10-10 against PowerPoint for Mac 16.113.4; video/animated GIF row re-scored 2026-10-11, #171) · **Target:** Microsoft PowerPoint for Mac 16.113 (Microsoft 365)
 
 The summary between `<!-- SUMMARY -->
 **Weighted breadth parity: 84%** over 191 features.
@@ -9,7 +9,7 @@ The summary between `<!-- SUMMARY -->
 |---|---|---|---|---|---|
 | P0 | 72 | 61 | 11 | 0 | 92% |
 | P1 | 65 | 45 | 16 | 4 | 82% |
-| P2 | 54 | 17 | 25 | 12 | 55% |
+| P2 | 54 | 17 | 26 | 11 | 56% |
 
 | Area | Parity |
 |---|---|
@@ -21,7 +21,7 @@ The summary between `<!-- SUMMARY -->
 | Shapes | 91% |
 | Format | 83% |
 | Arrange | 100% |
-| Text | 83% |
+| Text | 84% |
 | Tables | 97% |
 | Charts | 65% |
 | SmartArt | 50% |
@@ -158,7 +158,7 @@ Open P0 items: Contextual tabs (Shape Format, Picture Format, Table Design/Layou
 | Text | AutoCorrect and smart quotes | P2 | P |
 | Text | Thesaurus | P2 | P |
 | Text | Symbols and emoji | P1 | D |
-| Text | Equations | P2 | M |
+| Text | Equations | P2 | P |
 | Text | Hyperlinks (URL, slide, email) | P1 | D |
 | Text | Date/time and slide number fields | P1 | D |
 | Text | Right-to-left and complex scripts | P1 | P |
@@ -233,3 +233,7 @@ Open P0 items: Contextual tabs (Shape Format, Picture Format, Table Design/Layou
 | Platforms (✱) | macOS, Windows, Linux builds | P0 | P |
 | Platforms (✱) | Web (WASM) build | P1 | D |
 | Platforms (✱) | BSD build | P2 | P |
+
+## Equation revision
+
+2026-10-14: Equations changed from missing to partial. Direct insertion, math shortcuts, the contextual Equation tab, active-field shading and arrow-key exit work; structured equation layout remains open. See [equation input](equations.md).

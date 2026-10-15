@@ -85,9 +85,23 @@ pub struct TextSel {
     /// start of the next line. Ignored once the caret moves anywhere else.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub line_end: Option<(usize, usize)>,
+    /// Right Arrow can leave an equation without inserting a character. The next text uses
+    /// these ordinary-text properties while the caret remains at that boundary.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub after_equation: Option<EquationExit>,
+}
+
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+pub struct EquationExit {
+    pub at: (usize, usize),
+    pub props: deckcraft_model::text::RunProps,
 }
 
 impl TextSel {
+    pub fn plain_props(&self) -> Option<&deckcraft_model::text::RunProps> {
+        self.after_equation.as_ref().filter(|e| !self.is_range() && self.caret == e.at).map(|e| &e.props)
+    }
+
     pub fn is_range(&self) -> bool {
         self.anchor != self.caret
     }

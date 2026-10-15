@@ -910,6 +910,7 @@ impl Session {
                     self.select(|_, sel| {
                         if let Some(t) = sel.text.as_mut() {
                             t.caret = pos;
+                            t.after_equation = None;
                         }
                     })?;
                 }
@@ -1258,6 +1259,7 @@ impl Session {
             if let Some(tt) = sel.text.as_mut() {
                 tt.cell = cell;
                 tt.caret = pos;
+                tt.after_equation = None;
                 if !extend {
                     tt.anchor = pos;
                 }

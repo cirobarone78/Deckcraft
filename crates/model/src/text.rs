@@ -431,6 +431,10 @@ impl RunProps {
 #[serde(rename_all = "camelCase", tag = "kind")]
 pub enum RunKind {
     Text,
+    /// Editable linear math. Unlike preserved OMML, these characters can be edited in place.
+    Equation {
+        placeholder: bool,
+    },
     /// A line break inside the paragraph (Shift+Enter).
     Break,
     /// A field: `slidenum`, `datetime`, `datetime1`…`datetime13`, or other; `text` holds the last value.
@@ -441,6 +445,12 @@ pub enum RunKind {
     Math {
         omml: String,
     },
+}
+
+impl RunKind {
+    pub fn editable_text(&self) -> bool {
+        matches!(self, Self::Text | Self::Equation { .. })
+    }
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
@@ -536,12 +546,12 @@ impl Paragraph {
     pub fn normalize(&mut self) {
         let mut out: Vec<Run> = Vec::with_capacity(self.runs.len());
         for r in self.runs.drain(..) {
-            if r.kind == RunKind::Text && r.text.is_empty() {
+            if r.kind.editable_text() && r.text.is_empty() {
                 continue;
             }
             if let Some(last) = out.last_mut()
-                && last.kind == RunKind::Text
-                && r.kind == RunKind::Text
+                && last.kind.editable_text()
+                && last.kind == r.kind
                 && last.props == r.props
             {
                 last.text.push_str(&r.text);

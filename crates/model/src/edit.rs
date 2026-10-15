@@ -32,13 +32,13 @@ fn split_at(p: &mut Paragraph, at: usize) -> usize {
         }
         if at < pos + len {
             let Some(r) = p.runs.get(i) else { return i };
-            if r.kind != RunKind::Text {
+            if !r.kind.editable_text() {
                 return i + 1;
             }
             let k = at - pos;
             let byte = r.text.char_indices().nth(k).map(|(b, _)| b).unwrap_or(r.text.len());
             let (a, b) = r.text.split_at(byte);
-            let second = Run { text: b.to_string(), props: r.props.clone(), kind: RunKind::Text };
+            let second = Run { text: b.to_string(), props: r.props.clone(), kind: r.kind.clone() };
             let first = a.to_string();
             if let Some(r) = p.runs.get_mut(i) {
                 r.text = first;
@@ -75,6 +75,11 @@ pub fn props_at(body: &TextBody, pos: Pos) -> RunProps {
 /// Insert `text` at `pos` (with `props`, else the props at `pos`). `\n` starts a new paragraph
 /// (same level and paragraph props); `\u{b}` inserts a line break. Returns the caret after it.
 pub fn insert(body: &mut TextBody, pos: Pos, text: &str, props: Option<RunProps>) -> Pos {
+    insert_as(body, pos, text, props, RunKind::Text)
+}
+
+/// Insert ordinary text or an editable equation, retaining its kind across run splits.
+pub fn insert_as(body: &mut TextBody, pos: Pos, text: &str, props: Option<RunProps>, kind: RunKind) -> Pos {
     if body.paragraphs.is_empty() {
         body.paragraphs.push(Paragraph::default());
     }
@@ -107,7 +112,7 @@ pub fn insert(body: &mut TextBody, pos: Pos, text: &str, props: Option<RunProps>
                 continue;
             }
             let idx = split_at(p, ch);
-            p.runs.insert(idx, Run::with(seg, props.clone()));
+            p.runs.insert(idx, Run { text: seg.to_string(), props: props.clone(), kind: kind.clone() });
             ch += seg.chars().count();
         }
         if let Some(p) = body.paragraphs.get_mut(pi) {

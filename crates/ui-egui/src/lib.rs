@@ -438,6 +438,8 @@ pub struct SlideApp {
     pub session: Session,
     pub services: Services,
     pub ui: UiState,
+    /// Ribbon tab to restore when the caret leaves an equation. Never persisted.
+    equation_previous_tab: Option<String>,
     pub textures: textures::Textures,
     pub control_rx: Option<Receiver<ControlRequest>>,
     /// Spelling squiggles, checked on a worker thread.
@@ -535,6 +537,7 @@ impl SlideApp {
             session,
             services,
             ui: UiState::default(),
+            equation_previous_tab: None,
             textures: textures::Textures::default(),
             control_rx: None,
             squiggles: Default::default(),
@@ -1046,6 +1049,10 @@ impl SlideApp {
             }
             "app.dialog" => {
                 let d = p.get("id").and_then(Value::as_str).ok_or("missing `id`")?;
+                // Older menu customizations and control clients used this dialog command.
+                if d == "equation" {
+                    return self.session.execute("insert.equation", &json!({})).map_err(|e| e.to_string());
+                }
                 self.dialog = Some(dialogs::Dialog::new(d));
             }
             "app.links" => {
@@ -2012,6 +2019,8 @@ mod animpane_tests;
 mod browsetheme_tests;
 #[cfg(test)]
 mod compare_tests;
+#[cfg(test)]
+mod equation_tests;
 #[cfg(test)]
 mod eyedropper_tests;
 #[cfg(test)]

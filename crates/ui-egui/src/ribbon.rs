@@ -148,6 +148,9 @@ fn contextual(app: &SlideApp) -> Vec<&'static str> {
     if shapes.iter().any(|s| matches!(s.kind, ShapeKind::Media(_))) {
         v.push("Playback");
     }
+    if deckcraft_engine::cmd::equation::active(st).is_some() {
+        v.push("Equation");
+    }
     v
 }
 
@@ -157,6 +160,15 @@ const TABS: [&str; 10] = ["Home", "Insert", "Draw", "Design", "Transitions", "An
 pub fn show(app: &mut SlideApp, ui: &mut Ui) {
     let t = Tokens::get(ui.ctx());
     let ctx_tabs = contextual(app);
+    if ctx_tabs.contains(&"Equation") {
+        if app.equation_previous_tab.is_none() {
+            app.equation_previous_tab = Some(if app.ui.tab == "Equation" { "Home".into() } else { app.ui.tab.clone() });
+            app.ui.tab = "Equation".into();
+            app.ui.ribbon_collapsed = false;
+        }
+    } else if let Some(previous) = app.equation_previous_tab.take() {
+        app.ui.tab = previous;
+    }
     if !TABS.contains(&app.ui.tab.as_str()) && !ctx_tabs.contains(&app.ui.tab.as_str()) {
         app.ui.tab = "Home".into();
     }
@@ -188,6 +200,7 @@ pub fn show(app: &mut SlideApp, ui: &mut Ui) {
             let r = Rect::from_min_size(pos2(x, y), vec2(w, 24.0));
             let resp = ui.interact(r, ui.id().with(("tab", name)), Sense::click());
             let active = app.ui.tab == name;
+            resp.widget_info(|| egui::WidgetInfo::selected(egui::WidgetType::SelectableLabel, true, active, format!("{name} tab")));
             if resp.hovered() && !active {
                 ui.painter().rect_filled(r.shrink2(vec2(2.0, 2.0)), CornerRadius::same(4), t.hover);
             }
@@ -245,6 +258,8 @@ pub fn show(app: &mut SlideApp, ui: &mut Ui) {
             "Slide Master" => slide_master(app, ui),
             "Handout Master" => handout_master(app, ui),
             "Notes Master" => notes_master(app, ui),
+            // Contextual placeholder; equation controls will be added separately.
+            "Equation" => {}
             _ => {}
         }
     });
@@ -1281,7 +1296,7 @@ fn insert(app: &mut SlideApp, ui: &mut Ui) {
         big(app, ui, Icon::SlideNumber, "Slide\nNumber", "insert.slideNumber", json!({}));
     });
     group(ui, |ui| {
-        big(app, ui, Icon::Equation, "Equation", "app.dialog", json!({"id": "equation"}));
+        big(app, ui, Icon::Equation, "Equation", "insert.equation", json!({}));
         big(app, ui, Icon::Symbol, "Symbol", "app.dialog", json!({"id": "symbol"}));
     });
     group(ui, |ui| {

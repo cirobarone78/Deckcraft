@@ -119,6 +119,9 @@ pub(crate) fn edit_text<T>(s: &mut Session, f: impl FnOnce(&mut TextBody, &mut T
         let mut t = t0.clone();
         let body = body_mut(doc, sel, &t).ok_or_else(|| bad("text", "the text being edited is gone"))?;
         let r = f(body, &mut t);
+        if t.plain_props().is_none() {
+            t.after_equation = None;
+        }
         // The saved shrink-on-overflow scale was for the old text: fit the new text afresh.
         if let Some(AutoFit::Shrink { font_scale, line_reduction }) = &mut body.body.autofit {
             (*font_scale, *line_reduction) = (1.0, 0.0);
@@ -269,7 +272,7 @@ pub fn caret_color(st: &DocState, t: &TextSel) -> Option<deckcraft_color::Rgba> 
     let ctx = ctx_for(&st.doc, &st.selection)?;
     let blank = Paragraph::default();
     let para = body.paragraphs.get(t.caret.0).unwrap_or(&blank);
-    let props = resolve::run(&ctx, sh, para, &ed::props_at(body, t.caret));
+    let props = resolve::run(&ctx, sh, para, &t.plain_props().cloned().unwrap_or_else(|| ed::props_at(body, t.caret)));
     Some(resolve::text_color(&ctx, &props)).filter(|c| c.a > 0)
 }
 
@@ -313,7 +316,7 @@ fn edit(s: &mut Session, p: &Value) -> Result<Value> {
     }
     s.select(|_, sel| {
         sel.shapes = vec![id];
-        sel.text = Some(TextSel { shape: id, anchor: at, caret: at, cell, notes: false, line_end: None });
+        sel.text = Some(TextSel { shape: id, anchor: at, caret: at, cell, ..Default::default() });
     })?;
     Ok(json!({"id": id, "at": [at.0, at.1]}))
 }
@@ -350,15 +353,23 @@ pub(crate) fn insert_text(s: &mut Session, text: &str, props: Option<RunProps>) 
         match &st.selection.text {
             Some(t) => {
                 let body = body_of(st, t).cloned().unwrap_or_default();
-                typed(s, &body, t.ordered().0, text)
+                if super::equation::context(&body, t).is_some() { text.to_string() } else { typed(s, &body, t.ordered().0, text) }
             }
             None => text.to_string(),
         }
     };
+    let mut equation = false;
     let pos = edit_text(s, |body, t| {
+        if let Some(ctx) = super::equation::context(body, t) {
+            equation = true;
+            return super::equation::type_text(body, t, &text, props.clone(), ctx);
+        }
         let (a, b) = t.ordered();
         let at = ed::delete(body, a, b);
-        let props = props.clone().or_else(|| if a != b { Some(ed::props_at(body, at)) } else { unlinked_at_link_end(body, at) });
+        let props = props
+            .clone()
+            .or_else(|| t.plain_props().cloned())
+            .or_else(|| if a != b { Some(ed::props_at(body, at)) } else { unlinked_at_link_end(body, at) });
         let c = ed::insert(body, at, &text, props);
         t.anchor = c;
         t.caret = c;
@@ -369,7 +380,9 @@ pub(crate) fn insert_text(s: &mut Session, text: &str, props: Option<RunProps>) 
         }
         c
     })?;
-    autocorrect(s, text.chars().count() == 1)?;
+    if !equation {
+        autocorrect(s, text.chars().count() == 1)?;
+    }
     Ok(json!({"caret": [pos.0, pos.1]}))
 }
 
@@ -681,6 +694,9 @@ fn autocorrect_options(s: &mut Session, p: &Value) -> Result<Value> {
 pub(crate) fn paste_body(s: &mut Session, src: &TextBody) -> Result<Value> {
     let inherited = inherited_aligns_for_edit(s);
     let pos = edit_text(s, |body, t| {
+        if let Some(ctx) = super::equation::context(body, t) {
+            return super::equation::type_text(body, t, &src.text(), None, ctx);
+        }
         let (a, b) = t.ordered();
         let at = ed::delete(body, a, b);
         let c = ed::insert_body(body, at, src);
@@ -756,7 +772,7 @@ fn compose(s: &mut Session, p: &Value) -> Result<Value> {
             let (start, props) = edit_text(s, |body, t| {
                 let (a, b) = t.ordered();
                 let at = ed::delete(body, a, b);
-                let props = if a != b { Some(ed::props_at(body, at)) } else { unlinked_at_link_end(body, at) };
+                let props = t.plain_props().cloned().or_else(|| if a != b { Some(ed::props_at(body, at)) } else { unlinked_at_link_end(body, at) });
                 let c = ed::insert(body, at, &text, props.clone());
                 t.anchor = c;
                 t.caret = c;
@@ -931,6 +947,7 @@ pub(crate) fn delete_dir(s: &mut Session, dir: &str) -> Result<Value> {
     let dir = dir.to_string();
     edit_text(s, move |body, t| {
         let (a, b) = t.ordered();
+        let equation = super::equation::context(body, t);
         let at = if dir == "wordBackward" || dir == "wordForward" {
             // Ctrl+Backspace/Delete work from the start of a selection and leave the rest of it
             // (PowerPoint for Windows).
@@ -958,6 +975,7 @@ pub(crate) fn delete_dir(s: &mut Session, dir: &str) -> Result<Value> {
         };
         t.anchor = at;
         t.caret = at;
+        super::equation::restore_empty(body, t, equation);
     })?;
     ok()
 }
@@ -995,6 +1013,26 @@ fn move_caret(s: &mut Session, p: &Value) -> Result<Value> {
         (x, _) => x,
     }
     .to_string();
+    if !extend && !t.is_range() {
+        if to == "right"
+            && let Some(exit) = super::equation::exit_at_end(&body, &t)
+        {
+            s.select(|_, sel| {
+                if let Some(t) = sel.text.as_mut() {
+                    t.after_equation = Some(exit);
+                }
+            })?;
+            return Ok(json!({"caret": caret, "equation": false}));
+        }
+        if to == "left" && t.plain_props().is_some() {
+            s.select(|_, sel| {
+                if let Some(t) = sel.text.as_mut() {
+                    t.after_equation = None;
+                }
+            })?;
+            return Ok(json!({"caret": caret, "equation": true}));
+        }
+    }
     let collapse_to = |left: bool| if left { t.ordered().0 } else { t.ordered().1 };
     let mut upstream = false;
     let new = match to.as_str() {
@@ -1036,6 +1074,9 @@ fn move_caret(s: &mut Session, p: &Value) -> Result<Value> {
     let new = (new.0.min(body.paragraphs.len().saturating_sub(1)), new.1.min(body.paragraphs.get(new.0).map(|x| x.char_len()).unwrap_or(0)));
     s.select(|_, sel| {
         if let Some(tt) = sel.text.as_mut() {
+            if new != caret || extend {
+                tt.after_equation = None;
+            }
             tt.caret = new;
             tt.line_end = if upstream { Some(new) } else { None };
             if !extend {
@@ -1051,6 +1092,7 @@ fn select(s: &mut Session, p: &Value) -> Result<Value> {
     let c = pos_param(p, "caret").unwrap_or(a);
     s.select(|_, sel| {
         if let Some(t) = sel.text.as_mut() {
+            t.after_equation = None;
             t.anchor = a;
             t.caret = c;
         }
@@ -1064,6 +1106,7 @@ fn select_all(s: &mut Session, _p: &Value) -> Result<Value> {
     let end = body_of(st, &t).map(ed::end).unwrap_or((0, 0));
     s.select(|_, sel| {
         if let Some(t) = sel.text.as_mut() {
+            t.after_equation = None;
             t.anchor = (0, 0);
             t.caret = end;
         }
@@ -1079,6 +1122,7 @@ fn select_word(s: &mut Session, p: &Value) -> Result<Value> {
     let (a, b) = ed::word_at(&body, at);
     s.select(|_, sel| {
         if let Some(t) = sel.text.as_mut() {
+            t.after_equation = None;
             t.anchor = a;
             t.caret = b;
         }
@@ -1096,6 +1140,7 @@ fn select_para(s: &mut Session, p: &Value) -> Result<Value> {
     let end = if body.is_some_and(|b| at.0 + 1 < b.paragraphs.len()) { (at.0 + 1, 0) } else { (at.0, n) };
     s.select(|_, sel| {
         if let Some(t) = sel.text.as_mut() {
+            t.after_equation = None;
             t.anchor = (at.0, 0);
             t.caret = end;
         }
@@ -1175,6 +1220,14 @@ fn get(s: &mut Session, p: &Value) -> Result<Value> {
 pub(crate) fn format_run(s: &mut Session, f: &(dyn Fn(&mut RunProps) + Send + Sync)) -> Result<Value> {
     let st = s.doc()?;
     if let Some(t) = st.selection.text.clone() {
+        if t.plain_props().is_some() {
+            s.select(|_, sel| {
+                if let Some(exit) = sel.text.as_mut().and_then(|t| t.after_equation.as_mut()) {
+                    f(&mut exit.props);
+                }
+            })?;
+            return ok();
+        }
         let (a, b) = format_range(st, &t);
         let collapsed = a == b;
         edit_text(s, |body, _| {

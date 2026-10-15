@@ -897,6 +897,11 @@ fn overlays(app: &mut SlideApp, ui: &Ui, painter: &egui::Painter, xf: Xf, t: &To
     }
     // Caret / text selection, in a shape or a table cell.
     if let Some(ts) = &editing {
+        if let Some(equation) = deckcraft_engine::cmd::equation::active(st) {
+            for quad in text_marks(st, &equation).iter().flat_map(|m| &m.selection) {
+                painter.add(egui::Shape::convex_polygon(quad.iter().map(|q| xf.to_screen(*q)).collect(), t.equation_shading, Stroke::NONE));
+            }
+        }
         for quad in text_marks(st, ts).iter().flat_map(|m| &m.selection) {
             painter.add(egui::Shape::convex_polygon(quad.iter().map(|q| xf.to_screen(*q)).collect(), t.text_selection, Stroke::NONE));
         }

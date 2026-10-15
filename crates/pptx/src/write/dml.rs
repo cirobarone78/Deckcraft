@@ -606,6 +606,10 @@ fn typeface(w: &mut W, tag: &str, f: &Option<String>) {
 
 /// `a:rPr`, `a:defRPr`, `a:endParaRPr`.
 pub fn rpr(w: &mut W, x: &mut Exp, o: &mut Out, tag: &str, r: &RunProps) {
+    rpr_equation(w, x, o, tag, r, None);
+}
+
+fn rpr_equation(w: &mut W, x: &mut Exp, o: &mut Out, tag: &str, r: &RunProps, equation: Option<bool>) {
     let a = A::new()
         .o("lang", r.lang.as_deref().filter(|l| !l.is_empty()))
         .o("sz", r.size.map(|s| (s.clamp(1.0, 4000.0) * 100.0).round() as i64))
@@ -643,7 +647,8 @@ pub fn rpr(w: &mut W, x: &mut Exp, o: &mut Out, tag: &str, r: &RunProps) {
         || r.font_cs.is_some()
         || r.font_sym.is_some()
         || r.link.is_some()
-        || r.hover.is_some();
+        || r.hover.is_some()
+        || equation.is_some();
     if !has_kids {
         w.empty(tag, a);
         return;
@@ -692,6 +697,14 @@ pub fn rpr(w: &mut W, x: &mut Exp, o: &mut Out, tag: &str, r: &RunProps) {
     // Schema order: hlinkClick, hlinkMouseOver.
     if let Some(h) = &r.hover {
         hyperlink(w, x, o, "a:hlinkMouseOver", h);
+    }
+    // Other readers display standard text; DeckCraft retains the live input region on reopen.
+    if let Some(placeholder) = equation {
+        w.open0("a:extLst");
+        w.open("a:ext", A::new().a("uri", "urn:deckcraft:equation:v1"));
+        w.empty("dc:equation", A::new().a("xmlns:dc", "urn:deckcraft:equation:v1").b("placeholder", Some(placeholder)));
+        w.close("a:ext");
+        w.close("a:extLst");
     }
     w.close(tag);
 }
@@ -753,6 +766,12 @@ pub fn paragraph(w: &mut W, x: &mut Exp, o: &mut Out, p: &Paragraph, math: bool,
     for (ri, r) in p.runs.iter().enumerate() {
         match &r.kind {
             RunKind::Text => run_text(w, x, o, &r.text, &r.props),
+            RunKind::Equation { placeholder } => {
+                w.open0("a:r");
+                rpr_equation(w, x, o, "a:rPr", &r.props, Some(*placeholder));
+                w.elt("a:t", &r.text);
+                w.close("a:r");
+            }
             RunKind::Break => {
                 w.open0("a:br");
                 rpr(w, x, o, "a:rPr", &r.props);
