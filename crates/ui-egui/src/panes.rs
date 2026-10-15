@@ -231,6 +231,11 @@ fn format_shape(app: &mut SlideApp, ui: &mut Ui) {
         {
             app.ui.format_tab = "picture".into();
         }
+        if matches!(sh.kind, ShapeKind::Chart(_))
+            && widgets::icon_toggle(ui, Icon::Chart, "Chart Options", true, app.ui.format_tab.starts_with("chart")).clicked()
+        {
+            app.ui.format_tab = "chart".into();
+        }
     });
     ui.separator();
     match app.ui.format_tab.as_str() {
@@ -438,6 +443,12 @@ fn format_shape(app: &mut SlideApp, ui: &mut Ui) {
             }
             if ui.button("Reset Picture").clicked() {
                 run(app, "picture.reset", json!({}));
+            }
+        }
+        tab if tab.starts_with("chart") => {
+            if let ShapeKind::Chart(c) = &sh.kind {
+                let c = (**c).clone();
+                crate::chart_pane::pane(app, ui, &c, sh.id);
             }
         }
         _ => {

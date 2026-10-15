@@ -1,6 +1,6 @@
 # Where DeckCraft falls short of PowerPoint
 
-> **Last reviewed:** 2026-10-14 · **Last updated:** 2026-10-14 · **Change:** major (community PR wave 2026-10-14: soak tests, PPTX corpus, comment threads (#70), embedded fonts, SmartArt Text Pane, Animation Pane timeline, Hunspell spelling, thesaurus, AutoCorrect, 14 new dialogs, pen pressure and trackpad gestures; duplicated entries and headers folded; previous: minor, 3-D bevel, camera and face lighting rendered) · **Target:** Microsoft PowerPoint for Mac 16.113 (Microsoft 365)
+> **Last reviewed:** 2026-10-14 · **Last updated:** 2026-10-15 · **Change:** minor (charts: every LibreOffice type and variant, data editing and formatting for every type, workbooks for edited charts); previous: major (community PR wave 2026-10-14: soak tests, PPTX corpus, comment threads (#70), embedded fonts, SmartArt Text Pane, Animation Pane timeline, Hunspell spelling, thesaurus, AutoCorrect, 14 new dialogs, pen pressure and trackpad gestures; duplicated entries and headers folded; previous: minor, 3-D bevel, camera and face lighting rendered) · **Target:** Microsoft PowerPoint for Mac 16.113 (Microsoft 365)
 
 Every known shortfall, one entry each, ranked by how much it stops someone who presents with
 PowerPoint from switching. This is the work list: pick from the top. Numbers are summarized in
@@ -164,8 +164,16 @@ Detail in [file-format-parity.md](file-format-parity.md).
 - **Estimate:** 2–4 h. **Beta blocker.**
 
 ### Charts: data grid, elements and the newer chart types
-- **Evidence:** checklist rows "Edit chart data" (P0, partial), "Chart elements" (partial), "Other
-  chart types" (partial); `chartex` parts (waterfall, funnel, treemap, sunburst, histogram, Pareto,
+- **Status (2026-10-15):** every LibreOffice Impress chart type and variant is modelled, drawn,
+  read and written and in the chart gallery, with main's Office 2016 types
+  ([chart-type-parity.md](chart-type-parity.md)); the Chart Data window and the `chart.*` data
+  commands edit every type's data (scatter X/Y, bubble sizes, stock roles, combos, paste from
+  spreadsheets, one undo step per cell); the Format pane's Chart Options and `chart.format.*` format
+  every element, round-tripped through PPTX; the embedded workbook is written for edited and new
+  charts and updated in place. Left: formatting of the secondary axis' line and font, stock lines
+  and bars, bubble scale and 3-D walls; picking elements on the slide; Select Data ranges.
+- **Evidence:** checklist rows "Edit chart data" (P0, done), "Chart elements" (done), "Format chart
+  elements" (done), "Chart type variants" (done), "Other chart types" (done); `chartex` parts (waterfall, funnel, treemap, sunburst, histogram, Pareto,
   box & whisker) are read, drawn, inserted, edited and saved as `chartEx` (kept unchanged, else
   written from the model, with a plain chart fallback). Waterfalls float and total, funnels,
   treemaps (squarified, nested by level with group banners) and sunbursts (one ring per level)
@@ -177,12 +185,11 @@ Detail in [file-format-parity.md](file-format-parity.md).
   `c:stockChart`, and combo charts start as columns with a line. Trendlines round-trip
   (`corpus_charts.rs`) and are drawn: linear, exponential, logarithmic, polynomial, power and
   moving average, with forecast and the equation and R² label. A moving average is drawn with
-  neither label. A combo chart's secondary value axis is read (`y2_*`,
-  `Series.secondary_axis`) and is not written back when the chart is rebuilt.
-  An unchanged chart's embedded workbook now survives save (#335); editing the chart still
-  drops it rather than writing a stale spreadsheet.
-- **Impact:** most business decks have charts; editing their data is routine.
-- **Estimate:** 12–20 h. Data and elements are **beta blockers** (6–10 h).
+  neither label. A combo chart's secondary value axis is read and written (`y2_*`,
+  `Series.secondary_axis`). An unchanged chart's embedded workbook survives save (#335); an
+  edited chart's is updated in place, or written from the chart data.
+- **Impact:** most business decks have charts; their data and look can now be edited in place.
+- **Estimate:** 4–8 h for what is left; no longer a beta blocker.
 
 ### SmartArt editing is shallow
 - **Evidence:** a SmartArt graphic keeps its outline (`Shape.diagram`) and has a Text Pane, Add
@@ -355,6 +362,7 @@ Detail in [localization-parity.md](localization-parity.md).
 
 | Date | Change | Summary |
 |---|---|---|
+| 2026-10-15 | minor | Charts: every LibreOffice chart type and variant, data editing and formatting for every type, workbooks written for edited and new charts (#255, #241) |
 | 2026-10-14 | trivial | Fixed #718: remote MCP no longer accepts unrelated or buffered stale success; loopback regressions cover invalid envelopes, incomplete and oversized frames |
 | 2026-10-14 | minor | Community PR wave folded: one entry each for the soak tests (engine and UI), the PPTX corpus (seven owned corpus files), edit points / text warp / 3-D, proofing (Hunspell spelling, thesaurus, AutoCorrect), the smaller missing rows, dialogs (41 vs ~60; Print and Insert Object left) and pen/trackpad input; ranked rows 3, 4 and 10 de-duplicated (comment threads #70 and the pane timeline are done); the fixed command-palette entry (#79) removed |
 | 2026-10-13 | minor | EMF/WMF rectangle clip regions (`INTERSECTCLIPRECT`, `EXCLUDECLIPRECT`, `EXTSELECTCLIPRGN`) limit later drawing. EMF+ records remain |

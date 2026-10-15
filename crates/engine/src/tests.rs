@@ -3557,3 +3557,116 @@ fn an_exhausted_id_space_refuses_growth() {
     sorted.dedup();
     assert_eq!(sorted.len(), ids.len(), "no id repeats");
 }
+
+#[test]
+fn chart_data_editor_title_and_type_flow() {
+    let mut s = session();
+
+    // 1. The ribbon's insert (editData) opens the data editor for each type.
+    for kind in ["column", "bar", "line", "area", "pie"] {
+        s.ui_requests.clear();
+        let r = s.execute("insert.chart", &json!({"type": kind, "editData": true})).unwrap();
+        let id = r["id"].as_u64().unwrap();
+        assert!(id > 0);
+
+        assert!(
+            s.ui_requests.iter().any(|req| matches!(req, UiRequest::Dialog { id: d_id, .. } if d_id == "chartData")),
+            "insert.chart should request chartData dialog for {kind}"
+        );
+
+        let st = s.doc().unwrap();
+        let sh = st.shape(deckcraft_model::ShapeId(id as u32)).unwrap();
+        assert!(matches!(sh.kind, deckcraft_model::ShapeKind::Chart(_)), "should be a chart shape for {kind}");
+    }
+
+    // A programmatic insert opens no dialog.
+    s.ui_requests.clear();
+    s.execute("insert.chart", &json!({"type": "column"})).unwrap();
+    assert!(s.ui_requests.is_empty(), "insert.chart without editData opens nothing");
+
+    // 2. Test chart.title command
+    let chart_id = s.doc().unwrap().current_slide().unwrap().shapes.last().unwrap().id.0;
+    s.execute("edit.select", &json!({"ids": [chart_id]})).unwrap();
+    s.execute("chart.title", &json!({"id": chart_id, "title": "Quarterly Performance"})).unwrap();
+    let st = s.doc().unwrap();
+    let sh = st.shape(deckcraft_model::ShapeId(chart_id)).unwrap();
+    let deckcraft_model::ShapeKind::Chart(c) = &sh.kind else { panic!("not chart") };
+    assert_eq!(c.title.as_deref(), Some("Quarterly Performance"));
+
+    // 3. Test chart.data command with custom categories, series, and title
+    let new_cats = vec!["Jan", "Feb", "Mar"];
+    let new_series = vec![json!({"name": "Product A", "values": [12.5, 18.0, 24.3]}), json!({"name": "Product B", "values": [8.0, 14.2, 19.5]})];
+    s.execute(
+        "chart.data",
+        &json!({
+            "id": chart_id,
+            "title": "Q1 Product Sales",
+            "categories": new_cats,
+            "series": new_series
+        }),
+    )
+    .unwrap();
+
+    let st = s.doc().unwrap();
+    let sh = st.shape(deckcraft_model::ShapeId(chart_id)).unwrap();
+    let deckcraft_model::ShapeKind::Chart(c) = &sh.kind else { panic!("not chart") };
+    assert_eq!(c.title.as_deref(), Some("Q1 Product Sales"));
+    assert_eq!(c.categories, vec!["Jan", "Feb", "Mar"]);
+    assert_eq!(c.series[0].name, "Product A");
+    assert_eq!(c.series[0].values, vec![Some(12.5), Some(18.0), Some(24.3)]);
+
+    // 4. chart.type switches between the basic types
+    for (t_name, expected_kind) in [
+        ("bar", deckcraft_model::chart::ChartType::Bar),
+        ("line", deckcraft_model::chart::ChartType::Line),
+        ("area", deckcraft_model::chart::ChartType::Area),
+        ("pie", deckcraft_model::chart::ChartType::Pie),
+        ("column", deckcraft_model::chart::ChartType::Column),
+    ] {
+        s.execute("chart.type", &json!({"id": chart_id, "type": t_name})).unwrap();
+        let st = s.doc().unwrap();
+        let sh = st.shape(deckcraft_model::ShapeId(chart_id)).unwrap();
+        let deckcraft_model::ShapeKind::Chart(c) = &sh.kind else { panic!("not chart") };
+        assert_eq!(c.kind, expected_kind, "chart type should match {t_name}");
+    }
+
+    // 5. Test double click on chart opens chartData dialog
+    s.ui_requests.clear();
+    let xfrm = s.doc().unwrap().shape(deckcraft_model::ShapeId(chart_id)).unwrap().xfrm.unwrap();
+    let ev = |kind, x: f64, y: f64| tools::PointerEvent { kind, x, y, mods: Default::default(), tol: 3.0, pressure: None };
+    s.pointer(ev(tools::PointerKind::DoubleClick, xfrm.x + 20.0, xfrm.y + 20.0)).unwrap();
+    assert!(
+        s.ui_requests.iter().any(|req| matches!(req, UiRequest::Dialog { id: d_id, .. } if d_id == "chartData")),
+        "double clicking chart must trigger chartData dialog"
+    );
+}
+
+/// Every gallery entry inserts its type and variant, and turns an existing chart into it.
+#[test]
+fn chart_gallery_types_insert_and_change() {
+    use deckcraft_model::chart::{ChartPreset, ChartType};
+    let chart_of = |s: &Session, id: u64| match &s.doc().unwrap().shape(deckcraft_model::ShapeId(id as u32)).unwrap().kind {
+        deckcraft_model::ShapeKind::Chart(c) => (**c).clone(),
+        _ => panic!("not a chart"),
+    };
+    let mut s = session();
+    let target = s.execute("insert.chart", &json!({"type": "column"})).unwrap()["id"].as_u64().unwrap();
+    for p in ChartPreset::GALLERY {
+        let id = s.execute("insert.chart", &json!({"type": p.id})).unwrap()["id"].as_u64().unwrap();
+        let c = chart_of(&s, id);
+        assert!(p.matches(&c), "insert.chart {}: {:?} {:?}", p.id, c.kind, c.variant);
+        s.execute("chart.type", &json!({"id": target, "type": p.id})).unwrap();
+        let c = chart_of(&s, target);
+        assert!(p.matches(&c), "chart.type {}: {:?} {:?}", p.id, c.kind, c.variant);
+        assert!(c.raw.is_none());
+    }
+    // The type names the ribbon used before the gallery still work.
+    for (name, kind) in [("StackedColumn", ChartType::StackedColumn), ("LineMarkers", ChartType::LineMarkers), ("donut", ChartType::Doughnut)] {
+        s.execute("chart.type", &json!({"id": target, "type": name})).unwrap();
+        assert_eq!(chart_of(&s, target).kind, kind, "{name}");
+    }
+    // A combo chart without series types gets a column-line layout.
+    s.execute("chart.type", &json!({"id": target, "type": "combo"})).unwrap();
+    let c = chart_of(&s, target);
+    assert_eq!(c.series.iter().map(|x| x.kind).collect::<Vec<_>>(), [Some(ChartType::Column), Some(ChartType::Column), Some(ChartType::Line)]);
+}

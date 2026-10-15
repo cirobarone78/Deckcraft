@@ -144,6 +144,7 @@ fn contextual(app: &SlideApp) -> Vec<&'static str> {
     }
     if shapes.iter().any(|s| matches!(s.kind, ShapeKind::Chart(_))) {
         v.push("Chart Design");
+        v.push("Chart Format");
     }
     if shapes.iter().any(|s| matches!(s.kind, ShapeKind::Media(_))) {
         v.push("Playback");
@@ -241,6 +242,7 @@ pub fn show(app: &mut SlideApp, ui: &mut Ui) {
             "Layout" => table_layout(app, ui),
             "Chart Design" => chart_design(app, ui),
             "SmartArt Design" => smartart_design(app, ui),
+            "Chart Format" => crate::chart_pane::format_tab(app, ui),
             "Playback" => playback(app, ui),
             "Slide Master" => slide_master(app, ui),
             "Handout Master" => handout_master(app, ui),
@@ -1233,15 +1235,8 @@ fn insert(app: &mut SlideApp, ui: &mut Ui) {
         big(app, ui, Icon::SmartArt, "SmartArt", "app.dialog", json!({"id": "smartart"}));
         let r = big_button(ui, Icon::Chart, "Chart", enabled(app, "insert.chart"));
         egui::Popup::menu(&r).show(|ui| {
-            for k in chart_menu_types() {
-                if k.is_none() {
-                    ui.separator();
-                }
-                if let Some(k) = k
-                    && ui.button(k.label()).clicked()
-                {
-                    run(app, "insert.chart", json!({"type": format!("{k:?}")}));
-                }
+            if let Some(p) = chart_gallery(ui, None) {
+                run(app, "insert.chart", json!({"type": p.id, "editData": true}));
             }
         });
     });
@@ -3036,25 +3031,40 @@ fn table_layout(app: &mut SlideApp, ui: &mut Ui) {
     arrange_group(app, ui);
 }
 
-fn chart_design(app: &mut SlideApp, ui: &mut Ui) {
-    group(ui, |ui| {
-        let r = big_button(ui, Icon::ChangeChartType, "Change\nChart Type", true);
-        egui::Popup::menu(&r).show(|ui| {
-            for k in chart_menu_types() {
-                let Some(k) = k else {
-                    ui.separator();
-                    continue;
-                };
-                if ui.button(k.label()).clicked() {
-                    // Replace the chart's type keeping its data.
-                    if let Some(id) = app.session.active().and_then(|d| d.selection.shapes.first().copied()) {
-                        let _ = app.run("chart.type", json!({"id": id.0, "type": format!("{k:?}")}));
-                    }
+/// The chart type gallery: a submenu per family (Column, Bar, Pie…) listing its types and
+/// variants, the current one checked. Returns the one picked.
+pub(crate) fn chart_gallery(ui: &mut Ui, current: Option<&deckcraft_model::Chart>) -> Option<&'static deckcraft_model::chart::ChartPreset> {
+    use deckcraft_model::chart::ChartPreset;
+    let mut picked = None;
+    for family in ChartPreset::FAMILIES {
+        ui.menu_button(family, |ui| {
+            for p in ChartPreset::family(family) {
+                if ui.selectable_label(current.is_some_and(|c| p.matches(c)), p.label).clicked() {
+                    picked = Some(p);
+                    ui.close();
                 }
+            }
+        });
+    }
+    picked
+}
+
+fn chart_design(app: &mut SlideApp, ui: &mut Ui) {
+    let ch = app.session.active().and_then(|d| {
+        d.selected_shapes().into_iter().find_map(|s| if let ShapeKind::Chart(c) = &s.kind { Some(((**c).clone(), s.id)) } else { None })
+    });
+    group(ui, |ui| {
+        let r = big_button(ui, Icon::ChangeChartType, "Change\nChart Type", ch.is_some());
+        egui::Popup::menu(&r).show(|ui| {
+            if let Some(p) = chart_gallery(ui, ch.as_ref().map(|(c, _)| c))
+                && let Some((_, id)) = &ch
+            {
+                let _ = app.run("chart.type", json!({"id": id.0, "type": p.id}));
             }
         });
         big(app, ui, Icon::EditData, "Edit\nData", "app.dialog", json!({"id": "chartData"}));
     });
+    crate::chart_pane::design_groups(app, ui);
     arrange_group(app, ui);
 }
 
@@ -3379,16 +3389,6 @@ fn paint_freeform_icon(p: &egui::Painter, r: Rect, name: &str, ink: Color32) {
         _ => (0..=40).map(|i| i as f32 / 40.0).map(|u| at(u, 0.5 + 0.35 * (u * 19.0).sin() * (1.0 - u * 0.4))).collect(),
     };
     p.add(egui::Shape::line(pts, egui::Stroke::new(1.3, ink)));
-}
-
-/// The chart types in the Insert Chart and Change Chart Type menus: the main ones, a separator
-/// (`None`), then the Office 2016 types not already listed.
-fn chart_menu_types() -> Vec<Option<deckcraft_model::chart::ChartType>> {
-    use deckcraft_model::chart::ChartType;
-    let mut v: Vec<Option<ChartType>> = ChartType::MAIN.iter().copied().map(Some).collect();
-    v.push(None);
-    v.extend(ChartType::OFFICE_2016.iter().copied().filter(|k| !ChartType::MAIN.contains(k)).map(Some));
-    v
 }
 
 #[cfg(test)]

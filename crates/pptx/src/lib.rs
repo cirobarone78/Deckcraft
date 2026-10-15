@@ -26,6 +26,10 @@ use deckcraft_model::Presentation;
 
 /// Extension URI of the PowerPoint 2010 section list in `presentation.xml`.
 pub(crate) const SECTION_EXT_URI: &str = "{521415D9-36F7-43E2-AB2F-B90AF26B5E84}";
+/// Extension of a chart part holding the DeckCraft chart options that OOXML has no element for
+/// (stepped lines). Other applications skip it.
+pub(crate) const CHART_EXT_URI: &str = "urn:deckcraft:chart";
+pub(crate) const NS_DECKCRAFT_CHART: &str = "urn:deckcraft:chart";
 
 /// Extension URI of the modern-comments anchor in a slide (names the threaded comment part).
 pub(crate) const COMMENTS_EXT_URI: &str = "{6950BFC3-D8DA-4A85-94F7-54DA5524770B}";
